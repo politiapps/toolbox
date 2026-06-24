@@ -7,7 +7,7 @@
  *  - Own no parsing logic — that lives exclusively in taskParser.ts.
  */
 
-import { Plugin, WorkspaceLeaf, TFile } from "obsidian";
+import { Plugin, WorkspaceLeaf, TFile, TAbstractFile } from "obsidian";
 import {
 	DEFAULT_SETTINGS,
 	TasksPluginSettings,
@@ -35,13 +35,18 @@ export default class TasksPlugin extends Plugin {
 
 		this.addSettingTab(new TasksSettingTab(this.app, this));
 
-		// Auto-refresh when the tasks file is changed externally. Registered via
-		// this.registerEvent() so Obsidian removes it on plugin unload.
+		// Auto-refresh when the tasks file changes externally — including being
+		// created, deleted, or renamed into/out of the configured path. All
+		// registered via this.registerEvent() so Obsidian removes them on unload.
+		const isTasksFile = (file: TAbstractFile): boolean =>
+			file instanceof TFile && file.path === this.settings.tasksFilePath;
+
+		this.registerEvent(this.app.vault.on("modify", (f) => isTasksFile(f) && this.refreshViews()));
+		this.registerEvent(this.app.vault.on("create", (f) => isTasksFile(f) && this.refreshViews()));
+		this.registerEvent(this.app.vault.on("delete", (f) => isTasksFile(f) && this.refreshViews()));
 		this.registerEvent(
-			this.app.vault.on("modify", (file) => {
-				if (file instanceof TFile && file.path === this.settings.tasksFilePath) {
-					this.refreshViews();
-				}
+			this.app.vault.on("rename", (f, oldPath) => {
+				if (isTasksFile(f) || oldPath === this.settings.tasksFilePath) this.refreshViews();
 			})
 		);
 	}

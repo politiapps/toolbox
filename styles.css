@@ -73,6 +73,44 @@
 	height: 17px;
 }
 
+/* ── Missing-file empty state ─────────────────────────────────────────── */
+.tasks-missing {
+	margin: 8px 0;
+	padding: 14px;
+	border: 1px solid var(--background-modifier-border);
+	border-left: 3px solid var(--text-warning, var(--text-accent));
+	border-radius: 8px;
+	background-color: var(--background-primary);
+}
+
+.tasks-missing-title {
+	font-weight: 650;
+	color: var(--text-normal);
+	margin-bottom: 4px;
+}
+
+.tasks-missing-body {
+	font-size: 0.82rem;
+	color: var(--text-muted);
+	line-height: 1.4;
+}
+
+.tasks-missing-path {
+	display: inline-block;
+	margin: 8px 0;
+	font-family: var(--font-monospace);
+	font-size: 0.75rem;
+	color: var(--text-normal);
+	background-color: var(--background-modifier-border);
+	padding: 2px 6px;
+	border-radius: 4px;
+	word-break: break-all;
+}
+
+.tasks-missing-actions {
+	margin-top: 6px;
+}
+
 /* ── Section cards ────────────────────────────────────────────────────── */
 .tasks-section {
 	background-color: var(--background-primary);

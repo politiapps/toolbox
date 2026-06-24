@@ -142,12 +142,6 @@ export class TasksView extends ItemView {
 		return f instanceof TFile ? f : null;
 	}
 
-	private async readContent(): Promise<string> {
-		const file = this.getTasksFile();
-		if (!file) return "";
-		return this.app.vault.read(file);
-	}
-
 	/** Ensure the tasks file exists, creating it (and parent folders) if needed. */
 	private async ensureTasksFile(): Promise<TFile> {
 		const existing = this.getTasksFile();
@@ -192,7 +186,8 @@ export class TasksView extends ItemView {
 	/* ---------------------------- rendering ---------------------------- */
 
 	async refresh(): Promise<void> {
-		const content = await this.readContent();
+		const file = this.getTasksFile();
+		const content = file ? await this.app.vault.read(file) : "";
 		const { tasks } = parseTasks(content);
 		this.allTags = this.mergedTagList(tasks);
 
@@ -201,6 +196,13 @@ export class TasksView extends ItemView {
 		root.addClass("tasks-panel-content");
 
 		this.renderPanelHeader(root);
+
+		// No file at the configured path — say so plainly instead of showing an
+		// empty panel that looks like "you have no tasks".
+		if (!file) {
+			this.renderMissingFileNotice(root);
+			return;
+		}
 
 		const incomplete = tasks.filter((t) => !t.completed);
 
@@ -235,6 +237,28 @@ export class TasksView extends ItemView {
 		setIcon(add, "plus");
 		add.setAttr("aria-label", "Add task");
 		add.addEventListener("click", () => this.openAddForm());
+	}
+
+	private renderMissingFileNotice(root: HTMLElement): void {
+		const path = this.plugin.settings.tasksFilePath;
+		const notice = root.createDiv({ cls: "tasks-missing" });
+		notice.createDiv({ cls: "tasks-missing-title", text: "No tasks file found" });
+		notice.createDiv({
+			cls: "tasks-missing-body",
+			text: "Nothing exists at this path. Check it in settings, or create the file here.",
+		});
+		notice.createEl("code", { cls: "tasks-missing-path", text: path });
+
+		const actions = notice.createDiv({ cls: "tasks-missing-actions" });
+		const createBtn = actions.createEl("button", { cls: "mod-cta", text: "Create file" });
+		createBtn.addEventListener("click", async () => {
+			try {
+				await this.ensureTasksFile();
+				await this.refresh();
+			} catch (e) {
+				new Notice(`Couldn't create ${path} — its folder may not exist.`);
+			}
+		});
 	}
 
 	private isCollapsed(key: string, fallback: boolean): boolean {

@@ -39,10 +39,14 @@ to that release. You never upload build artifacts by hand.
 ### Cut a beta (pre-release)
 
 1. Push your work to `beta`.
-2. Bump `manifest.json` `version` if appropriate (e.g. `1.0.0`).
+2. Set `manifest.json` `version` to the **same string as the tag** below, and
+   make sure it is **strictly greater** than the last released version. BRAT only
+   updates when the manifest version increases, and prereleases rank below their
+   release (`1.0.1-beta.1` < `1.0.1` but > `1.0.0`), so a beta series toward
+   stable `1.0.1` goes `1.0.1-beta.1`, `1.0.1-beta.2`, … then `1.0.1`.
 3. Create a GitHub Release:
    - **Target:** `beta`
-   - **Tag:** a pre-release semver, e.g. `1.0.0-beta.1`
+   - **Tag:** the same pre-release semver, e.g. `1.0.1-beta.1`
    - **Set as a pre-release:** ✅ checked
 4. Publish. CI attaches the three assets.
 

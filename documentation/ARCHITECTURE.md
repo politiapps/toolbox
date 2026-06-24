@@ -25,9 +25,9 @@ manifest.json    Plugin id/name/minAppVersion (1.4.0)
 - Loads/saves settings and persisted UI state via `loadData()` / `saveData()`.
 - Registers the view type (`VIEW_TYPE_TASKS`), a ribbon icon, and the
   `open-tasks-panel` command.
-- Registers the **single** `vault.on('modify')` listener via
-  `this.registerEvent()`. When the configured tasks file changes (including
-  external edits), it calls `refreshViews()`.
+- Registers vault listeners (`modify`, `create`, `delete`, `rename`) via
+  `this.registerEvent()`. When the configured tasks file changes — including
+  being created or renamed into the path — it calls `refreshViews()`.
 - `activateView()` opens/reveals the view in the right sidebar.
 - `refreshViews()` re-renders every open `TasksView`.
 
@@ -51,7 +51,9 @@ manifest.json    Plugin id/name/minAppVersion (1.4.0)
   section's collapse state.
 
 ### `taskView.ts` — `TasksView extends ItemView`
-- Rendering: Add button → user sections (in settings order) → Completed.
+- Rendering: header (today + add) → user sections (in settings order) →
+  Completed. If the configured file does not exist, renders a "No tasks file
+  found" notice (with a Create-file action) instead of empty sections.
 - Each section header shows display name + incomplete-count badge and toggles
   collapse (persisted via `collapseState`).
 - Each task row: checkbox, description, tag pill(s), due date ("Thursday 25th",

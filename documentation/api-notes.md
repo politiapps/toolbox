@@ -20,10 +20,24 @@ Add a note here whenever a non-obvious API behaviour bites you.
   rather than by stored index, because an external edit could have shifted line
   numbers. If the exact line is gone, we surface a Notice and abort.
 
+## Distribution / BRAT versioning (non-obvious)
+- BRAT decides "is there an update?" by **semver-comparing the manifest
+  `version`** in the release asset against the installed one. The new version
+  must be **strictly greater**, or BRAT silently does nothing on startup.
+- Prereleases rank BELOW their release in semver: `1.0.0-beta.2` < `1.0.0`. So
+  shipping beta.1 with manifest `1.0.0` and then beta.2 with `1.0.0-beta.2` is a
+  *downgrade* in BRAT's eyes — it won't update.
+- RULE: the manifest `version` must (a) match the prerelease tag and (b) only
+  ever increase. For a beta series toward stable `1.0.1`, use
+  `1.0.1-beta.1`, `1.0.1-beta.2`, … then `1.0.1`. Each is > the last and > the
+  previous stable.
+
 ## Events
-- The `vault.on('modify')` listener is registered once in `main.ts` via
-  `this.registerEvent()` so Obsidian disposes it on unload. Do NOT register it
-  per-view (would leak / double-fire).
+- The vault listeners (`modify`, `create`, `delete`, `rename`) are registered
+  once in `main.ts` via `this.registerEvent()` so Obsidian disposes them on
+  unload. Do NOT register them per-view (would leak / double-fire). We watch all
+  four so the panel refreshes when the tasks file is created or renamed into the
+  configured path, not just edited.
 - Our own `vault.modify()` calls also trigger `modify`, causing an extra
   `refreshViews()`. This is harmless (idempotent re-render) and keeps all views
   in sync.
