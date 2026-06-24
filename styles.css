@@ -1,0 +1,226 @@
+/* styles.css — Tasks Panel sidebar styling.
+   Class conventions are documented in documentation/ui.md. All selectors are
+   prefixed with `tasks-` to avoid clashing with core / other plugins. */
+
+.tasks-panel-content {
+	padding: 8px 10px 24px;
+}
+
+/* Toolbar / Add button -------------------------------------------------- */
+.tasks-toolbar {
+	position: sticky;
+	top: 0;
+	z-index: 5;
+	background-color: var(--background-secondary);
+	padding-bottom: 8px;
+	margin-bottom: 4px;
+}
+
+.tasks-add-button {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	gap: 6px;
+	width: 100%;
+	cursor: pointer;
+}
+
+.tasks-add-icon {
+	display: inline-flex;
+}
+
+.tasks-add-icon svg {
+	width: 16px;
+	height: 16px;
+}
+
+/* Sections -------------------------------------------------------------- */
+.tasks-section {
+	margin-bottom: 10px;
+}
+
+.tasks-section-header {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	padding: 4px 2px;
+	cursor: pointer;
+	user-select: none;
+	border-radius: 4px;
+}
+
+.tasks-section-header:hover {
+	background-color: var(--background-modifier-hover);
+}
+
+.tasks-chevron {
+	display: inline-flex;
+	color: var(--text-muted);
+}
+
+.tasks-chevron svg {
+	width: 16px;
+	height: 16px;
+}
+
+.tasks-section-title {
+	font-weight: 600;
+	flex: 1;
+}
+
+.tasks-count-badge {
+	font-size: 0.75em;
+	background-color: var(--background-modifier-border);
+	color: var(--text-muted);
+	border-radius: 10px;
+	padding: 1px 8px;
+	min-width: 18px;
+	text-align: center;
+}
+
+.tasks-section-body {
+	padding-left: 4px;
+}
+
+.tasks-empty {
+	color: var(--text-faint);
+	font-size: 0.85em;
+	padding: 4px 6px;
+}
+
+/* Task rows ------------------------------------------------------------- */
+.tasks-row {
+	display: flex;
+	align-items: flex-start;
+	gap: 8px;
+	padding: 6px 4px;
+	border-radius: 6px;
+}
+
+.tasks-row:hover {
+	background-color: var(--background-modifier-hover);
+}
+
+.tasks-checkbox {
+	margin-top: 2px;
+	cursor: pointer;
+	flex-shrink: 0;
+}
+
+.tasks-row-main {
+	flex: 1;
+	min-width: 0;
+}
+
+.tasks-desc {
+	word-break: break-word;
+}
+
+.tasks-row.is-completed .tasks-desc {
+	text-decoration: line-through;
+	color: var(--text-muted);
+}
+
+.tasks-meta {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 6px;
+	margin-top: 3px;
+	font-size: 0.8em;
+}
+
+.tasks-tag-pill {
+	background-color: var(--background-modifier-border);
+	color: var(--text-muted);
+	border-radius: 10px;
+	padding: 1px 8px;
+}
+
+.tasks-due {
+	color: var(--text-muted);
+}
+
+.tasks-due.is-overdue {
+	color: var(--text-error);
+	font-weight: 600;
+}
+
+.tasks-done-date {
+	color: var(--text-faint);
+}
+
+.tasks-priority {
+	line-height: 1;
+}
+
+/* Row actions ----------------------------------------------------------- */
+.tasks-actions {
+	display: flex;
+	align-items: center;
+	gap: 2px;
+	flex-shrink: 0;
+	opacity: 0;
+	transition: opacity 0.1s ease-in-out;
+	position: relative;
+}
+
+.tasks-row:hover .tasks-actions {
+	opacity: 1;
+}
+
+.tasks-icon-button {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	background: transparent;
+	border: none;
+	box-shadow: none;
+	cursor: pointer;
+	color: var(--text-muted);
+	padding: 4px;
+	border-radius: 4px;
+}
+
+.tasks-icon-button:hover {
+	background-color: var(--background-modifier-border);
+	color: var(--text-normal);
+}
+
+.tasks-icon-button svg {
+	width: 15px;
+	height: 15px;
+}
+
+.tasks-delete-button:hover {
+	color: var(--text-error);
+}
+
+/* Inline delete confirmation ------------------------------------------- */
+.tasks-confirm-popup {
+	position: absolute;
+	top: 100%;
+	right: 0;
+	z-index: 10;
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	background-color: var(--background-primary);
+	border: 1px solid var(--background-modifier-border);
+	border-radius: 6px;
+	padding: 6px 8px;
+	box-shadow: 0 2px 8px rgba(0, 0, 0, 0.25);
+	white-space: nowrap;
+	font-size: 0.85em;
+}
+
+.tasks-confirm-popup button {
+	padding: 2px 8px;
+	font-size: 0.85em;
+	cursor: pointer;
+}
+
+/* Form modal ------------------------------------------------------------ */
+.tasks-form-modal .tasks-form-description {
+	width: 100%;
+}

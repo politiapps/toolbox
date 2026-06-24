@@ -1,0 +1,43 @@
+name: Release Obsidian plugin
+
+# Builds the plugin and attaches the distributable files to a GitHub Release
+# whenever a release is *published*. This fires for releases cut from any branch
+# (e.g. stable releases on `main` and pre-releases on `beta`), because for the
+# `release` event GitHub runs the workflow file as it exists on the default
+# branch (`main`) but checks out the commit the release tag points at.
+on:
+  release:
+    types: [published]
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout the tagged commit
+        uses: actions/checkout@v4
+        with:
+          # github.sha for a release event is the commit the release targets,
+          # so this builds the exact code being released (main or beta).
+          ref: ${{ github.sha }}
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "18.x"
+          cache: "npm"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build
+        run: npm run build
+
+      - name: Attach build artifacts to the release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ github.event.release.tag_name }}
+        run: |
+          gh release upload "$TAG" main.js manifest.json styles.css --clobber

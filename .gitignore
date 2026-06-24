@@ -1,0 +1,9 @@
+# build output
+main.js
+
+# dependencies
+node_modules/
+
+# editor / OS
+.DS_Store
+*.log
