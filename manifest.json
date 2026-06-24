@@ -1,7 +1,7 @@
 {
 	"id": "tasker",
 	"name": "Tasks Panel",
-	"version": "1.0.0",
+	"version": "1.0.0-beta.2",
 	"minAppVersion": "1.4.0",
 	"description": "A sidebar panel to view, add, edit, complete, and delete tasks stored in an Obsidian Tasks plugin-compatible markdown file.",
 	"author": "millerjacob91",

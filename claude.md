@@ -46,7 +46,7 @@ A custom Obsidian sidebar panel that reads from and writes to a user-configured 
 - [ ] Description #tag 📅 YYYY-MM-DD ⏫
 - [x] Description #tag 📅 YYYY-MM-DD ✅ YYYY-MM-DD
 
-**Priority emojis:** ⏫ highest, 🔼 high, 🔽 low
+**Priority emojis:** 🔺 highest, ⏫ high, 🔼 medium, 🔽 low, ⏬ lowest (matches the official Obsidian Tasks plugin)
 
 **Date display in UI:** "Thursday 25th" — day name + day number + ordinal suffix, no year. Overdue = red.
 

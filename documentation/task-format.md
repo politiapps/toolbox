@@ -29,10 +29,15 @@ A task line is any list item matching:
 | `#tag`       | Tag (zero or more) | `#[A-Za-z0-9_\-/]*[A-Za-z_\-/][A-Za-z0-9_\-/]*` |
 | `📅 DATE`    | Due date           | `📅 YYYY-MM-DD`                           |
 | `✅ DATE`    | Completion date    | `✅ YYYY-MM-DD` (only on completed tasks) |
-| `⏫`         | Highest priority   | —                                         |
-| `🔼`         | High priority      | —                                         |
-| `🔽`         | Low priority       | —                                         |
+| `🔺`         | Highest priority   | —                                         |
+| `⏫`         | High priority      | —                                         |
+| `🔼`         | Medium priority    | —                                         |
 | (none)       | Normal priority    | —                                         |
+| `🔽`         | Low priority       | —                                         |
+| `⏬`         | Lowest priority    | —                                         |
+
+Priority emoji match the official Obsidian Tasks plugin so its queries/sorts
+interpret the same lines identically.
 
 Dates are always `YYYY-MM-DD`. They are parsed as **local** dates to avoid UTC
 off-by-one errors.

@@ -15,6 +15,7 @@ import {
 	Setting,
 	Notice,
 	TFile,
+	TextComponent,
 	setIcon,
 } from "obsidian";
 import type TasksPlugin from "./main";
@@ -38,15 +39,19 @@ export const VIEW_TYPE_TASKS = "tasks-panel-view";
 const PRIORITY_RANK: Record<Priority, number> = {
 	highest: 0,
 	high: 1,
-	normal: 2,
-	low: 3,
+	medium: 2,
+	normal: 3,
+	low: 4,
+	lowest: 5,
 };
 
 const PRIORITY_LABEL: Record<Priority, string> = {
 	highest: "Highest",
 	high: "High",
+	medium: "Medium",
 	normal: "Normal",
 	low: "Low",
+	lowest: "Lowest",
 };
 
 /* ------------------------------------------------------------------ */
@@ -195,7 +200,7 @@ export class TasksView extends ItemView {
 		root.empty();
 		root.addClass("tasks-panel-content");
 
-		this.renderAddButton(root);
+		this.renderPanelHeader(root);
 
 		const incomplete = tasks.filter((t) => !t.completed);
 
@@ -218,12 +223,18 @@ export class TasksView extends ItemView {
 		return [...recent, ...rest];
 	}
 
-	private renderAddButton(root: HTMLElement): void {
-		const bar = root.createDiv({ cls: "tasks-toolbar" });
-		const btn = bar.createEl("button", { cls: "tasks-add-button mod-cta" });
-		setIcon(btn.createSpan({ cls: "tasks-add-icon" }), "plus");
-		btn.createSpan({ text: "Add Task" });
-		btn.addEventListener("click", () => this.openAddForm());
+	private renderPanelHeader(root: HTMLElement): void {
+		// The panel is framed around "today" — the lens for due-date triage.
+		const header = root.createDiv({ cls: "tasks-header" });
+
+		const date = header.createDiv({ cls: "tasks-today" });
+		date.createDiv({ cls: "tasks-today-eyebrow", text: "Today" });
+		date.createDiv({ cls: "tasks-today-date", text: formatDueDisplay(todayISO()) });
+
+		const add = header.createEl("button", { cls: "tasks-add" });
+		setIcon(add, "plus");
+		add.setAttr("aria-label", "Add task");
+		add.addEventListener("click", () => this.openAddForm());
 	}
 
 	private isCollapsed(key: string, fallback: boolean): boolean {
@@ -241,22 +252,20 @@ export class TasksView extends ItemView {
 		const sorted = sortTasks(tasks, section.sort);
 
 		const sectionEl = root.createDiv({ cls: "tasks-section" });
-		const header = this.renderHeader(
-			sectionEl,
-			section.name,
-			tasks.length,
-			collapsed,
-			async (next) => {
-				await this.setCollapsed(section.id, next);
-				this.refresh();
-			}
-		);
+		// Each lane carries a stable accent hue derived from its id — the one
+		// place colour is spent. Rows indent off this left spine.
+		sectionEl.style.setProperty("--section-accent", sectionAccent(section.id));
+
+		const header = this.renderHeader(sectionEl, section.name, tasks.length, collapsed, true, async (next) => {
+			await this.setCollapsed(section.id, next);
+			this.refresh();
+		});
 		header.dataset.sectionId = section.id;
 
 		if (!collapsed) {
 			const body = sectionEl.createDiv({ cls: "tasks-section-body" });
 			if (sorted.length === 0) {
-				body.createDiv({ cls: "tasks-empty", text: "No tasks" });
+				body.createDiv({ cls: "tasks-empty", text: "Nothing due here" });
 			} else {
 				for (const task of sorted) this.renderTaskRow(body, task);
 			}
@@ -269,7 +278,7 @@ export class TasksView extends ItemView {
 		const sorted = [...tasks].sort((a, b) => (b.doneDate ?? "").localeCompare(a.doneDate ?? ""));
 
 		const sectionEl = root.createDiv({ cls: "tasks-section tasks-section-completed" });
-		this.renderHeader(sectionEl, "Completed", tasks.length, collapsed, async (next) => {
+		this.renderHeader(sectionEl, "Completed", tasks.length, collapsed, false, async (next) => {
 			await this.setCollapsed(COMPLETED_KEY, next);
 			this.refresh();
 		});
@@ -277,7 +286,7 @@ export class TasksView extends ItemView {
 		if (!collapsed) {
 			const body = sectionEl.createDiv({ cls: "tasks-section-body" });
 			if (sorted.length === 0) {
-				body.createDiv({ cls: "tasks-empty", text: "Nothing completed yet" });
+				body.createDiv({ cls: "tasks-empty", text: "Completed tasks land here" });
 			} else {
 				for (const task of sorted) this.renderTaskRow(body, task);
 			}
@@ -289,6 +298,7 @@ export class TasksView extends ItemView {
 		title: string,
 		count: number,
 		collapsed: boolean,
+		showDot: boolean,
 		onToggle: (collapsed: boolean) => void
 	): HTMLElement {
 		const header = parent.createDiv({ cls: "tasks-section-header" });
@@ -297,6 +307,7 @@ export class TasksView extends ItemView {
 		const chevron = header.createSpan({ cls: "tasks-chevron" });
 		setIcon(chevron, collapsed ? "chevron-right" : "chevron-down");
 
+		if (showDot) header.createSpan({ cls: "tasks-section-dot" });
 		header.createSpan({ cls: "tasks-section-title", text: title });
 		header.createSpan({ cls: "tasks-count-badge", text: String(count) });
 
@@ -332,19 +343,21 @@ export class TasksView extends ItemView {
 		if (task.completed && task.doneDate) {
 			meta.createSpan({
 				cls: "tasks-done-date",
-				text: `✅ ${formatDueDisplay(task.doneDate)}`,
+				text: `Done ${formatDueDisplay(task.doneDate)}`,
 			});
 		} else if (task.due) {
 			const dueEl = meta.createSpan({ cls: "tasks-due", text: formatDueDisplay(task.due) });
 			if (isOverdue(task.due)) dueEl.addClass("is-overdue");
+			else if (task.due === todayISO()) dueEl.addClass("is-today");
 		}
 
 		if (task.priority !== "normal") {
-			meta.createSpan({
+			const chip = meta.createSpan({
 				cls: `tasks-priority tasks-priority-${task.priority}`,
-				text: priorityIndicator(task.priority),
 				attr: { "aria-label": `${PRIORITY_LABEL[task.priority]} priority` },
 			});
+			chip.createSpan({ cls: "tasks-priority-dot" });
+			chip.createSpan({ cls: "tasks-priority-label", text: PRIORITY_LABEL[task.priority] });
 		}
 
 		const actions = row.createDiv({ cls: "tasks-actions" });
@@ -456,17 +469,22 @@ export class TasksView extends ItemView {
 /* Pure helpers                                                        */
 /* ------------------------------------------------------------------ */
 
-function priorityIndicator(p: Priority): string {
-	switch (p) {
-		case "highest":
-			return "⏫";
-		case "high":
-			return "🔼";
-		case "low":
-			return "🔽";
-		default:
-			return "";
-	}
+// A small, theme-agnostic accent set. Each section gets a stable hue from its
+// id (so colour follows the lane, not its position) — used only for thin spines
+// and dots, never fills, so it sits quietly over any Obsidian theme.
+const SECTION_ACCENTS = [
+	"#6366f1", // indigo
+	"#0ea5e9", // sky
+	"#14b8a6", // teal
+	"#f59e0b", // amber
+	"#ec4899", // pink
+	"#8b5cf6", // violet
+];
+
+function sectionAccent(id: string): string {
+	let hash = 0;
+	for (let i = 0; i < id.length; i++) hash = (hash * 31 + id.charCodeAt(i)) | 0;
+	return SECTION_ACCENTS[Math.abs(hash) % SECTION_ACCENTS.length];
 }
 
 function taskHasTag(task: Task, tag: string): boolean {
@@ -549,34 +567,70 @@ class TaskFormModal extends Modal {
 			window.setTimeout(() => text.inputEl.focus(), 0);
 		});
 
-		// Tag input with a datalist so existing tags autocomplete but new tags
-		// can be typed freely. Ordered by most recently used.
-		new Setting(contentEl)
-			.setName("Tag")
-			.setDesc("Pick an existing tag or type a new one.")
-			.addText((text) => {
-				text.setValue(this.tag).onChange((v) => (this.tag = v.trim()));
-				const listId = "tasks-tag-list";
-				const datalist = contentEl.createEl("datalist");
-				datalist.id = listId;
-				for (const t of this.knownTags) {
-					datalist.createEl("option", { value: t });
+		// Tag: a plain dropdown of existing tags (most-recently-used first), with a
+		// "create new" option that reveals a text box. Easier to click than a
+		// typeahead, and new tags are still one step away.
+		const NEW_TAG = "__new_tag__";
+		const NO_TAG = "__no_tag__";
+		const tagOptions = [...this.knownTags];
+		if (this.tag && !tagOptions.includes(this.tag)) tagOptions.unshift(this.tag);
+
+		let newTagComponent: TextComponent | null = null;
+		let setNewTagVisible: (show: boolean) => void = () => {};
+
+		new Setting(contentEl).setName("Tag").addDropdown((dd) => {
+			dd.addOption(NO_TAG, "No tag");
+			for (const t of tagOptions) dd.addOption(t, t);
+			dd.addOption(NEW_TAG, "+ Create new tag");
+			dd.setValue(this.tag ? this.tag : NO_TAG);
+			dd.onChange((v) => {
+				if (v === NEW_TAG) {
+					this.tag = "";
+					setNewTagVisible(true);
+				} else {
+					this.tag = v === NO_TAG ? "" : v;
+					setNewTagVisible(false);
 				}
-				text.inputEl.setAttr("list", listId);
-				text.inputEl.setAttr("placeholder", "#tag");
 			});
+		});
+
+		const newTagSetting = new Setting(contentEl).setName("New tag").addText((text) => {
+			text.setPlaceholder("#tag").onChange((v) => (this.tag = v.trim()));
+			newTagComponent = text;
+		});
+		newTagSetting.settingEl.style.display = "none";
+		setNewTagVisible = (show: boolean) => {
+			newTagSetting.settingEl.style.display = show ? "" : "none";
+			if (show) window.setTimeout(() => newTagComponent?.inputEl.focus(), 0);
+		};
 
 		new Setting(contentEl).setName("Due date").addText((text) => {
-			text.inputEl.type = "date";
+			const input = text.inputEl;
+			input.type = "date";
+			input.addClass("tasks-form-date");
 			if (this.due) text.setValue(this.due);
 			text.onChange((v) => (this.due = v || null));
+			// Open the native calendar from anywhere in the field, not just the
+			// tiny built-in icon.
+			const openPicker = () => {
+				const picker = input as unknown as { showPicker?: () => void };
+				try {
+					picker.showPicker?.();
+				} catch (_) {
+					/* showPicker unsupported or not user-activated — ignore */
+				}
+			};
+			input.addEventListener("click", openPicker);
+			input.addEventListener("focus", openPicker);
 		});
 
 		new Setting(contentEl).setName("Priority").addDropdown((dd) => {
 			dd.addOption("none", "None");
-			dd.addOption("low", "Low");
-			dd.addOption("high", "High");
-			dd.addOption("highest", "Highest");
+			dd.addOption("highest", "🔺 Highest");
+			dd.addOption("high", "⏫ High");
+			dd.addOption("medium", "🔼 Medium");
+			dd.addOption("low", "🔽 Low");
+			dd.addOption("lowest", "⏬ Lowest");
 			dd.setValue(this.priority === "normal" ? "none" : this.priority);
 			dd.onChange((v) => (this.priority = v === "none" ? "normal" : (v as Priority)));
 		});

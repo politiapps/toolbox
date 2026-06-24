@@ -12,13 +12,19 @@
  * Priority emojis: ⏫ highest, 🔼 high, 🔽 low, (none) = normal.
  */
 
-export type Priority = "highest" | "high" | "normal" | "low";
+export type Priority = "highest" | "high" | "medium" | "normal" | "low" | "lowest";
 
-/** Maps the non-normal priorities to their canonical emoji. */
+/**
+ * Maps the non-normal priorities to their canonical emoji. These match the
+ * official Obsidian Tasks plugin so its queries and sorts interpret the same
+ * lines identically.
+ */
 export const PRIORITY_EMOJI: Record<Exclude<Priority, "normal">, string> = {
-	highest: "⏫",
-	high: "🔼",
+	highest: "🔺",
+	high: "⏫",
+	medium: "🔼",
 	low: "🔽",
+	lowest: "⏬",
 };
 
 /** Emoji markers used in the task syntax. */
@@ -86,15 +92,11 @@ export function parseTask(line: string, lineIndex: number): Task | null {
 	const tags = body.match(TAG_RE) ?? [];
 
 	// Strip every recognised token to leave a clean description.
-	let description = body
-		.replace(DUE_RE, " ")
-		.replace(DONE_RE, " ")
-		.replace(PRIORITY_EMOJI.highest, " ")
-		.replace(PRIORITY_EMOJI.high, " ")
-		.replace(PRIORITY_EMOJI.low, " ")
-		.replace(TAG_RE, " ")
-		.replace(/\s+/g, " ")
-		.trim();
+	let description = body.replace(DUE_RE, " ").replace(DONE_RE, " ");
+	for (const emoji of Object.values(PRIORITY_EMOJI)) {
+		description = description.split(emoji).join(" ");
+	}
+	description = description.replace(TAG_RE, " ").replace(/\s+/g, " ").trim();
 
 	return {
 		raw: line,
@@ -112,6 +114,8 @@ export function parseTask(line: string, lineIndex: number): Task | null {
 function detectPriority(body: string): Priority {
 	if (body.includes(PRIORITY_EMOJI.highest)) return "highest";
 	if (body.includes(PRIORITY_EMOJI.high)) return "high";
+	if (body.includes(PRIORITY_EMOJI.medium)) return "medium";
+	if (body.includes(PRIORITY_EMOJI.lowest)) return "lowest";
 	if (body.includes(PRIORITY_EMOJI.low)) return "low";
 	return "normal";
 }
