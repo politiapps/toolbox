@@ -31,13 +31,17 @@ applied via the `--section-accent` CSS custom property to the header dot only.
 │      .tasks-today-eyebrow "TODAY"     │
 │      .tasks-today-date "Wednesday 24th"│
 │    button.tasks-add  (circular "+", right)
+│  .tasks-calendar  (card, only if ics URL set)
+│    .tasks-calendar-header "Today's events"
+│    .tasks-event (time + title) …      │
 │  ── for each configured section ──    │
 │  .tasks-section  (card) [--section-accent]
 │    .tasks-section-header              │
 │      .tasks-chevron                   │
 │      .tasks-section-dot   (identity hue)
-│      .tasks-section-title (eyebrow)   │
+│      .tasks-section-title (heading)   │
 │      .tasks-count-badge   (incomplete)│
+│      button.tasks-section-add ("+", hover)
 │    .tasks-section-body                │
 │      .tasks-row …                     │
 │  ── always last ──                    │

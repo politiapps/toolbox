@@ -37,6 +37,8 @@ export interface TasksPluginSettings {
 	recentTags: string[];
 	/** Persisted collapse state keyed by section id (and the completed key). */
 	collapseState: Record<string, boolean>;
+	/** Public .ics subscription URL for the "Today" calendar (empty = hidden). */
+	icsUrl: string;
 }
 
 /** Persistence key for the always-present Completed section. */
@@ -47,6 +49,7 @@ export const DEFAULT_SETTINGS: TasksPluginSettings = {
 	sections: [],
 	recentTags: [],
 	collapseState: {},
+	icsUrl: "",
 };
 
 /** Generate a reasonably unique id for a new section. */
@@ -79,6 +82,22 @@ export class TasksSettingTab extends PluginSettingTab {
 						this.plugin.settings.tasksFilePath = value.trim() || "tasks.md";
 						await this.plugin.saveSettings();
 						this.plugin.refreshViews();
+					})
+			);
+
+		new Setting(containerEl)
+			.setName("Calendar (.ics) URL")
+			.setDesc(
+				"Public iCalendar subscription URL. Today's events show above your tasks. Leave empty to hide the calendar."
+			)
+			.addText((text) =>
+				text
+					.setPlaceholder("https://…/basic.ics")
+					.setValue(this.plugin.settings.icsUrl)
+					.onChange(async (value) => {
+						this.plugin.settings.icsUrl = value.trim();
+						await this.plugin.saveSettings();
+						this.plugin.fetchCalendar();
 					})
 			);
 

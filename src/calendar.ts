@@ -1,0 +1,247 @@
+/**
+ * calendar.ts — Minimal iCalendar (.ics) parsing for "what's on today".
+ *
+ * Scope is deliberately narrow: enough to surface today's events from a typical
+ * Google/Outlook/Apple subscription feed. It handles line unfolding, timed and
+ * all-day events, UTC and floating/TZID times (TZID is treated as wall-clock —
+ * see limitations), EXDATE, and common recurrence (DAILY / WEEKLY+BYDAY /
+ * MONTHLY / YEARLY with INTERVAL, UNTIL, COUNT). It does not implement the full
+ * RFC 5545 recurrence grammar.
+ *
+ * This module never touches the vault or task files — it is pure parsing.
+ */
+
+export interface CalendarOccurrence {
+	summary: string;
+	/** Local start time, or null for all-day events. */
+	start: Date | null;
+	allDay: boolean;
+}
+
+type Freq = "DAILY" | "WEEKLY" | "MONTHLY" | "YEARLY";
+
+interface RRule {
+	freq: Freq;
+	interval: number;
+	byDay?: number[]; // 0=Sun … 6=Sat
+	until?: Date;
+	count?: number;
+}
+
+interface RawEvent {
+	summary: string;
+	start: Date;
+	end: Date | null;
+	allDay: boolean;
+	rrule?: RRule;
+	exDates: Set<string>; // local YYYY-M-D keys
+}
+
+const WEEKDAY: Record<string, number> = { SU: 0, MO: 1, TU: 2, WE: 3, TH: 4, FR: 5, SA: 6 };
+const DAY_MS = 86_400_000;
+
+/** Convenience: parse a feed and return today's occurrences, sorted. */
+export function getEventsForToday(ics: string): CalendarOccurrence[] {
+	return eventsOnDay(parseICS(ics), new Date());
+}
+
+/** Unfold RFC 5545 continuation lines (leading space/tab continues prior line). */
+function unfold(ics: string): string[] {
+	const out: string[] = [];
+	for (const line of ics.split(/\r?\n/)) {
+		if ((line.startsWith(" ") || line.startsWith("\t")) && out.length) {
+			out[out.length - 1] += line.slice(1);
+		} else {
+			out.push(line);
+		}
+	}
+	return out;
+}
+
+function splitLine(line: string): { name: string; params: Record<string, string>; value: string } | null {
+	const idx = line.indexOf(":");
+	if (idx === -1) return null;
+	const segs = line.slice(0, idx).split(";");
+	const params: Record<string, string> = {};
+	for (let i = 1; i < segs.length; i++) {
+		const eq = segs[i].indexOf("=");
+		if (eq !== -1) params[segs[i].slice(0, eq).toUpperCase()] = segs[i].slice(eq + 1).toUpperCase();
+	}
+	return { name: segs[0].toUpperCase(), params, value: line.slice(idx + 1) };
+}
+
+function unescapeText(v: string): string {
+	return v
+		.replace(/\\n/gi, " ")
+		.replace(/\\,/g, ",")
+		.replace(/\\;/g, ";")
+		.replace(/\\\\/g, "\\")
+		.trim();
+}
+
+function parseDate(value: string, params: Record<string, string>): { date: Date; allDay: boolean } {
+	if (params.VALUE === "DATE" || /^\d{8}$/.test(value)) {
+		const y = +value.slice(0, 4),
+			mo = +value.slice(4, 6),
+			d = +value.slice(6, 8);
+		return { date: new Date(y, mo - 1, d), allDay: true };
+	}
+	const m = value.match(/^(\d{4})(\d{2})(\d{2})T(\d{2})(\d{2})(\d{2})(Z)?$/);
+	if (!m) return { date: new Date(value), allDay: false };
+	const [, y, mo, d, h, mi, s, z] = m;
+	if (z === "Z") return { date: new Date(Date.UTC(+y, +mo - 1, +d, +h, +mi, +s)), allDay: false };
+	return { date: new Date(+y, +mo - 1, +d, +h, +mi, +s), allDay: false };
+}
+
+function parseRRule(value: string): RRule | undefined {
+	const parts: Record<string, string> = {};
+	for (const kv of value.split(";")) {
+		const eq = kv.indexOf("=");
+		if (eq !== -1) parts[kv.slice(0, eq).toUpperCase()] = kv.slice(eq + 1).toUpperCase();
+	}
+	const freq = parts.FREQ as Freq;
+	if (!["DAILY", "WEEKLY", "MONTHLY", "YEARLY"].includes(freq)) return undefined;
+	const rule: RRule = { freq, interval: parts.INTERVAL ? +parts.INTERVAL : 1 };
+	if (parts.BYDAY) {
+		rule.byDay = parts.BYDAY.split(",")
+			.map((d) => WEEKDAY[d.slice(-2)])
+			.filter((n) => n !== undefined);
+	}
+	if (parts.COUNT) rule.count = +parts.COUNT;
+	if (parts.UNTIL) rule.until = parseDate(parts.UNTIL, {}).date;
+	return rule;
+}
+
+export function parseICS(ics: string): RawEvent[] {
+	const events: RawEvent[] = [];
+	let cur: Partial<RawEvent> | null = null;
+
+	for (const line of unfold(ics)) {
+		if (line === "BEGIN:VEVENT") {
+			cur = { exDates: new Set() };
+			continue;
+		}
+		if (line === "END:VEVENT") {
+			if (cur && cur.start) {
+				events.push({
+					summary: cur.summary || "(no title)",
+					start: cur.start,
+					end: cur.end ?? null,
+					allDay: cur.allDay ?? false,
+					rrule: cur.rrule,
+					exDates: cur.exDates ?? new Set(),
+				});
+			}
+			cur = null;
+			continue;
+		}
+		if (!cur) continue;
+
+		const p = splitLine(line);
+		if (!p) continue;
+		switch (p.name) {
+			case "DTSTART": {
+				const { date, allDay } = parseDate(p.value, p.params);
+				cur.start = date;
+				cur.allDay = allDay;
+				break;
+			}
+			case "DTEND":
+				cur.end = parseDate(p.value, p.params).date;
+				break;
+			case "SUMMARY":
+				cur.summary = unescapeText(p.value);
+				break;
+			case "RRULE":
+				cur.rrule = parseRRule(p.value);
+				break;
+			case "EXDATE":
+				cur.exDates!.add(dayKey(parseDate(p.value, p.params).date));
+				break;
+		}
+	}
+	return events;
+}
+
+function dayKey(d: Date): string {
+	return `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`;
+}
+
+function startOfDay(d: Date): Date {
+	return new Date(d.getFullYear(), d.getMonth(), d.getDate());
+}
+
+function dayDiff(from: Date, to: Date): number {
+	return Math.round((startOfDay(to).getTime() - startOfDay(from).getTime()) / DAY_MS);
+}
+
+function occursOn(ev: RawEvent, day: Date): boolean {
+	if (ev.exDates.has(dayKey(day))) return false;
+
+	if (!ev.rrule) {
+		if (ev.allDay && ev.end) {
+			// DTEND is exclusive for all-day spans.
+			return dayDiff(ev.start, day) >= 0 && dayDiff(day, ev.end) > 0;
+		}
+		return dayDiff(ev.start, day) === 0;
+	}
+
+	const r = ev.rrule;
+	const diff = dayDiff(ev.start, day);
+	if (diff < 0) return false;
+	if (r.until && dayDiff(day, r.until) < 0) return false;
+
+	switch (r.freq) {
+		case "DAILY": {
+			if (diff % r.interval !== 0) return false;
+			if (r.count !== undefined && diff / r.interval >= r.count) return false;
+			return true;
+		}
+		case "WEEKLY": {
+			const days = r.byDay && r.byDay.length ? r.byDay : [ev.start.getDay()];
+			if (!days.includes(day.getDay())) return false;
+			const weeks = Math.floor(dayDiff(startOfWeek(ev.start), startOfWeek(day)) / 7);
+			return weeks % r.interval === 0;
+		}
+		case "MONTHLY": {
+			if (day.getDate() !== ev.start.getDate()) return false;
+			const months = (day.getFullYear() - ev.start.getFullYear()) * 12 + (day.getMonth() - ev.start.getMonth());
+			if (months % r.interval !== 0) return false;
+			if (r.count !== undefined && months / r.interval >= r.count) return false;
+			return true;
+		}
+		case "YEARLY": {
+			if (day.getMonth() !== ev.start.getMonth() || day.getDate() !== ev.start.getDate()) return false;
+			const years = day.getFullYear() - ev.start.getFullYear();
+			if (years % r.interval !== 0) return false;
+			if (r.count !== undefined && years / r.interval >= r.count) return false;
+			return true;
+		}
+	}
+}
+
+function startOfWeek(d: Date): Date {
+	const s = startOfDay(d);
+	s.setDate(s.getDate() - s.getDay()); // week starts Sunday
+	return s;
+}
+
+export function eventsOnDay(events: RawEvent[], day: Date): CalendarOccurrence[] {
+	const out: CalendarOccurrence[] = [];
+	for (const ev of events) {
+		if (!occursOn(ev, day)) continue;
+		out.push({
+			summary: ev.summary,
+			allDay: ev.allDay,
+			start: ev.allDay
+				? null
+				: new Date(day.getFullYear(), day.getMonth(), day.getDate(), ev.start.getHours(), ev.start.getMinutes()),
+		});
+	}
+	out.sort((a, b) => {
+		if (a.allDay !== b.allDay) return a.allDay ? -1 : 1;
+		if (a.start && b.start) return a.start.getTime() - b.start.getTime();
+		return 0;
+	});
+	return out;
+}

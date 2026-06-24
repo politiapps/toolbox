@@ -94,8 +94,34 @@ function formatDueDisplay(iso: string): string {
 	return `${weekday} ${d.getDate()}${ordinalSuffix(d.getDate())}`;
 }
 
-function isOverdue(iso: string): boolean {
-	return iso < todayISO();
+/** Whole days from today to the given date (negative = past). */
+function daysUntil(iso: string): number {
+	const today = parseLocalDate(todayISO()).getTime();
+	const due = parseLocalDate(iso).getTime();
+	return Math.round((due - today) / 86_400_000);
+}
+
+/** Human label for a due date: "Today"/"Tomorrow" for the near term, else date. */
+function dueLabel(iso: string): string {
+	const d = daysUntil(iso);
+	if (d === 0) return "Today";
+	if (d === 1) return "Tomorrow";
+	return formatDueDisplay(iso);
+}
+
+/** Local clock time for a calendar event, e.g. "9:30 AM". */
+function formatEventTime(d: Date): string {
+	return d.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+}
+
+/** Proximity class driving the due-date colour ramp (sooner = warmer). */
+function dueClass(iso: string): string {
+	const d = daysUntil(iso);
+	if (d < 0) return "is-overdue";
+	if (d === 0) return "is-today";
+	if (d === 1) return "is-tomorrow";
+	if (d === 2) return "is-soon";
+	return "is-upcoming";
 }
 
 /* ------------------------------------------------------------------ */
@@ -196,6 +222,7 @@ export class TasksView extends ItemView {
 		root.addClass("tasks-panel-content");
 
 		this.renderPanelHeader(root);
+		this.renderCalendar(root);
 
 		// No file at the configured path — say so plainly instead of showing an
 		// empty panel that looks like "you have no tasks".
@@ -237,6 +264,36 @@ export class TasksView extends ItemView {
 		setIcon(add, "plus");
 		add.setAttr("aria-label", "Add task");
 		add.addEventListener("click", () => this.openAddForm());
+	}
+
+	/** "Today" calendar block above the tasks (only when an .ics URL is set). */
+	private renderCalendar(root: HTMLElement): void {
+		if (!this.plugin.settings.icsUrl) return;
+
+		const cal = root.createDiv({ cls: "tasks-calendar" });
+		const header = cal.createDiv({ cls: "tasks-calendar-header" });
+		setIcon(header.createSpan({ cls: "tasks-calendar-icon" }), "calendar");
+		header.createSpan({ cls: "tasks-calendar-title", text: "Today's events" });
+
+		if (this.plugin.calendarError) {
+			cal.createDiv({ cls: "tasks-calendar-error", text: this.plugin.calendarError });
+			return;
+		}
+
+		const events = this.plugin.calendarEvents;
+		if (events.length === 0) {
+			cal.createDiv({ cls: "tasks-empty", text: "Nothing scheduled today" });
+			return;
+		}
+
+		for (const ev of events) {
+			const row = cal.createDiv({ cls: "tasks-event" });
+			row.createSpan({
+				cls: "tasks-event-time",
+				text: ev.allDay || !ev.start ? "All day" : formatEventTime(ev.start),
+			});
+			row.createSpan({ cls: "tasks-event-title", text: ev.summary });
+		}
 	}
 
 	private renderMissingFileNotice(root: HTMLElement): void {
@@ -285,6 +342,15 @@ export class TasksView extends ItemView {
 			this.refresh();
 		});
 		header.dataset.sectionId = section.id;
+
+		// Per-section add: opens the form pre-assigned to this category's tag.
+		const addBtn = header.createEl("button", { cls: "tasks-section-add" });
+		setIcon(addBtn, "plus");
+		addBtn.setAttr("aria-label", `Add task to ${section.name}`);
+		addBtn.addEventListener("click", (e) => {
+			e.stopPropagation(); // don't toggle collapse
+			this.openAddForm(section.tag);
+		});
 
 		if (!collapsed) {
 			const body = sectionEl.createDiv({ cls: "tasks-section-body" });
@@ -370,9 +436,8 @@ export class TasksView extends ItemView {
 				text: `Done ${formatDueDisplay(task.doneDate)}`,
 			});
 		} else if (task.due) {
-			const dueEl = meta.createSpan({ cls: "tasks-due", text: formatDueDisplay(task.due) });
-			if (isOverdue(task.due)) dueEl.addClass("is-overdue");
-			else if (task.due === todayISO()) dueEl.addClass("is-today");
+			const dueEl = meta.createSpan({ cls: "tasks-due", text: dueLabel(task.due) });
+			dueEl.addClass(dueClass(task.due));
 		}
 
 		if (task.priority !== "normal") {
@@ -446,7 +511,7 @@ export class TasksView extends ItemView {
 		});
 	}
 
-	private openAddForm(): void {
+	private openAddForm(prefillTag?: string): void {
 		new TaskFormModal(this, "Add task", this.allTags, null, async (input) => {
 			const line = serializeTask({
 				indent: "",
@@ -461,7 +526,7 @@ export class TasksView extends ItemView {
 			for (const tag of input.tags) touchRecentTag(this.plugin.settings, tag);
 			await this.plugin.saveSettings();
 			await this.refresh();
-		}).open();
+		}, prefillTag).open();
 	}
 
 	private openEditForm(task: Task): void {
@@ -562,7 +627,8 @@ class TaskFormModal extends Modal {
 		titleText: string,
 		knownTags: string[],
 		initial: TaskInput | null,
-		onSubmit: (input: TaskInput) => Promise<void>
+		onSubmit: (input: TaskInput) => Promise<void>,
+		prefillTag?: string
 	) {
 		super(view.app);
 		this.view = view;
@@ -576,6 +642,9 @@ class TaskFormModal extends Modal {
 			this.tag = initial.tags[0] ?? "";
 			this.due = initial.due;
 			this.priority = initial.priority;
+		} else if (prefillTag) {
+			// Adding from a section's "+": start with that category's tag.
+			this.tag = prefillTag;
 		}
 	}
 

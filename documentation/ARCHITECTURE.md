@@ -11,8 +11,9 @@ Obsidian Tasks plugin-compatible syntax, so other Tasks queries keep working.
 
 ```
 src/
-  main.ts        Plugin entry point + lifecycle + global vault watcher
+  main.ts        Plugin entry point + lifecycle + vault watcher + calendar fetch
   taskParser.ts  THE ONLY place tasks are parsed / serialised
+  calendar.ts    THE ONLY place .ics feeds are parsed (pure; no vault access)
   settings.ts    Settings model, defaults, native settings tab
   taskView.ts    Sidebar ItemView, rendering, interactions, add/edit modal
 styles.css       Sidebar styling (auto-loaded by Obsidian)
@@ -30,6 +31,19 @@ manifest.json    Plugin id/name/minAppVersion (1.4.0)
   being created or renamed into the path — it calls `refreshViews()`.
 - `activateView()` opens/reveals the view in the right sidebar.
 - `refreshViews()` re-renders every open `TasksView`.
+- `fetchCalendar()` pulls the configured `.ics` feed via `requestUrl` (no CORS),
+  caches today's events on the plugin (`calendarEvents` / `calendarError`), and
+  refreshes views. Called on load, on a 30-minute `registerInterval`, and when
+  the URL changes in settings.
+
+### `calendar.ts`
+- Minimal iCalendar (`.ics`) parsing — pure functions, no vault/network code.
+- `getEventsForToday(ics)` → today's `CalendarOccurrence[]` (parse + filter).
+- `parseICS` / `eventsOnDay` are exported for testing. Handles line unfolding,
+  timed + all-day events, UTC and floating/TZID times (TZID treated as
+  wall-clock), EXDATE, and common recurrence (DAILY / WEEKLY+BYDAY / MONTHLY /
+  YEARLY with INTERVAL, UNTIL, COUNT). Not full RFC 5545.
+- Fetched and cached by `main.ts` (`fetchCalendar`), rendered by the view.
 
 ### `taskParser.ts`
 - Exports `Task`, `TaskInput`, `Priority`, `PRIORITY_EMOJI`.
@@ -41,7 +55,7 @@ manifest.json    Plugin id/name/minAppVersion (1.4.0)
 
 ### `settings.ts`
 - `TasksPluginSettings`: `tasksFilePath`, `sections[]`, `recentTags[]`,
-  `collapseState{}`.
+  `collapseState{}`, `icsUrl`.
 - `SectionConfig`: `id`, `name`, `tag`, `sort`, `collapsedByDefault`.
 - `SortOrder`: `due | priority-due | priority | file`.
 - `TasksSettingTab`: native settings UI to edit the file path and manage
