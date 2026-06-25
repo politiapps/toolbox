@@ -238,8 +238,12 @@ export class TasksView extends ItemView {
 
 		const incomplete = tasks.filter((t) => !t.completed);
 
+		// A top-level task renders in the first section it matches only — never
+		// twice. Subtasks are never section rows; they render under their parent.
+		const shown = new Set<Task>();
 		for (const section of this.plugin.settings.sections) {
-			const matching = incomplete.filter((t) => taskHasTag(t, section.tag));
+			const matching = incomplete.filter((t) => !shown.has(t) && taskHasTag(t, section.tag));
+			matching.forEach((t) => shown.add(t));
 			this.renderSection(root, section, matching);
 		}
 
@@ -410,7 +414,7 @@ export class TasksView extends ItemView {
 		return header;
 	}
 
-	private renderTask(parent: HTMLElement, task: Task): void {
+	private renderTask(parent: HTMLElement, task: Task, parentTags: string[] = []): void {
 		const item = parent.createDiv({ cls: "tasks-item" });
 		const row = item.createDiv({ cls: "tasks-row" });
 		if (task.completed) row.addClass("is-completed");
@@ -452,7 +456,9 @@ export class TasksView extends ItemView {
 
 		const meta = main.createDiv({ cls: "tasks-meta" });
 
+		// Skip a tag pill the parent already shows — it's inherited, not new info.
 		for (const tag of task.tags) {
+			if (parentTags.includes(tag)) continue;
 			meta.createSpan({ cls: "tasks-tag-pill", text: tag });
 		}
 
@@ -496,7 +502,7 @@ export class TasksView extends ItemView {
 
 		if (hasChildren && !collapsed) {
 			const childWrap = item.createDiv({ cls: "tasks-children" });
-			for (const child of task.children) this.renderTask(childWrap, child);
+			for (const child of task.children) this.renderTask(childWrap, child, task.tags);
 		}
 	}
 
@@ -569,8 +575,20 @@ export class TasksView extends ItemView {
 		}, prefillTag).open();
 	}
 
-	private openAddSubtask(parent: Task): void {
-		new TaskFormModal(this, "Add subtask", this.allTags, null, (input) => this.addSubtask(parent, input)).open();
+	/** Open the full add form for a subtask, pre-tagged with the parent's project. */
+	openAddSubtask(parent: Task, onDone?: () => void): void {
+		const prefill = parent.tags[0];
+		new TaskFormModal(
+			this,
+			"Add subtask",
+			this.allTags,
+			null,
+			async (input) => {
+				await this.addSubtask(parent, input);
+				onDone?.();
+			},
+			prefill
+		).open();
 	}
 
 	private openDetail(task: Task): void {
@@ -1005,22 +1023,9 @@ class TaskDetailModal extends Modal {
 		this.renderSubtasks(subWrap);
 
 		const addRow = contentEl.createDiv({ cls: "tasks-detail-addsub" });
-		const addInput = addRow.createEl("input", {
-			type: "text",
-			attr: { placeholder: "New subtask" },
-		});
-		const addBtn = addRow.createEl("button", { text: "Add" });
-		const doAdd = async () => {
-			const text = addInput.value.trim();
-			if (!text) return;
-			await this.view.addSubtask(this.task, { description: text, tags: [], due: null, priority: "normal" });
-			addInput.value = "";
-			await this.reload();
-		};
-		addBtn.addEventListener("click", doAdd);
-		addInput.addEventListener("keydown", (e) => {
-			if (e.key === "Enter") doAdd();
-		});
+		addRow
+			.createEl("button", { text: "+ Add subtask" })
+			.addEventListener("click", () => this.view.openAddSubtask(this.task, () => this.reload()));
 
 		const footer = contentEl.createDiv({ cls: "tasks-detail-footer" });
 		footer.createEl("button", { text: "Save", cls: "mod-cta" }).addEventListener("click", () => this.save());

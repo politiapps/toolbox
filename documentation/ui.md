@@ -75,6 +75,11 @@ applied via the `--section-accent` CSS custom property to the header dot only.
 - A `.tasks-note-indicator` icon appears when a task has notes.
 - Clicking the description (or the pencil) opens `TaskDetailModal`: editable
   fields, a notes textarea, and a subtask list (toggle + add).
+- Adding a subtask (row `+` or the detail modal) opens the full add form
+  pre-tagged with the parent's project tag, with due date + priority.
+- A subtask hides any tag pill it shares with its parent (inherited, not new),
+  and a top-level task renders in only the first section it matches — so nothing
+  appears twice.
 - The checkbox is a custom round control (CSS `appearance: none`), filled with
   the theme accent when checked.
 - `.tasks-due` carries a state class: `.is-overdue` (red) when `due < today`,
