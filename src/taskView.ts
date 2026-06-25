@@ -26,6 +26,11 @@ import {
 	parseTasks,
 	serializeTask,
 	collectTags,
+	childIndentOf,
+	findTaskByRaw,
+	setTaskNotes,
+	addChildTaskLine,
+	removeTaskBlock,
 } from "./taskParser";
 import {
 	SectionConfig,
@@ -214,8 +219,8 @@ export class TasksView extends ItemView {
 	async refresh(): Promise<void> {
 		const file = this.getTasksFile();
 		const content = file ? await this.app.vault.read(file) : "";
-		const { tasks } = parseTasks(content);
-		this.allTags = this.mergedTagList(tasks);
+		const { tasks, flat } = parseTasks(content);
+		this.allTags = this.mergedTagList(flat);
 
 		const root = this.contentEl;
 		root.empty();
@@ -357,7 +362,7 @@ export class TasksView extends ItemView {
 			if (sorted.length === 0) {
 				body.createDiv({ cls: "tasks-empty", text: "Nothing due here" });
 			} else {
-				for (const task of sorted) this.renderTaskRow(body, task);
+				for (const task of sorted) this.renderTask(body, task);
 			}
 		}
 	}
@@ -378,7 +383,7 @@ export class TasksView extends ItemView {
 			if (sorted.length === 0) {
 				body.createDiv({ cls: "tasks-empty", text: "Completed tasks land here" });
 			} else {
-				for (const task of sorted) this.renderTaskRow(body, task);
+				for (const task of sorted) this.renderTask(body, task);
 			}
 		}
 	}
@@ -405,14 +410,28 @@ export class TasksView extends ItemView {
 		return header;
 	}
 
-	private renderTaskRow(parent: HTMLElement, task: Task): void {
-		const row = parent.createDiv({ cls: "tasks-row" });
+	private renderTask(parent: HTMLElement, task: Task): void {
+		const item = parent.createDiv({ cls: "tasks-item" });
+		const row = item.createDiv({ cls: "tasks-row" });
 		if (task.completed) row.addClass("is-completed");
 
-		const checkbox = row.createEl("input", {
-			type: "checkbox",
-			cls: "tasks-checkbox",
-		});
+		const hasChildren = task.children.length > 0;
+		const collapseKey = "task:" + hashKey(task.raw);
+		const collapsed = hasChildren && this.isCollapsed(collapseKey, false);
+
+		// Expand/collapse twisty (or a spacer to keep rows aligned).
+		const twisty = row.createSpan({ cls: "tasks-twisty" });
+		if (hasChildren) {
+			setIcon(twisty, collapsed ? "chevron-right" : "chevron-down");
+			twisty.addClass("is-clickable");
+			twisty.addEventListener("click", async (e) => {
+				e.stopPropagation();
+				await this.setCollapsed(collapseKey, !collapsed);
+				this.refresh();
+			});
+		}
+
+		const checkbox = row.createEl("input", { type: "checkbox", cls: "tasks-checkbox" });
 		checkbox.checked = task.completed;
 		checkbox.addEventListener("change", () => {
 			if (checkbox.checked && !task.completed) this.markDone(task);
@@ -422,7 +441,14 @@ export class TasksView extends ItemView {
 		const main = row.createDiv({ cls: "tasks-row-main" });
 
 		const descLine = main.createDiv({ cls: "tasks-desc-line" });
-		descLine.createSpan({ cls: "tasks-desc", text: task.description });
+		const desc = descLine.createSpan({ cls: "tasks-desc is-clickable", text: task.description });
+		desc.setAttr("aria-label", "Open task");
+		desc.addEventListener("click", () => this.openDetail(task));
+		if (task.notes) {
+			const note = descLine.createSpan({ cls: "tasks-note-indicator" });
+			setIcon(note, "align-left");
+			note.setAttr("aria-label", "Has notes");
+		}
 
 		const meta = main.createDiv({ cls: "tasks-meta" });
 
@@ -431,13 +457,15 @@ export class TasksView extends ItemView {
 		}
 
 		if (task.completed && task.doneDate) {
-			meta.createSpan({
-				cls: "tasks-done-date",
-				text: `Done ${formatDueDisplay(task.doneDate)}`,
-			});
+			meta.createSpan({ cls: "tasks-done-date", text: `Done ${formatDueDisplay(task.doneDate)}` });
 		} else if (task.due) {
 			const dueEl = meta.createSpan({ cls: "tasks-due", text: dueLabel(task.due) });
 			dueEl.addClass(dueClass(task.due));
+		}
+
+		if (hasChildren) {
+			const done = task.children.filter((c) => c.completed).length;
+			meta.createSpan({ cls: "tasks-progress", text: `${done}/${task.children.length}` });
 		}
 
 		if (task.priority !== "normal") {
@@ -451,15 +479,25 @@ export class TasksView extends ItemView {
 
 		const actions = row.createDiv({ cls: "tasks-actions" });
 
+		const addSubBtn = actions.createEl("button", { cls: "tasks-icon-button" });
+		setIcon(addSubBtn, "plus");
+		addSubBtn.setAttr("aria-label", "Add subtask");
+		addSubBtn.addEventListener("click", () => this.openAddSubtask(task));
+
 		const editBtn = actions.createEl("button", { cls: "tasks-icon-button" });
 		setIcon(editBtn, "pencil");
-		editBtn.setAttr("aria-label", "Edit task");
-		editBtn.addEventListener("click", () => this.openEditForm(task));
+		editBtn.setAttr("aria-label", "Open task");
+		editBtn.addEventListener("click", () => this.openDetail(task));
 
 		const delBtn = actions.createEl("button", { cls: "tasks-icon-button tasks-delete-button" });
 		setIcon(delBtn, "trash-2");
 		delBtn.setAttr("aria-label", "Delete task");
 		delBtn.addEventListener("click", () => this.confirmDelete(task, delBtn));
+
+		if (hasChildren && !collapsed) {
+			const childWrap = item.createDiv({ cls: "tasks-children" });
+			for (const child of task.children) this.renderTask(childWrap, child);
+		}
 	}
 
 	/* --------------------------- task actions -------------------------- */
@@ -494,7 +532,10 @@ export class TasksView extends ItemView {
 
 	private confirmDelete(task: Task, anchor: HTMLElement): void {
 		const popup = anchor.createDiv({ cls: "tasks-confirm-popup" });
-		popup.createSpan({ text: "Delete this task?" });
+		const n = countDescendants(task);
+		popup.createSpan({
+			text: n > 0 ? `Delete task and ${n} subtask${n === 1 ? "" : "s"}?` : "Delete this task?",
+		});
 		const yes = popup.createEl("button", { text: "Delete", cls: "mod-warning" });
 		const no = popup.createEl("button", { text: "Cancel" });
 
@@ -502,8 +543,7 @@ export class TasksView extends ItemView {
 		yes.addEventListener("click", async (e) => {
 			e.stopPropagation();
 			cleanup();
-			await this.replaceLine(task.raw, null);
-			await this.refresh();
+			await this.removeTask(task);
 		});
 		no.addEventListener("click", (e) => {
 			e.stopPropagation();
@@ -529,28 +569,105 @@ export class TasksView extends ItemView {
 		}, prefillTag).open();
 	}
 
-	private openEditForm(task: Task): void {
-		const initial: TaskInput = {
-			description: task.description,
-			tags: task.tags,
-			due: task.due,
-			priority: task.priority,
-		};
-		new TaskFormModal(this, "Edit task", this.allTags, initial, async (input) => {
+	private openAddSubtask(parent: Task): void {
+		new TaskFormModal(this, "Add subtask", this.allTags, null, (input) => this.addSubtask(parent, input)).open();
+	}
+
+	private openDetail(task: Task): void {
+		new TaskDetailModal(this, task).open();
+	}
+
+	/** Exposed so the detail modal can populate its tag dropdown. */
+	knownTagList(): string[] {
+		return this.allTags;
+	}
+
+	/* ----------------------- structural writes ------------------------ */
+
+	/**
+	 * Re-read the file, locate `targetRaw` in a fresh parse, apply a pure line
+	 * edit, and write back. The task passed to `edit` has block indices valid
+	 * for the `lines` array given to `edit`.
+	 */
+	private async applyStructural(
+		targetRaw: string,
+		edit: (lines: string[], task: Task) => string[]
+	): Promise<void> {
+		const file = this.getTasksFile();
+		if (!file) return;
+		const content = await this.app.vault.read(file);
+		const { flat, lines } = parseTasks(content);
+		const task = findTaskByRaw(flat, targetRaw);
+		if (!task) {
+			new Notice("Couldn't locate the task — it may have changed externally.");
+			return;
+		}
+		await this.app.vault.modify(file, edit(lines, task).join("\n"));
+	}
+
+	private async removeTask(task: Task): Promise<void> {
+		await this.applyStructural(task.raw, (lines, t) => removeTaskBlock(lines, t));
+		await this.refresh();
+	}
+
+	deleteTask(task: Task): Promise<void> {
+		return this.removeTask(task);
+	}
+
+	async setNotes(task: Task, notes: string): Promise<void> {
+		await this.applyStructural(task.raw, (lines, t) => setTaskNotes(lines, t, notes));
+		await this.refresh();
+	}
+
+	async addSubtask(parent: Task, input: TaskInput): Promise<void> {
+		await this.applyStructural(parent.raw, (lines, t) => {
 			const line = serializeTask({
-				indent: task.indent,
+				indent: childIndentOf(t),
 				description: input.description,
 				tags: input.tags,
 				due: input.due,
 				priority: input.priority,
-				completed: task.completed,
-				doneDate: task.doneDate,
+				completed: false,
+				doneDate: null,
 			});
-			await this.replaceLine(task.raw, line);
-			for (const tag of input.tags) touchRecentTag(this.plugin.settings, tag);
-			await this.plugin.saveSettings();
-			await this.refresh();
-		}).open();
+			return addChildTaskLine(lines, t, line);
+		});
+		for (const tag of input.tags) touchRecentTag(this.plugin.settings, tag);
+		await this.plugin.saveSettings();
+		await this.refresh();
+	}
+
+	/** Save edited fields and notes together in a single read/write. */
+	async saveTaskDetail(task: Task, input: TaskInput, notes: string): Promise<void> {
+		await this.applyStructural(task.raw, (lines, t) => {
+			lines[t.blockStart] = serializeTask({
+				indent: t.indent,
+				description: input.description,
+				tags: input.tags,
+				due: input.due,
+				priority: input.priority,
+				completed: t.completed,
+				doneDate: t.doneDate,
+			});
+			return setTaskNotes(lines, t, notes);
+		});
+		for (const tag of input.tags) touchRecentTag(this.plugin.settings, tag);
+		await this.plugin.saveSettings();
+		await this.refresh();
+	}
+
+	/** Toggle a task's done state (used by the detail modal's subtask list). */
+	toggleTask(task: Task): Promise<void> {
+		return task.completed ? this.markUndone(task) : this.markDone(task);
+	}
+
+	/** Re-read and return the current version of a task by its line text. */
+	async reloadTask(raw: string): Promise<Task | null> {
+		const file = this.getTasksFile();
+		if (!file) return null;
+		const content = await this.app.vault.read(file);
+		const { flat } = parseTasks(content);
+		return findTaskByRaw(flat, raw);
 	}
 }
 
@@ -571,9 +688,25 @@ const SECTION_ACCENTS = [
 ];
 
 function sectionAccent(id: string): string {
-	let hash = 0;
-	for (let i = 0; i < id.length; i++) hash = (hash * 31 + id.charCodeAt(i)) | 0;
-	return SECTION_ACCENTS[Math.abs(hash) % SECTION_ACCENTS.length];
+	return SECTION_ACCENTS[hash32(id) % SECTION_ACCENTS.length];
+}
+
+function hash32(s: string): number {
+	let h = 0;
+	for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) | 0;
+	return Math.abs(h);
+}
+
+/** Stable persistence key for a task's expand/collapse state. */
+function hashKey(s: string): string {
+	return hash32(s).toString(36);
+}
+
+/** Total number of descendant tasks (subtasks at any depth). */
+function countDescendants(task: Task): number {
+	let n = task.children.length;
+	for (const c of task.children) n += countDescendants(c);
+	return n;
 }
 
 function taskHasTag(task: Task, tag: string): boolean {
@@ -753,6 +886,192 @@ class TaskFormModal extends Modal {
 		};
 		this.close();
 		await this.onSubmit(input);
+	}
+
+	onClose(): void {
+		this.contentEl.empty();
+	}
+}
+
+/* ------------------------------------------------------------------ */
+/* Task detail modal — open a task to edit fields, notes, subtasks      */
+/* ------------------------------------------------------------------ */
+
+class TaskDetailModal extends Modal {
+	private view: TasksView;
+	private task: Task;
+
+	private description: string;
+	private tag: string;
+	private due: string | null;
+	private priority: Priority;
+	private notes: string;
+
+	constructor(view: TasksView, task: Task) {
+		super(view.app);
+		this.view = view;
+		this.task = task;
+		this.description = task.description;
+		this.tag = task.tags[0] ?? "";
+		this.due = task.due;
+		this.priority = task.priority;
+		this.notes = task.notes;
+	}
+
+	onOpen(): void {
+		const { contentEl } = this;
+		contentEl.empty();
+		contentEl.addClass("tasks-form-modal", "tasks-detail-modal");
+		contentEl.createEl("h3", { text: "Task" });
+
+		new Setting(contentEl).setName("Description").addText((t) => {
+			t.setValue(this.description).onChange((v) => (this.description = v));
+			t.inputEl.classList.add("tasks-form-description");
+		});
+
+		const NEW_TAG = "__new_tag__";
+		const NO_TAG = "__no_tag__";
+		const tagOptions = [...this.view.knownTagList()];
+		if (this.tag && !tagOptions.includes(this.tag)) tagOptions.unshift(this.tag);
+		let newTagComponent: TextComponent | null = null;
+		let setNewTagVisible: (show: boolean) => void = () => {};
+
+		new Setting(contentEl).setName("Tag").addDropdown((dd) => {
+			dd.addOption(NO_TAG, "No tag");
+			for (const t of tagOptions) dd.addOption(t, t);
+			dd.addOption(NEW_TAG, "+ Create new tag");
+			dd.setValue(this.tag ? this.tag : NO_TAG);
+			dd.onChange((v) => {
+				if (v === NEW_TAG) {
+					this.tag = "";
+					setNewTagVisible(true);
+				} else {
+					this.tag = v === NO_TAG ? "" : v;
+					setNewTagVisible(false);
+				}
+			});
+		});
+
+		const newTagSetting = new Setting(contentEl).setName("New tag").addText((t) => {
+			t.setPlaceholder("#tag").onChange((v) => (this.tag = v.trim()));
+			newTagComponent = t;
+		});
+		newTagSetting.settingEl.style.display = "none";
+		setNewTagVisible = (show: boolean) => {
+			newTagSetting.settingEl.style.display = show ? "" : "none";
+			if (show) window.setTimeout(() => newTagComponent?.inputEl.focus(), 0);
+		};
+
+		new Setting(contentEl).setName("Due date").addText((t) => {
+			const input = t.inputEl;
+			input.type = "date";
+			input.addClass("tasks-form-date");
+			if (this.due) t.setValue(this.due);
+			t.onChange((v) => (this.due = v || null));
+			const open = () => {
+				const p = input as unknown as { showPicker?: () => void };
+				try {
+					p.showPicker?.();
+				} catch (_) {
+					/* ignore */
+				}
+			};
+			input.addEventListener("click", open);
+			input.addEventListener("focus", open);
+		});
+
+		new Setting(contentEl).setName("Priority").addDropdown((dd) => {
+			dd.addOption("none", "None");
+			dd.addOption("highest", "🔺 Highest");
+			dd.addOption("high", "⏫ High");
+			dd.addOption("medium", "🔼 Medium");
+			dd.addOption("low", "🔽 Low");
+			dd.addOption("lowest", "⏬ Lowest");
+			dd.setValue(this.priority === "normal" ? "none" : this.priority);
+			dd.onChange((v) => (this.priority = v === "none" ? "normal" : (v as Priority)));
+		});
+
+		// Notes
+		contentEl.createEl("div", { cls: "tasks-detail-label", text: "Notes" });
+		const notesArea = contentEl.createEl("textarea", { cls: "tasks-notes-input" });
+		notesArea.value = this.notes;
+		notesArea.rows = 4;
+		notesArea.placeholder = "Add notes…";
+		notesArea.addEventListener("input", () => (this.notes = notesArea.value));
+
+		// Subtasks
+		contentEl.createEl("div", { cls: "tasks-detail-label", text: "Subtasks" });
+		const subWrap = contentEl.createDiv({ cls: "tasks-detail-subtasks" });
+		this.renderSubtasks(subWrap);
+
+		const addRow = contentEl.createDiv({ cls: "tasks-detail-addsub" });
+		const addInput = addRow.createEl("input", {
+			type: "text",
+			attr: { placeholder: "New subtask" },
+		});
+		const addBtn = addRow.createEl("button", { text: "Add" });
+		const doAdd = async () => {
+			const text = addInput.value.trim();
+			if (!text) return;
+			await this.view.addSubtask(this.task, { description: text, tags: [], due: null, priority: "normal" });
+			addInput.value = "";
+			await this.reload();
+		};
+		addBtn.addEventListener("click", doAdd);
+		addInput.addEventListener("keydown", (e) => {
+			if (e.key === "Enter") doAdd();
+		});
+
+		const footer = contentEl.createDiv({ cls: "tasks-detail-footer" });
+		footer.createEl("button", { text: "Save", cls: "mod-cta" }).addEventListener("click", () => this.save());
+		footer.createEl("button", { text: "Delete", cls: "mod-warning" }).addEventListener("click", () => {
+			this.close();
+			this.view.deleteTask(this.task);
+		});
+	}
+
+	private renderSubtasks(wrap: HTMLElement): void {
+		wrap.empty();
+		if (this.task.children.length === 0) {
+			wrap.createDiv({ cls: "tasks-empty", text: "No subtasks yet" });
+			return;
+		}
+		for (const child of this.task.children) {
+			const row = wrap.createDiv({ cls: "tasks-detail-subrow" });
+			const cb = row.createEl("input", { type: "checkbox", cls: "tasks-checkbox" });
+			cb.checked = child.completed;
+			cb.addEventListener("change", async () => {
+				await this.view.toggleTask(child);
+				await this.reload();
+			});
+			const span = row.createSpan({ cls: "tasks-detail-subtitle", text: child.description });
+			if (child.completed) span.addClass("is-completed");
+		}
+	}
+
+	/** Re-read the task (after a subtask change) and re-render the subtask list. */
+	private async reload(): Promise<void> {
+		const fresh = await this.view.reloadTask(this.task.raw);
+		if (!fresh) return;
+		this.task = fresh;
+		const wrap = this.contentEl.querySelector(".tasks-detail-subtasks");
+		if (wrap instanceof HTMLElement) this.renderSubtasks(wrap);
+	}
+
+	private async save(): Promise<void> {
+		const description = this.description.trim();
+		if (!description) {
+			new Notice("Description is required.");
+			return;
+		}
+		let tag = this.tag.trim();
+		if (tag && !tag.startsWith("#")) tag = "#" + tag;
+		this.close();
+		await this.view.saveTaskDetail(
+			this.task,
+			{ description, tags: tag ? [tag] : [], due: this.due, priority: this.priority },
+			this.notes
+		);
 	}
 
 	onClose(): void {

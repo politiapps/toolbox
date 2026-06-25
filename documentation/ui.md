@@ -69,6 +69,12 @@ applied via the `--section-accent` CSS custom property to the header dot only.
   .tasks-icon-button.tasks-delete-button (trash → delete)
 ```
 
+- Tasks with subtasks show a `.tasks-twisty` expand/collapse chevron (state
+  persisted per task), a `.tasks-progress` `done/total` badge, and render their
+  `.tasks-children` recursively, indented with a hairline guide.
+- A `.tasks-note-indicator` icon appears when a task has notes.
+- Clicking the description (or the pencil) opens `TaskDetailModal`: editable
+  fields, a notes textarea, and a subtask list (toggle + add).
 - The checkbox is a custom round control (CSS `appearance: none`), filled with
   the theme accent when checked.
 - `.tasks-due` carries a state class: `.is-overdue` (red) when `due < today`,

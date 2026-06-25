@@ -49,6 +49,22 @@ export interface Task {
 	priority: Priority;
 	/** Completion date as YYYY-MM-DD, or null. */
 	doneDate: string | null;
+
+	/* --- hierarchy & notes (filled by parseTasks) --- */
+	/** Nested subtasks (deeper-indented task lines directly under this one). */
+	children: Task[];
+	/** Note text under this task (indentation stripped), or "". */
+	notes: string;
+	/** Indentation width with tabs expanded — used to build the tree. */
+	indentWidth: number;
+	/** Line range of this task's whole block: itself + notes + all descendants. */
+	blockStart: number;
+	blockEnd: number;
+	/** Line range of the existing note lines, or null when there are none. */
+	noteStart: number | null;
+	noteEnd: number | null;
+	/** Indent string used by this task's note lines (for round-tripping). */
+	noteIndent: string | null;
 }
 
 /** Fields used to build a brand new task or update an existing one. */
@@ -108,7 +124,27 @@ export function parseTask(line: string, lineIndex: number): Task | null {
 		due,
 		priority,
 		doneDate,
+		children: [],
+		notes: "",
+		indentWidth: indentWidthOf(indent),
+		blockStart: lineIndex,
+		blockEnd: lineIndex,
+		noteStart: null,
+		noteEnd: null,
+		noteIndent: null,
 	};
+}
+
+/** Indentation width with tabs counted as 4 columns. */
+function indentWidthOf(indent: string): number {
+	let w = 0;
+	for (const ch of indent) w += ch === "\t" ? 4 : 1;
+	return w;
+}
+
+function leadingWhitespace(line: string): string {
+	const m = line.match(/^(\s*)/);
+	return m ? m[1] : "";
 }
 
 function detectPriority(body: string): Priority {
@@ -121,17 +157,105 @@ function detectPriority(body: string): Priority {
 }
 
 /**
- * Parse the full file content into tasks and the raw line array.
- * The line array is returned so writers can merge edits without reparsing.
+ * Parse the full file content into a task tree.
+ *   - `tasks`: top-level tasks, each with nested `children` and `notes`.
+ *   - `flat`: every task (including subtasks) in document order.
+ *   - `lines`: the raw line array, so writers can merge edits without reparsing.
+ *
+ * Hierarchy is built from indentation. A task's notes are the indented,
+ * non-task lines directly following it (before its first subtask).
  */
-export function parseTasks(content: string): { tasks: Task[]; lines: string[] } {
+export function parseTasks(content: string): { tasks: Task[]; flat: Task[]; lines: string[] } {
 	const lines = content.split("\n");
-	const tasks: Task[] = [];
-	lines.forEach((line, i) => {
+	const roots: Task[] = [];
+	const flat: Task[] = [];
+	const stack: Task[] = [];
+
+	for (let i = 0; i < lines.length; i++) {
+		const line = lines[i];
 		const t = parseTask(line, i);
-		if (t) tasks.push(t);
-	});
-	return { tasks, lines };
+
+		if (t) {
+			flat.push(t);
+			while (stack.length && stack[stack.length - 1].indentWidth >= t.indentWidth) stack.pop();
+			if (stack.length) stack[stack.length - 1].children.push(t);
+			else roots.push(t);
+			stack.push(t);
+			continue;
+		}
+
+		// Blank lines don't close a block (notes may contain them).
+		if (line.trim() === "") continue;
+
+		const w = indentWidthOf(leadingWhitespace(line));
+		while (stack.length && stack[stack.length - 1].indentWidth >= w) stack.pop();
+
+		// An indented line under a task with no subtasks yet is that task's note.
+		const top = stack[stack.length - 1];
+		if (top && w > top.indentWidth && top.children.length === 0) {
+			top.notes = top.notes ? top.notes + "\n" + line.trim() : line.trim();
+			if (top.noteStart === null) {
+				top.noteStart = i;
+				top.noteIndent = leadingWhitespace(line);
+			}
+			top.noteEnd = i;
+		}
+	}
+
+	for (const t of roots) computeBlockEnd(t);
+	return { tasks: roots, flat, lines };
+}
+
+function computeBlockEnd(t: Task): number {
+	let end = t.blockStart;
+	if (t.noteEnd !== null) end = Math.max(end, t.noteEnd);
+	for (const c of t.children) end = Math.max(end, computeBlockEnd(c));
+	t.blockEnd = end;
+	return end;
+}
+
+/** The indent string a child / note line of `task` should use. */
+export function childIndentOf(task: Task): string {
+	if (task.children.length) return task.children[0].indent;
+	if (task.noteIndent) return task.noteIndent;
+	return task.indent + "    ";
+}
+
+/** Find a task (anywhere in the tree) by exact original line text. */
+export function findTaskByRaw(flat: Task[], raw: string): Task | null {
+	return flat.find((t) => t.raw === raw) ?? null;
+}
+
+/**
+ * Replace a task's note lines with `notes` (newline-separated). Empty `notes`
+ * removes them. Pure: takes and returns the line array. `task` must come from a
+ * parse of the SAME `lines`.
+ */
+export function setTaskNotes(lines: string[], task: Task, notes: string): string[] {
+	const out = lines.slice();
+	const indent = childIndentOf(task);
+	const newLines = notes.trim() ? notes.split("\n").map((l) => indent + l.trim()) : [];
+
+	if (task.noteStart !== null && task.noteEnd !== null) {
+		out.splice(task.noteStart, task.noteEnd - task.noteStart + 1, ...newLines);
+	} else if (newLines.length) {
+		out.splice(task.blockStart + 1, 0, ...newLines);
+	}
+	return out;
+}
+
+/** Insert a serialised child line at the end of `parent`'s block. Pure. */
+export function addChildTaskLine(lines: string[], parent: Task, childLine: string): string[] {
+	const out = lines.slice();
+	out.splice(parent.blockEnd + 1, 0, childLine);
+	return out;
+}
+
+/** Remove a task and its entire block (notes + descendants). Pure. */
+export function removeTaskBlock(lines: string[], task: Task): string[] {
+	const out = lines.slice();
+	out.splice(task.blockStart, task.blockEnd - task.blockStart + 1);
+	return out;
 }
 
 /**

@@ -59,3 +59,28 @@ off-by-one errors.
 
 The description is the body with all tags, dates, and priority emoji stripped
 out and internal whitespace collapsed. It may contain any other text.
+
+## Subtasks and notes
+
+Hierarchy and notes come from indentation:
+
+```
+- [ ] Parent task #getup 📅 2026-06-26
+    A note line (indented, no checkbox) — the parent's note
+    - [ ] Subtask one          ← nested task
+    - [ ] Subtask two
+```
+
+- A task's **subtasks** are deeper-indented task lines directly under it
+  (`children` in the parse tree); nesting is unbounded.
+- A task's **notes** are the indented, non-task lines immediately following it,
+  before its first subtask (`notes`). Opening a task shows/edits these.
+- Indentation may be tabs or spaces; tabs count as 4 columns for depth. New
+  subtasks/notes reuse the existing child indent, defaulting to four spaces.
+- This stays plain Markdown — the official Tasks plugin still reads every
+  checkbox line as its own independent task (no parent/child rollup).
+
+`parseTasks` returns the top-level `tasks` (each with `children`/`notes`) plus a
+`flat` list of every task. Structural edits (`setTaskNotes`, `addChildTaskLine`,
+`removeTaskBlock`) are pure functions over the line array, located by each
+task's `blockStart`/`blockEnd`/`noteStart`/`noteEnd` ranges.

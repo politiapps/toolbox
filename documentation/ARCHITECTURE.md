@@ -46,10 +46,14 @@ manifest.json    Plugin id/name/minAppVersion (1.4.0)
 - Fetched and cached by `main.ts` (`fetchCalendar`), rendered by the view.
 
 ### `taskParser.ts`
-- Exports `Task`, `TaskInput`, `Priority`, `PRIORITY_EMOJI`.
+- Exports `Task` (now with `children`, `notes`, and block-range fields),
+  `TaskInput`, `Priority`, `PRIORITY_EMOJI`.
 - `parseTask(line, index)` → `Task | null` for one line.
-- `parseTasks(content)` → `{ tasks, lines }` for the whole file.
+- `parseTasks(content)` → `{ tasks, flat, lines }`: `tasks` is the top-level
+  tree (indentation-based, with `children`/`notes`), `flat` is every task.
 - `serializeTask(input)` → canonical markdown line.
+- Pure structural editors over the line array: `setTaskNotes`,
+  `addChildTaskLine`, `removeTaskBlock`, plus `findTaskByRaw`, `childIndentOf`.
 - `collectTags(tasks)` → unique tags in first-seen order.
 - **No other file may parse or build task line strings.**
 
@@ -78,9 +82,13 @@ manifest.json    Plugin id/name/minAppVersion (1.4.0)
   `replaceLine` relocates the target line by exact text match so concurrent
   external edits don't clobber the wrong line.
 - Actions: `markDone` (sets `[x]` + `✅ today`), `markUndone`, delete, add, edit.
-- `TaskFormModal` (same file) is the add/edit form: description, tag (datalist
-  of file tags ordered most-recently-used, free typing allowed), due date,
-  priority. Used for both add and edit.
+- Subtasks render recursively (`renderTask`) with an expand/collapse twisty
+  (state persisted per task), a `done/total` progress badge, and a note
+  indicator. Structural writes go through `applyStructural` (re-read → locate by
+  raw → pure edit → write).
+- `TaskFormModal` is the quick add form (also used for "add subtask").
+- `TaskDetailModal` opens when you click a task: edit fields, a multi-line
+  **notes** textarea, and a subtask list (toggle + add).
 - Date formatting helpers are UI-only and never parse task syntax.
 
 ## Data flow

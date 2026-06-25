@@ -277,13 +277,82 @@
 }
 
 /* ── Task row ─────────────────────────────────────────────────────────── */
+.tasks-item {
+	display: flex;
+	flex-direction: column;
+}
+
+/* Subtasks indent off their parent with a hairline guide. */
+.tasks-children {
+	margin-left: 10px;
+	padding-left: 8px;
+	border-left: 1px solid var(--background-modifier-border);
+}
+
+.tasks-twisty {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	width: 14px;
+	height: 18px;
+	margin-top: 1px;
+	flex-shrink: 0;
+	color: var(--text-faint);
+	border-radius: 3px;
+}
+
+.tasks-twisty.is-clickable {
+	cursor: pointer;
+}
+
+.tasks-twisty.is-clickable:hover {
+	color: var(--text-normal);
+	background-color: var(--background-modifier-border);
+}
+
+.tasks-twisty svg {
+	width: 13px;
+	height: 13px;
+}
+
 .tasks-row {
 	display: flex;
 	align-items: flex-start;
-	gap: 9px;
+	gap: 6px;
 	padding: 6px 4px 6px 2px;
 	border-radius: 6px;
 	position: relative;
+}
+
+.tasks-desc.is-clickable {
+	cursor: pointer;
+}
+
+.tasks-desc.is-clickable:hover {
+	text-decoration: underline;
+	text-decoration-color: var(--text-faint);
+}
+
+.tasks-note-indicator {
+	display: inline-flex;
+	vertical-align: text-bottom;
+	margin-left: 5px;
+	color: var(--text-faint);
+}
+
+.tasks-note-indicator svg {
+	width: 12px;
+	height: 12px;
+}
+
+.tasks-progress {
+	font-family: var(--font-monospace);
+	font-size: 0.66rem;
+	font-variant-numeric: tabular-nums;
+	color: var(--text-muted);
+	background-color: var(--background-modifier-border);
+	border-radius: 4px;
+	padding: 0 5px;
 }
 
 .tasks-row:hover {
@@ -518,6 +587,60 @@
 .tasks-form-modal .tasks-form-date {
 	font-family: var(--font-monospace);
 	cursor: pointer;
+}
+
+/* Detail modal */
+.tasks-detail-label {
+	margin: 14px 0 6px;
+	font-family: var(--font-monospace);
+	font-size: 0.66rem;
+	letter-spacing: 0.12em;
+	text-transform: uppercase;
+	color: var(--text-muted);
+}
+
+.tasks-notes-input {
+	width: 100%;
+	resize: vertical;
+	min-height: 70px;
+	font-family: inherit;
+	font-size: 0.9rem;
+	line-height: 1.4;
+}
+
+.tasks-detail-subtasks {
+	display: flex;
+	flex-direction: column;
+	gap: 2px;
+}
+
+.tasks-detail-subrow {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	padding: 3px 0;
+}
+
+.tasks-detail-subtitle.is-completed {
+	text-decoration: line-through;
+	color: var(--text-faint);
+}
+
+.tasks-detail-addsub {
+	display: flex;
+	gap: 6px;
+	margin-top: 8px;
+}
+
+.tasks-detail-addsub input {
+	flex: 1;
+}
+
+.tasks-detail-footer {
+	display: flex;
+	justify-content: flex-end;
+	gap: 8px;
+	margin-top: 18px;
 }
 
 /* ── Reduced motion ───────────────────────────────────────────────────── */
