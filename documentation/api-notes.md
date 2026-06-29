@@ -59,6 +59,37 @@ Add a note here whenever a non-obvious API behaviour bites you.
 - Prefer `createDiv` / `createEl` / `createSpan` helpers (they return the child
   and accept `{ cls, text, attr }`) over manual `document.createElement`.
 
+## Live Preview rendering (Editable Columns)
+- **Render cells through the pipeline, never by hand.** To make embeds /
+  dataviewjs / Tasks execute inside custom-rendered content, call
+  `MarkdownRenderer.render(app, md, el, sourcePath, component)` — it runs the
+  registered post-processors. Hand-building HTML (Live Columns' mistake) shows
+  those blocks as raw text. `MarkdownRenderer.renderMarkdown` is the deprecated
+  spelling; use `.render`.
+- **A loaded Component is mandatory for lifecycle.** Pass a `MarkdownRenderChild`
+  (call `child.load()`) as the 5th arg and `unload()` it when the host widget is
+  destroyed, or nested components (dataviewjs) leak / keep running. Dataview also
+  ties its own refresh to that component, so dataviewjs cells update without us
+  re-rendering them.
+- **Comment markers beat a code fence for containers.** A ` ```columns ` fenced
+  block can't contain a cell's own ` ```dataviewjs ` / ` ```tasks ` fence
+  (markdown can't nest same-char fences). `%%`-comment markers
+  (`%% columns:start %%` …) have no nesting limit and degrade gracefully when the
+  feature is off — which is why Editable Columns uses them.
+- **CM6 block widgets:** replace a block with `Decoration.replace({ block: true,
+  widget })`; implement `WidgetType.eq()` (compare the block's source) so
+  unrelated keystrokes don't rebuild it, and skip the replacement when the
+  selection intersects the block so the user can edit the raw markers. Use
+  `ignoreEvent()` to let clicks on interactive descendants (links, embeds,
+  checkboxes) through instead of becoming cursor moves.
+- **`editorInfoField`** (from `obsidian`) read off `view.state` gives the editor's
+  `MarkdownFileInfo` — use `.file?.path` for the render `sourcePath` and `.app`
+  for the `App`. **`Extension`** is a `@codemirror/state` type, NOT exported by
+  `obsidian` — import it from there (`import type { Extension }`).
+- **Toggling an editor extension at runtime:** hand `registerEditorExtension` a
+  mutable array, mutate it in place, then call `app.workspace.updateOptions()`.
+  Re-registering is not needed and would double up.
+
 ## Dates
 - `toLocaleDateString(undefined, { weekday: 'long' })` for the day name.
 - Parse `YYYY-MM-DD` with `new Date(y, m-1, d)` (local) — `new Date('YYYY-MM-DD')`

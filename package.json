@@ -1,7 +1,7 @@
 {
-	"name": "my-tasks-plugin",
+	"name": "obsidian-toolbox",
 	"version": "1.0.0",
-	"description": "A sidebar panel for Obsidian Tasks plugin-compatible markdown tasks.",
+	"description": "A toolbox of Obsidian utilities (currently a sidebar Tasks panel; custom columns and timesheet planned).",
 	"main": "main.js",
 	"scripts": {
 		"dev": "node esbuild.config.mjs",
@@ -11,6 +11,7 @@
 	"keywords": [
 		"obsidian",
 		"plugin",
+		"toolbox",
 		"tasks"
 	],
 	"author": "millerjacob91",

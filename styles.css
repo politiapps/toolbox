@@ -643,6 +643,79 @@
 	margin-top: 18px;
 }
 
+/* ── Editable Columns (Live Preview layout) ───────────────────────────── */
+/* Grid lineage: the MIT-licensed Live Columns plugin. Theme-aware via Obsidian
+   CSS variables so it sits native in light and dark. */
+.toolbox-columns {
+	display: flex;
+	flex-direction: column;
+	gap: 12px;
+	margin: 6px 0;
+}
+
+.toolbox-columns-row {
+	display: grid;
+	gap: 12px;
+	align-items: start;
+}
+
+.toolbox-columns-cell {
+	min-width: 0;
+	padding: 10px 12px;
+	border: 1px solid var(--background-modifier-border);
+	border-radius: 8px;
+	background-color: var(--background-primary);
+	overflow-wrap: anywhere;
+}
+
+/* Trim the stock margins Obsidian puts on the first/last rendered block so cells
+   don't look top-heavy. */
+.toolbox-columns-cell > :first-child {
+	margin-top: 0;
+}
+.toolbox-columns-cell > :last-child {
+	margin-bottom: 0;
+}
+
+/* Embeds inside a cell read as click-to-edit. */
+.toolbox-columns-cell .internal-embed {
+	cursor: pointer;
+}
+
+/* Stack to a single column on narrow / mobile viewports. */
+@media (max-width: 600px) {
+	.toolbox-columns-row {
+		grid-template-columns: 1fr !important;
+	}
+}
+
+/* ── Embed edit modal ─────────────────────────────────────────────────── */
+.toolbox-embed-title {
+	font-family: var(--font-monospace);
+	font-size: 0.72rem;
+	letter-spacing: 0.12em;
+	text-transform: uppercase;
+	color: var(--text-muted);
+	margin-bottom: 10px;
+}
+
+.toolbox-embed-textarea {
+	width: 100%;
+	min-height: 220px;
+	resize: vertical;
+	font-family: var(--font-monospace);
+	font-size: 0.88rem;
+	line-height: 1.5;
+	tab-size: 4;
+}
+
+.toolbox-embed-footer {
+	display: flex;
+	justify-content: flex-end;
+	gap: 8px;
+	margin-top: 14px;
+}
+
 /* ── Reduced motion ───────────────────────────────────────────────────── */
 @media (prefers-reduced-motion: reduce) {
 	.tasks-add,

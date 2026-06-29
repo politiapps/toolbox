@@ -39,6 +39,8 @@ export interface TasksPluginSettings {
 	collapseState: Record<string, boolean>;
 	/** Public .ics subscription URL for the "Today" calendar (empty = hidden). */
 	icsUrl: string;
+	/** Editable Columns feature: render `%% columns %%` blocks in Live Preview. */
+	editableColumnsEnabled: boolean;
 }
 
 /** Persistence key for the always-present Completed section. */
@@ -50,6 +52,7 @@ export const DEFAULT_SETTINGS: TasksPluginSettings = {
 	recentTags: [],
 	collapseState: {},
 	icsUrl: "",
+	editableColumnsEnabled: true,
 };
 
 /** Generate a reasonably unique id for a new section. */
@@ -128,6 +131,20 @@ export class TasksSettingTab extends PluginSettingTab {
 					this.display();
 				})
 		);
+
+		containerEl.createEl("h2", { text: "Editable Columns" });
+		new Setting(containerEl)
+			.setName("Enable Editable Columns")
+			.setDesc(
+				"Render %% columns %% blocks as a multi-column layout in Live Preview, with click-to-edit embeds. See documentation/editable-columns.md for the syntax."
+			)
+			.addToggle((toggle) =>
+				toggle.setValue(this.plugin.settings.editableColumnsEnabled).onChange(async (value) => {
+					this.plugin.settings.editableColumnsEnabled = value;
+					await this.plugin.saveSettings();
+					this.plugin.applyEditableColumns();
+				})
+			);
 	}
 
 	private renderSectionSetting(containerEl: HTMLElement, section: SectionConfig, index: number): void {

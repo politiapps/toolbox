@@ -8,6 +8,7 @@
  */
 
 import { Plugin, WorkspaceLeaf, TFile, TAbstractFile, requestUrl } from "obsidian";
+import type { Extension } from "@codemirror/state";
 import {
 	DEFAULT_SETTINGS,
 	TasksPluginSettings,
@@ -15,6 +16,8 @@ import {
 } from "./settings";
 import { TasksView, VIEW_TYPE_TASKS } from "./taskView";
 import { CalendarOccurrence, getEventsForToday } from "./calendar";
+import { COLUMNS_CLASS, editableColumnsExtension } from "./editableColumns";
+import { openEmbedEditor, resolveEmbed } from "./embedEditor";
 
 /** How often to re-fetch the calendar feed while the plugin is running. */
 const CALENDAR_REFRESH_MS = 30 * 60 * 1000;
@@ -26,6 +29,14 @@ export default class TasksPlugin extends Plugin {
 	calendarEvents: CalendarOccurrence[] = [];
 	/** Non-null when the last fetch failed — surfaced in the panel. */
 	calendarError: string | null = null;
+
+	/**
+	 * Live mutable array handed to registerEditorExtension. Toggling the feature
+	 * mutates this in place and calls workspace.updateOptions() so the CM6
+	 * extension is added/removed without re-registering. Obsidian disposes the
+	 * registration itself on unload.
+	 */
+	private columnsExtension: Extension[] = [];
 
 	async onload(): Promise<void> {
 		await this.loadSettings();
@@ -62,6 +73,49 @@ export default class TasksPlugin extends Plugin {
 		// Calendar: fetch now and on a timer. registerInterval ensures cleanup.
 		this.fetchCalendar();
 		this.registerInterval(window.setInterval(() => this.fetchCalendar(), CALENDAR_REFRESH_MS));
+
+		// Editable Columns: register the (initially empty) editor-extension slot,
+		// then fill it if the feature is enabled. registerEditorExtension is
+		// auto-disposed on unload.
+		this.registerEditorExtension(this.columnsExtension);
+		this.applyEditableColumns();
+
+		// One document-level click listener (auto-removed on unload) makes embeds
+		// INSIDE our column cells editable. Scoped to .toolbox-columns so we never
+		// hijack ordinary embeds elsewhere in the vault.
+		this.registerDomEvent(document, "click", (evt) => this.handleColumnEmbedClick(evt));
+	}
+
+	/**
+	 * Add or remove the columns CM6 extension to match the current setting, then
+	 * refresh all editors so the change takes effect immediately.
+	 */
+	applyEditableColumns(): void {
+		this.columnsExtension.length = 0;
+		if (this.settings.editableColumnsEnabled) {
+			this.columnsExtension.push(editableColumnsExtension);
+		}
+		this.app.workspace.updateOptions();
+	}
+
+	/** Open the floating editor when an embed inside a column cell is clicked. */
+	private handleColumnEmbedClick(evt: MouseEvent): void {
+		if (!this.settings.editableColumnsEnabled) return;
+		const target = evt.target as HTMLElement | null;
+		if (!target || !target.closest("." + COLUMNS_CLASS)) return;
+
+		const embedEl = target.closest<HTMLElement>(".internal-embed");
+		if (!embedEl) return;
+		// Don't fight the embed's own interactive bits (links, the open button).
+		if (target.closest("a, button")) return;
+
+		const sourcePath = this.app.workspace.getActiveFile()?.path ?? "";
+		const resolved = resolveEmbed(this.app, embedEl, sourcePath);
+		if (!resolved) return;
+
+		evt.preventDefault();
+		evt.stopPropagation();
+		void openEmbedEditor(this.app, resolved);
 	}
 
 	/**

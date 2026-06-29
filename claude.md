@@ -1,6 +1,6 @@
 # claude.md (include verbatim as a file)
 
-# claude.md — Obsidian Tasks Plugin
+# claude.md — Toolbox (Obsidian plugin)
 
 ## 1. Core Map & Rules (MANDATORY INITIALIZATION)
 Before writing any code or running any commands, you MUST read these files:
@@ -39,7 +39,9 @@ If a relevant documentation file does not exist, create it in `documentation/` b
 
 ## 4. Project Context
 
-A custom Obsidian sidebar panel that reads from and writes to a user-configured tasks file. Tasks are stored in Obsidian Tasks plugin-compatible markdown syntax. All sections, tags, sort orders, and the file path are user-configured via the native settings page — nothing is hardcoded.
+**Toolbox** is a single Obsidian plugin (id `toolbox`) that bundles several utilities. Each utility is a *feature* registered from `src/main.ts`; as new features land they get their own module(s) under `src/` and their own doc under `documentation/`.
+
+Its current (and so far only) feature is the **Tasks panel** — a sidebar that reads from and writes to a user-configured tasks file. Tasks are stored in Obsidian Tasks plugin-compatible markdown syntax. All sections, tags, sort orders, and the file path are user-configured via the native settings page — nothing is hardcoded. **Planned features:** custom columns and a timesheet. The rules and notes below currently describe the Tasks feature; new features extend them rather than replace them.
 
 **Task format:**
 - [ ] Description #tag 📅 YYYY-MM-DD

@@ -1,7 +1,9 @@
-# Tasks Panel
+# Toolbox
 
-An Obsidian sidebar panel to view, add, edit, complete, and delete tasks stored
-in a single Obsidian Tasks plugin-compatible markdown file. See
+Toolbox is an Obsidian plugin that bundles several utilities. Its first feature
+is a **Tasks panel** — a sidebar to view, add, edit, complete, and delete tasks
+stored in an Obsidian Tasks plugin-compatible markdown file. **Custom columns**
+and a **timesheet** feature are planned. See
 [`documentation/ARCHITECTURE.md`](documentation/ARCHITECTURE.md) for the design.
 
 ## Development
@@ -16,7 +18,7 @@ To develop against a vault, junction the vault's plugin folder to this repo and
 use [pjeby/hot-reload](https://github.com/pjeby/hot-reload):
 
 ```powershell
-cmd /c mklink /J "C:\Path\To\DevVault\.obsidian\plugins\tasker" "C:\Projects\Coding_Projects\Tasks-plugin"
+cmd /c mklink /J "C:\Path\To\DevVault\.obsidian\plugins\toolbox" "C:\Projects\Coding_Projects\Toolbox"
 ```
 
 ## Branch model
@@ -73,7 +75,7 @@ plugins straight from GitHub releases.
 
 1. Install **Obsidian42 - BRAT** from Community Plugins and enable it.
 2. BRAT → **Add Beta Plugin**.
-3. Repository: `politiapps/tasker`.
+3. Repository: `politiapps/toolbox`.
 4. Choose the channel:
    - **Dev vault:** enable “Enable beta versions” so BRAT tracks the latest
      **pre-release** (`*-beta.*`) cut from `beta`.
@@ -82,4 +84,4 @@ plugins straight from GitHub releases.
 5. BRAT installs it and checks for updates on Obsidian startup.
 
 Manual install (no BRAT): copy `main.js`, `manifest.json`, and `styles.css` from
-a release into `<vault>/.obsidian/plugins/tasker/`.
+a release into `<vault>/.obsidian/plugins/toolbox/`.
