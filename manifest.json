@@ -1,7 +1,7 @@
 {
 	"id": "toolbox",
 	"name": "Toolbox",
-	"version": "1.0.1-beta.7",
+	"version": "1.0.1-beta.8",
 	"minAppVersion": "1.4.0",
 	"description": "A toolbox of Obsidian utilities. Currently provides a sidebar Tasks panel for Obsidian Tasks plugin-compatible markdown; more features (custom columns, timesheet) are planned.",
 	"author": "millerjacob91",

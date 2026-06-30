@@ -6,6 +6,16 @@ appear as raw text — and embedded notes are click-to-edit.
 
 Toggle it in **Settings → Toolbox → Editable Columns**.
 
+## Inserting a block
+
+Two ways to drop in a starter two-column block at the cursor (then just edit the
+cells):
+
+- The **"Insert columns"** ribbon icon (left ribbon, columns glyph).
+- The command palette → **"Insert columns block"**.
+
+Both insert the `%% columns %%` markup below and put the cursor in the first cell.
+
 ## Attribution
 
 - Layout and CSS lineage: [Live Columns](https://github.com/nhiwentwest/live-columns) (MIT).
@@ -53,6 +63,19 @@ Each cell's markdown is rendered with
 the whole point — it runs the registered post-processors, so embeds transclude
 and `dataviewjs` / Tasks execute. (Live Columns hand-built HTML and skipped this,
 which is why its cells showed raw text.)
+
+### Toolbox's own calendar in a cell
+
+To show the same merged "today" list as the sidebar inside a cell, drop in the
+`toolbox-calendar` block (no Dataview or ics-plugin needed):
+
+````
+Today's Calendar
+```toolbox-calendar
+```
+````
+
+It reads Toolbox's configured `.ics` feeds and re-renders when they refresh.
 
 ### Choices that matter
 

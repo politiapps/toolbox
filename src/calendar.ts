@@ -45,6 +45,37 @@ export function getEventsForToday(ics: string): CalendarOccurrence[] {
 	return eventsOnDay(parseICS(ics), new Date());
 }
 
+/** Stable ordering for today's occurrences: all-day first, then by start time. */
+function compareOccurrences(a: CalendarOccurrence, b: CalendarOccurrence): number {
+	if (a.allDay !== b.allDay) return a.allDay ? -1 : 1;
+	if (a.start && b.start) return a.start.getTime() - b.start.getTime();
+	return 0;
+}
+
+/** Identity used to de-duplicate the same event appearing across feeds. */
+function occurrenceKey(o: CalendarOccurrence): string {
+	return `${o.allDay ? "A" : "T"}|${o.start ? o.start.getTime() : 0}|${o.summary}`;
+}
+
+/**
+ * Merge today's occurrences from several feeds into one sorted list, dropping
+ * duplicates (the same event often appears in more than one shared calendar).
+ */
+export function mergeOccurrences(lists: CalendarOccurrence[][]): CalendarOccurrence[] {
+	const seen = new Set<string>();
+	const out: CalendarOccurrence[] = [];
+	for (const list of lists) {
+		for (const occ of list) {
+			const key = occurrenceKey(occ);
+			if (seen.has(key)) continue;
+			seen.add(key);
+			out.push(occ);
+		}
+	}
+	out.sort(compareOccurrences);
+	return out;
+}
+
 /** Unfold RFC 5545 continuation lines (leading space/tab continues prior line). */
 function unfold(ics: string): string[] {
 	const out: string[] = [];
@@ -238,10 +269,6 @@ export function eventsOnDay(events: RawEvent[], day: Date): CalendarOccurrence[]
 				: new Date(day.getFullYear(), day.getMonth(), day.getDate(), ev.start.getHours(), ev.start.getMinutes()),
 		});
 	}
-	out.sort((a, b) => {
-		if (a.allDay !== b.allDay) return a.allDay ? -1 : 1;
-		if (a.start && b.start) return a.start.getTime() - b.start.getTime();
-		return 0;
-	});
+	out.sort(compareOccurrences);
 	return out;
 }

@@ -33,6 +33,7 @@ src/
                      fetch + Editable Columns registration / embed-click listener
   taskParser.ts      THE ONLY place tasks are parsed / serialised
   calendar.ts        THE ONLY place .ics feeds are parsed (pure; no vault access)
+  calendarView.ts    Shared DOM render of the "Today's events" list (pure view)
   settings.ts        Settings model, defaults, native settings tab
   taskView.ts        Sidebar ItemView, rendering, interactions, add/edit modal
   editableColumns.ts Editable Columns: CM6 extension, marker parsing, cell render
@@ -52,20 +53,30 @@ manifest.json        Plugin id (`toolbox`) / name (`Toolbox`) / minAppVersion (1
   being created or renamed into the path — it calls `refreshViews()`.
 - `activateView()` opens/reveals the view in the right sidebar.
 - `refreshViews()` re-renders every open `TasksView`.
-- `fetchCalendar()` pulls the configured `.ics` feed via `requestUrl` (no CORS),
-  caches today's events on the plugin (`calendarEvents` / `calendarError`), and
-  refreshes views. Called on load, on a 30-minute `registerInterval`, and when
-  the URL changes in settings.
+- `fetchCalendar()` pulls every configured `.ics` feed (one URL per line) via
+  `requestUrl` (no CORS), in parallel (`Promise.allSettled`), merges today's
+  events with `mergeOccurrences`, and caches them on the plugin
+  (`calendarEvents` / `calendarError`). An error is surfaced only when *all*
+  feeds fail; partial successes show what loaded. Called on load, on a 30-minute
+  `registerInterval`, and when the URLs change in settings.
 - **Editable Columns wiring:** registers a mutable editor-extension array via
   `registerEditorExtension`; `applyEditableColumns()` fills/empties it to match
   the setting and calls `workspace.updateOptions()`. A single
   `registerDomEvent(document, "click", …)` handler opens the embed editor for
   embeds clicked inside a `.toolbox-columns` cell (scoped so ordinary embeds are
-  untouched).
+  untouched). An **"Insert columns"** ribbon icon and the `insert-columns-block`
+  command call `insertColumnsBlock(editor)` to drop a starter block at the cursor.
+- **`toolbox-calendar` code block:** `registerMarkdownCodeBlockProcessor` renders
+  the same merged "today" list as the sidebar anywhere in a note (incl. inside a
+  columns cell). Mounted blocks are tracked in `calendarBlocks` and re-rendered by
+  `refreshViews()` → `refreshCalendarBlocks()`; each is untracked on unload via a
+  `MarkdownRenderChild`.
 
 ### `calendar.ts`
 - Minimal iCalendar (`.ics`) parsing — pure functions, no vault/network code.
 - `getEventsForToday(ics)` → today's `CalendarOccurrence[]` (parse + filter).
+- `mergeOccurrences(lists)` → one sorted, de-duplicated list across feeds
+  (same event in multiple shared calendars is dropped once).
 - `parseICS` / `eventsOnDay` are exported for testing. Handles line unfolding,
   timed + all-day events, UTC and floating/TZID times (TZID treated as
   wall-clock), EXDATE, and common recurrence (DAILY / WEEKLY+BYDAY / MONTHLY /
@@ -80,7 +91,9 @@ manifest.json        Plugin id (`toolbox`) / name (`Toolbox`) / minAppVersion (1
   tree (indentation-based, with `children`/`notes`), `flat` is every task.
 - `serializeTask(input)` → canonical markdown line.
 - Pure structural editors over the line array: `setTaskNotes`,
-  `addChildTaskLine`, `removeTaskBlock`, plus `findTaskByRaw`, `childIndentOf`.
+  `addChildTaskLine`, `removeTaskBlock`, `moveTaskAsChild` (re-parent a task's
+  whole block under another, re-indented; rejects cyclic moves), plus
+  `findTaskByRaw`, `childIndentOf`.
 - `collectTags(tasks)` → unique tags in first-seen order.
 - **No other file may parse or build task line strings.**
 
@@ -109,6 +122,11 @@ manifest.json        Plugin id (`toolbox`) / name (`Toolbox`) / minAppVersion (1
   `replaceLine` relocates the target line by exact text match so concurrent
   external edits don't clobber the wrong line.
 - Actions: `markDone` (sets `[x]` + `✅ today`), `markUndone`, delete, add, edit.
+- **Drag-to-subtask:** each task row is draggable; dropping it on another row
+  calls `moveTaskUnder` (re-read → locate both by raw → `moveTaskAsChild` → write),
+  re-parenting the dragged block as a child of the drop target.
+- The "Today's events" list is rendered by `calendarView.renderTodayCalendar`
+  (shared with the `toolbox-calendar` block).
 - Subtasks render recursively (`renderTask`) with an expand/collapse twisty
   (state persisted per task), a `done/total` progress badge, and a note
   indicator. Structural writes go through `applyStructural` (re-read → locate by

@@ -102,6 +102,15 @@ applied via the `--section-accent` CSS custom property to the header dot only.
   Overdue (`due < today`) adds `.is-overdue` → red.
 - **Delete**: shows an inline `.tasks-confirm-popup` ("Delete this task?") with
   Delete / Cancel before removing the line.
+- **Drag to subtask**: each `.tasks-row` is draggable. While dragging it gets
+  `.is-dragging` (dimmed); the row under the cursor gets `.is-drop-target` (accent
+  spine). Dropping re-parents the dragged task — with its whole subtree — as a
+  child of the drop target (`moveTaskUnder` → `moveTaskAsChild`). Dropping onto
+  itself or one of its own descendants is ignored.
+
+The "Today's events" list (`.tasks-calendar`) is rendered by
+`calendarView.renderTodayCalendar`, shared with the `toolbox-calendar` code block
+so both look identical.
 
 ## Add / Edit form (`TaskFormModal`)
 

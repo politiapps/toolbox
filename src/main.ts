@@ -7,7 +7,17 @@
  *  - Own no parsing logic — that lives exclusively in taskParser.ts.
  */
 
-import { Plugin, WorkspaceLeaf, TFile, TAbstractFile, requestUrl } from "obsidian";
+import {
+	Plugin,
+	WorkspaceLeaf,
+	TFile,
+	TAbstractFile,
+	requestUrl,
+	Editor,
+	MarkdownView,
+	MarkdownRenderChild,
+	Notice,
+} from "obsidian";
 import type { Extension } from "@codemirror/state";
 import {
 	DEFAULT_SETTINGS,
@@ -15,7 +25,8 @@ import {
 	TasksSettingTab,
 } from "./settings";
 import { TasksView, VIEW_TYPE_TASKS } from "./taskView";
-import { CalendarOccurrence, getEventsForToday } from "./calendar";
+import { CalendarOccurrence, getEventsForToday, mergeOccurrences } from "./calendar";
+import { renderTodayCalendar } from "./calendarView";
 import { COLUMNS_CLASS, editableColumnsExtension } from "./editableColumns";
 import { openEmbedEditor, resolveEmbed } from "./embedEditor";
 
@@ -37,6 +48,9 @@ export default class TasksPlugin extends Plugin {
 	 * registration itself on unload.
 	 */
 	private columnsExtension: Extension[] = [];
+
+	/** Mounted `toolbox-calendar` block containers, re-rendered when feeds refresh. */
+	private calendarBlocks = new Set<HTMLElement>();
 
 	async onload(): Promise<void> {
 		await this.loadSettings();
@@ -84,6 +98,67 @@ export default class TasksPlugin extends Plugin {
 		// INSIDE our column cells editable. Scoped to .toolbox-columns so we never
 		// hijack ordinary embeds elsewhere in the vault.
 		this.registerDomEvent(document, "click", (evt) => this.handleColumnEmbedClick(evt));
+
+		// Insert-columns affordances: a ribbon icon and a command, both of which
+		// drop a starter block at the cursor in the active editor.
+		this.addRibbonIcon("columns-3", "Insert columns", () => {
+			const view = this.app.workspace.getActiveViewOfType(MarkdownView);
+			if (!view) {
+				new Notice("Open a note in editing mode to insert columns.");
+				return;
+			}
+			this.insertColumnsBlock(view.editor);
+		});
+
+		this.addCommand({
+			id: "insert-columns-block",
+			name: "Insert columns block",
+			editorCallback: (editor: Editor) => this.insertColumnsBlock(editor),
+		});
+
+		// `toolbox-calendar` code block: renders the same merged "today" list as the
+		// sidebar, anywhere in a note (including inside a columns cell). Tracked so
+		// it re-renders when the feeds refresh; untracked on unload.
+		this.registerMarkdownCodeBlockProcessor("toolbox-calendar", (_source, el, ctx) => {
+			const host = el.createDiv();
+			this.calendarBlocks.add(host);
+			this.renderCalendarBlock(host);
+			const child = new MarkdownRenderChild(host);
+			child.register(() => this.calendarBlocks.delete(host));
+			ctx.addChild(child);
+		});
+	}
+
+	/** Render today's merged events into a single `toolbox-calendar` host element. */
+	private renderCalendarBlock(host: HTMLElement): void {
+		host.empty();
+		renderTodayCalendar(host, this.calendarEvents, this.calendarError);
+	}
+
+	/** Re-render every mounted `toolbox-calendar` block (after a feed refresh). */
+	private refreshCalendarBlocks(): void {
+		for (const host of this.calendarBlocks) this.renderCalendarBlock(host);
+	}
+
+	/**
+	 * Insert a two-column starter block at the cursor, on its own line(s), and
+	 * place the cursor inside the first cell ready to type. The markup is the same
+	 * `%% columns %%` grammar editableColumns.ts renders.
+	 */
+	private insertColumnsBlock(editor: Editor): void {
+		const cursor = editor.getCursor();
+		const lineText = editor.getLine(cursor.line);
+		const needNL = lineText.trim().length > 0;
+
+		const block =
+			(needNL ? "\n" : "") +
+			"%% columns:start %%\n%% col %%\n\n%% col %%\n\n%% columns:end %%\n";
+		editor.replaceRange(block, { line: cursor.line, ch: lineText.length });
+
+		// First empty cell line: after the start + first `%% col %%` markers.
+		const firstCellLine = cursor.line + (needNL ? 3 : 2);
+		editor.setCursor({ line: firstCellLine, ch: 0 });
+		editor.focus();
 	}
 
 	/**
@@ -119,27 +194,43 @@ export default class TasksPlugin extends Plugin {
 	}
 
 	/**
-	 * Fetch the configured .ics feed and cache today's events, then refresh the
-	 * panel. Uses requestUrl (no CORS restriction). Safe to call repeatedly.
+	 * Fetch every configured .ics feed (one URL per line) and cache today's
+	 * merged, de-duplicated events, then refresh the panel. Uses requestUrl (no
+	 * CORS restriction) and fetches feeds in parallel. Safe to call repeatedly.
+	 *
+	 * Error policy: an error is surfaced only when *every* feed fails. If some
+	 * feeds load, we show what we have rather than nag about a partial failure.
 	 */
 	async fetchCalendar(): Promise<void> {
-		const raw = this.settings.icsUrl.trim();
-		if (!raw) {
+		const urls = this.settings.icsUrl
+			.split("\n")
+			.map((u) => u.trim())
+			.filter((u) => u.length > 0)
+			// webcal:// is just https with another scheme.
+			.map((u) => u.replace(/^webcal:\/\//i, "https://"));
+
+		if (urls.length === 0) {
 			this.calendarEvents = [];
 			this.calendarError = null;
 			this.refreshViews();
 			return;
 		}
-		// webcal:// is just https with another scheme.
-		const url = raw.replace(/^webcal:\/\//i, "https://");
-		try {
-			const res = await requestUrl({ url });
-			this.calendarEvents = getEventsForToday(res.text);
-			this.calendarError = null;
-		} catch (e) {
-			this.calendarEvents = [];
-			this.calendarError = "Couldn't load the calendar. Check the URL in settings.";
+
+		const results = await Promise.allSettled(urls.map((url) => requestUrl({ url })));
+
+		const lists: CalendarOccurrence[][] = [];
+		let anySuccess = false;
+		for (const res of results) {
+			if (res.status === "fulfilled") {
+				lists.push(getEventsForToday(res.value.text));
+				anySuccess = true;
+			}
 		}
+
+		this.calendarEvents = mergeOccurrences(lists);
+		this.calendarError = anySuccess
+			? null
+			: "Couldn't load the calendar. Check the URL(s) in settings.";
 		this.refreshViews();
 	}
 
@@ -179,5 +270,6 @@ export default class TasksPlugin extends Plugin {
 			const view = leaf.view;
 			if (view instanceof TasksView) view.refresh();
 		}
+		this.refreshCalendarBlocks();
 	}
 }

@@ -31,7 +31,9 @@ import {
 	setTaskNotes,
 	addChildTaskLine,
 	removeTaskBlock,
+	moveTaskAsChild,
 } from "./taskParser";
+import { renderTodayCalendar } from "./calendarView";
 import {
 	SectionConfig,
 	SortOrder,
@@ -114,11 +116,6 @@ function dueLabel(iso: string): string {
 	return formatDueDisplay(iso);
 }
 
-/** Local clock time for a calendar event, e.g. "9:30 AM". */
-function formatEventTime(d: Date): string {
-	return d.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
-}
-
 /** Proximity class driving the due-date colour ramp (sooner = warmer). */
 function dueClass(iso: string): string {
 	const d = daysUntil(iso);
@@ -136,6 +133,8 @@ function dueClass(iso: string): string {
 export class TasksView extends ItemView {
 	plugin: TasksPlugin;
 	private allTags: string[] = [];
+	/** Raw line text of the task currently being dragged (drag-to-subtask). */
+	private draggedTaskRaw: string | null = null;
 
 	constructor(leaf: WorkspaceLeaf, plugin: TasksPlugin) {
 		super(leaf);
@@ -278,31 +277,7 @@ export class TasksView extends ItemView {
 	/** "Today" calendar block above the tasks (only when an .ics URL is set). */
 	private renderCalendar(root: HTMLElement): void {
 		if (!this.plugin.settings.icsUrl) return;
-
-		const cal = root.createDiv({ cls: "tasks-calendar" });
-		const header = cal.createDiv({ cls: "tasks-calendar-header" });
-		setIcon(header.createSpan({ cls: "tasks-calendar-icon" }), "calendar");
-		header.createSpan({ cls: "tasks-calendar-title", text: "Today's events" });
-
-		if (this.plugin.calendarError) {
-			cal.createDiv({ cls: "tasks-calendar-error", text: this.plugin.calendarError });
-			return;
-		}
-
-		const events = this.plugin.calendarEvents;
-		if (events.length === 0) {
-			cal.createDiv({ cls: "tasks-empty", text: "Nothing scheduled today" });
-			return;
-		}
-
-		for (const ev of events) {
-			const row = cal.createDiv({ cls: "tasks-event" });
-			row.createSpan({
-				cls: "tasks-event-time",
-				text: ev.allDay || !ev.start ? "All day" : formatEventTime(ev.start),
-			});
-			row.createSpan({ cls: "tasks-event-title", text: ev.summary });
-		}
+		renderTodayCalendar(root, this.plugin.calendarEvents, this.plugin.calendarError);
 	}
 
 	private renderMissingFileNotice(root: HTMLElement): void {
@@ -418,6 +393,8 @@ export class TasksView extends ItemView {
 		const item = parent.createDiv({ cls: "tasks-item" });
 		const row = item.createDiv({ cls: "tasks-row" });
 		if (task.completed) row.addClass("is-completed");
+
+		this.attachDragHandlers(row, task);
 
 		const hasChildren = task.children.length > 0;
 		const collapseKey = "task:" + hashKey(task.raw);
@@ -621,6 +598,75 @@ export class TasksView extends ItemView {
 			return;
 		}
 		await this.app.vault.modify(file, edit(lines, task).join("\n"));
+	}
+
+	/* ----------------------- drag to make subtask ---------------------- */
+
+	/** Make a task row draggable, and a drop target that re-parents the drag. */
+	private attachDragHandlers(row: HTMLElement, task: Task): void {
+		row.setAttr("draggable", "true");
+
+		row.addEventListener("dragstart", (e) => {
+			this.draggedTaskRaw = task.raw;
+			row.addClass("is-dragging");
+			if (e.dataTransfer) {
+				e.dataTransfer.effectAllowed = "move";
+				// Some platforms require data to be set for the drag to begin.
+				e.dataTransfer.setData("text/plain", task.description);
+			}
+		});
+
+		row.addEventListener("dragend", () => {
+			this.draggedTaskRaw = null;
+			row.removeClass("is-dragging");
+			this.clearDropTargets();
+		});
+
+		row.addEventListener("dragover", (e) => {
+			// Only react while one of our own rows is in flight, and never onto the
+			// row being dragged itself.
+			if (this.draggedTaskRaw === null || this.draggedTaskRaw === task.raw) return;
+			e.preventDefault();
+			if (e.dataTransfer) e.dataTransfer.dropEffect = "move";
+			this.clearDropTargets();
+			row.addClass("is-drop-target");
+		});
+
+		row.addEventListener("dragleave", () => row.removeClass("is-drop-target"));
+
+		row.addEventListener("drop", (e) => {
+			e.preventDefault();
+			row.removeClass("is-drop-target");
+			const draggedRaw = this.draggedTaskRaw;
+			this.draggedTaskRaw = null;
+			if (draggedRaw && draggedRaw !== task.raw) void this.moveTaskUnder(draggedRaw, task.raw);
+		});
+	}
+
+	private clearDropTargets(): void {
+		this.containerEl.findAll(".tasks-row.is-drop-target").forEach((el) => el.removeClass("is-drop-target"));
+	}
+
+	/**
+	 * Re-parent the dragged task under `targetRaw`. Re-reads and locates both
+	 * tasks in a fresh parse (read-before-write); a cyclic / no-op move is
+	 * silently ignored by the parser.
+	 */
+	private async moveTaskUnder(draggedRaw: string, targetRaw: string): Promise<void> {
+		const file = this.getTasksFile();
+		if (!file) return;
+		const content = await this.app.vault.read(file);
+		const { flat, lines } = parseTasks(content);
+		const dragged = findTaskByRaw(flat, draggedRaw);
+		const target = findTaskByRaw(flat, targetRaw);
+		if (!dragged || !target) {
+			new Notice("Couldn't move the task — it may have changed externally.");
+			return;
+		}
+		const next = moveTaskAsChild(lines, dragged, target);
+		if (next === lines) return; // invalid move (onto itself or a descendant)
+		await this.app.vault.modify(file, next.join("\n"));
+		await this.refresh();
 	}
 
 	private async removeTask(task: Task): Promise<void> {

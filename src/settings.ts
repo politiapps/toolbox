@@ -89,20 +89,22 @@ export class TasksSettingTab extends PluginSettingTab {
 			);
 
 		new Setting(containerEl)
-			.setName("Calendar (.ics) URL")
+			.setName("Calendar (.ics) URLs")
 			.setDesc(
-				"Public iCalendar subscription URL. Today's events show above your tasks. Leave empty to hide the calendar."
+				"iCalendar subscription URLs, one per line. Today's events from all of them are merged above your tasks. For a Google calendar use its 'Secret address in iCal format'. Leave empty to hide the calendar."
 			)
-			.addText((text) =>
+			.addTextArea((text) => {
 				text
-					.setPlaceholder("https://…/basic.ics")
+					.setPlaceholder("https://…/basic.ics\nhttps://…/another/basic.ics")
 					.setValue(this.plugin.settings.icsUrl)
 					.onChange(async (value) => {
-						this.plugin.settings.icsUrl = value.trim();
+						this.plugin.settings.icsUrl = value;
 						await this.plugin.saveSettings();
 						this.plugin.fetchCalendar();
-					})
-			);
+					});
+				text.inputEl.rows = 4;
+				text.inputEl.addClass("tasks-ics-input");
+			});
 
 		containerEl.createEl("h3", { text: "Sections" });
 		containerEl.createEl("p", {

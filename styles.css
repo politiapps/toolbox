@@ -359,6 +359,17 @@
 	background-color: var(--background-modifier-hover);
 }
 
+/* Drag-to-subtask: the row in flight dims; the row under the cursor shows where
+   it will be dropped (becomes a child of that task). */
+.tasks-row.is-dragging {
+	opacity: 0.45;
+}
+
+.tasks-row.is-drop-target {
+	background-color: var(--background-modifier-hover);
+	box-shadow: inset 2px 0 0 var(--interactive-accent);
+}
+
 /* Round, hand-built checkbox — reads as a task app, not a form. */
 .tasks-checkbox {
 	appearance: none;
@@ -641,6 +652,14 @@
 	justify-content: flex-end;
 	gap: 8px;
 	margin-top: 18px;
+}
+
+/* Calendar URLs: a full-width, monospace multi-line input. */
+.tasks-ics-input {
+	width: 100%;
+	resize: vertical;
+	font-family: var(--font-monospace);
+	font-size: 0.82rem;
 }
 
 /* ── Editable Columns (Live Preview layout) ───────────────────────────── */

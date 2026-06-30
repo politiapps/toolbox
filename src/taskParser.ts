@@ -259,6 +259,43 @@ export function removeTaskBlock(lines: string[], task: Task): string[] {
 }
 
 /**
+ * Re-parent `dragged` (with its whole block — notes and subtasks) so it becomes
+ * a child of `target`, re-indenting every moved line by the indent delta. Pure:
+ * both tasks must come from a parse of the SAME `lines`.
+ *
+ * Returns the original `lines` reference unchanged for an invalid move — dropping
+ * a task on itself or into its own subtree — so callers can detect a no-op.
+ */
+export function moveTaskAsChild(lines: string[], dragged: Task, target: Task): string[] {
+	// Onto itself, or into its own block (a descendant) → cyclic / no-op.
+	if (target.blockStart >= dragged.blockStart && target.blockStart <= dragged.blockEnd) {
+		return lines;
+	}
+
+	const block = lines.slice(dragged.blockStart, dragged.blockEnd + 1);
+	const newBaseWidth = indentWidthOf(childIndentOf(target));
+
+	// Shift each line's indentation by (newBase - draggedBase), preserving the
+	// relative nesting of the moved subtree. Normalised to spaces (4 per level),
+	// matching childIndentOf.
+	const reindented = block.map((line) => {
+		const ws = leadingWhitespace(line);
+		const rest = line.slice(ws.length);
+		const shifted = Math.max(0, indentWidthOf(ws) - dragged.indentWidth + newBaseWidth);
+		return " ".repeat(shifted) + rest;
+	});
+
+	const out = lines.slice();
+	out.splice(dragged.blockStart, block.length);
+
+	// Insert after the target's block; adjust if removal shifted that index.
+	let insertAt = target.blockEnd + 1;
+	if (dragged.blockStart < insertAt) insertAt -= block.length;
+	out.splice(insertAt, 0, ...reindented);
+	return out;
+}
+
+/**
  * Serialise a task back to a single markdown line in canonical token order:
  *   indent + "- [ ]/[x] " + description + tags + due + priority + done
  */
