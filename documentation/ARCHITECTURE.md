@@ -20,7 +20,12 @@ feature's views, commands, and settings.
   widget whose cells are rendered through Obsidian's real markdown pipeline
   (so embeds / dataviewjs / Tasks execute). Embeds inside cells are
   click-to-edit. Documented in `documentation/editable-columns.md`.
-- **Timesheet** (planned) — not yet implemented.
+- **Timesheet** (current) — a sidebar `ItemView` for tracking work sessions with a
+  running timer. Reads from and writes to a user-configured markdown file (default
+  `timesheet.md`). Tracks start/end times, multiple breaks per session, and
+  supports multiple organisations per day. Shows today's entries and a weekly
+  summary with hours, fractional days (7h = 1 day), and earnings (from hourly
+  rates configured in settings).
 
 As each new feature lands it gets its own module(s) under `src/` and its own
 doc under `documentation/`, and is added to the list above.
@@ -31,14 +36,18 @@ doc under `documentation/`, and is added to the list above.
 src/
   main.ts            Plugin entry point + lifecycle + vault watcher + calendar
                      fetch + Editable Columns registration / embed-click listener
+                     + Timesheet registration / vault watcher
   taskParser.ts      THE ONLY place tasks are parsed / serialised
   calendar.ts        THE ONLY place .ics feeds are parsed (pure; no vault access)
   calendarView.ts    Shared DOM render of the "Today's events" list (pure view)
-  settings.ts        Settings model, defaults, native settings tab
+  settings.ts        Settings model, defaults, native settings tab + Org mgmt
   taskView.ts        Sidebar ItemView, rendering, interactions, add/edit modal
+  timesheetParser.ts THE ONLY place timesheet entries are parsed / serialised
+  timesheetView.ts   Sidebar ItemView, running timer, entries, weekly summary,
+                     add/edit modal
   editableColumns.ts Editable Columns: CM6 extension, marker parsing, cell render
   embedEditor.ts     Editable Columns: resolve a clicked embed → floating editor
-styles.css           Sidebar + columns + modal styling (auto-loaded by Obsidian)
+styles.css           Sidebar + columns + timesheet + modal styling
 manifest.json        Plugin id (`toolbox`) / name (`Toolbox`) / minAppVersion (1.4.0)
 ```
 
@@ -102,16 +111,21 @@ manifest.json        Plugin id (`toolbox`) / name (`Toolbox`) / minAppVersion (1
 
 ### `settings.ts`
 - `TasksPluginSettings`: `tasksFilePath`, `sections[]`, `recentTags[]`,
-  `collapseState{}`, `calendars[]`, `editableColumnsEnabled` (plus deprecated
-  `icsUrl`, migrated into `calendars`).
+  `collapseState{}`, `calendars[]`, `editableColumnsEnabled`, `timesheetFilePath`,
+  `timesheetOrgs[]`, `activeTimer` (plus deprecated `icsUrl`, migrated into
+  `calendars`).
 - `CalendarSource`: `id`, `title`, `url`. `migrateCalendars()` converts the legacy
   `icsUrl`; `newCalendarId()` mints ids. The settings tab manages calendars
   (add / title / URL / delete) with an inline per-calendar sync check
   (`fetchOneCalendar`).
+- `TimesheetOrg`: `id`, `name`, `colour`, `rate`. `newOrgId()` mints ids.
+  `TIMESHEET_ORG_COLORS` is the default palette.
+- `ActiveTimer`: persisted timer state (`org`, `startTime`, `breakStart`, `breaks[]`).
 - `SectionConfig`: `id`, `name`, `tag`, `sort`, `collapsedByDefault`.
 - `SortOrder`: `due | priority-due | priority | file`.
 - `TasksSettingTab`: native settings UI to edit the file path and manage
-  sections (add / remove / reorder / rename / retag / sort / default collapse).
+  sections (add / remove / reorder / rename / retag / sort / default collapse),
+  plus timesheet file path and orgs (add / remove / name / colour / rate).
 - `touchRecentTag()` promotes a tag to the front of the recently-used list.
 - `COMPLETED_KEY` is the persistence key for the always-present Completed
   section's collapse state.
@@ -159,6 +173,30 @@ manifest.json        Plugin id (`toolbox`) / name (`Toolbox`) / minAppVersion (1
   markers can be edited in place.
 - Marker grammar is module-internal constants (like the priority emojis), **not**
   task parsing — `taskParser.ts` is untouched.
+
+### `timesheetParser.ts`
+- Exports `TimesheetEntry`, `TimesheetDay`, `ParsedTimesheet`, `BreakPeriod`.
+- `parseTimesheet(content)` → `{ days, lines }` for a full file.
+- `serializeEntry(entry)` → canonical markdown lines for one session + its breaks.
+- Pure helpers: `timeToMinutes`, `formatMinutes`, `minutesToDays`, `entryWorkMinutes`.
+- Structural editors: `addEntryToContent(lines, date, entryLines)` and
+  `updateEntryLines(lines, entry, newLines|null)` (read-before-write compatible).
+- **No other file may parse or build timesheet entry lines.**
+
+### `timesheetView.ts` — `TimesheetView extends ItemView`
+- New sidebar panel (view type `timesheet-view`, icon `clock`).
+- **Timer section:** org selector, Start/Break/Resume/Stop buttons, running elapsed
+  display (1s tick). Timer state persisted via `activeTimer` in settings (survives
+  Obsidian restart). Three-state machine: idle → working → on_break.
+- **Today section:** lists today's entries with org dot, time range, break lines,
+  hours, inline edit (pencil) and delete (trash). Total row at bottom.
+- **Weekly summary:** groups this week's entries by org. Shows hours, fractional
+  days (at 7h/day), and estimated earnings (rate × hours). Grand total and total
+  earnings at bottom.
+- `TimesheetEntryModal` — add/edit form with org dropdown, time inputs (type="time"),
+  and dynamic break list (add/remove with start/end time inputs).
+- File IO goes through `this.app.vault`, read-before-write on all mutations.
+- Vault 'modify'/'create'/'rename' listeners in `main.ts` trigger re-render.
 
 ### `embedEditor.ts` — click-to-edit for embeds in cells
 - Adapted from Embed Editor (MIT). `resolveEmbed()` turns a clicked

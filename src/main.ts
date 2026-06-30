@@ -26,6 +26,7 @@ import {
 	migrateCalendars,
 } from "./settings";
 import { TasksView, VIEW_TYPE_TASKS } from "./taskView";
+import { TimesheetView, VIEW_TYPE_TIMESHEET } from "./timesheetView";
 import { CalendarOccurrence, getEventsForToday, mergeOccurrences } from "./calendar";
 import { renderTodayCalendar } from "./calendarView";
 import { COLUMNS_CLASS, editableColumnsExtension } from "./editableColumns";
@@ -116,6 +117,30 @@ export default class TasksPlugin extends Plugin {
 			name: "Insert columns block",
 			editorCallback: (editor: Editor) => this.insertColumnsBlock(editor),
 		});
+
+		// ── Timesheet ──────────────────────────────────────────────────────
+		this.registerView(VIEW_TYPE_TIMESHEET, (leaf: WorkspaceLeaf) => new TimesheetView(leaf, this));
+
+		this.addRibbonIcon("clock", "Open timesheet", () => {
+			this.activateTimesheetView();
+		});
+
+		this.addCommand({
+			id: "open-timesheet",
+			name: "Open timesheet",
+			callback: () => this.activateTimesheetView(),
+		});
+
+		const isTimesheetFile = (file: TAbstractFile): boolean =>
+			file instanceof TFile && file.path === this.settings.timesheetFilePath;
+
+		this.registerEvent(this.app.vault.on("modify", (f) => isTimesheetFile(f) && this.refreshTimesheetViews()));
+		this.registerEvent(this.app.vault.on("create", (f) => isTimesheetFile(f) && this.refreshTimesheetViews()));
+		this.registerEvent(
+			this.app.vault.on("rename", (f, oldPath) => {
+				if (isTimesheetFile(f) || oldPath === this.settings.timesheetFilePath) this.refreshTimesheetViews();
+			})
+		);
 
 		// `toolbox-calendar` code block: renders the same merged "today" list as the
 		// sidebar, anywhere in a note (including inside a columns cell). Tracked so
@@ -279,6 +304,31 @@ export default class TasksPlugin extends Plugin {
 		}
 
 		if (leaf) workspace.revealLeaf(leaf);
+	}
+
+	/** Open the timesheet view in the right sidebar and reveal it. */
+	async activateTimesheetView(): Promise<void> {
+		const { workspace } = this.app;
+
+		let leaf: WorkspaceLeaf | null = null;
+		const existing = workspace.getLeavesOfType(VIEW_TYPE_TIMESHEET);
+
+		if (existing.length > 0) {
+			leaf = existing[0];
+		} else {
+			leaf = workspace.getRightLeaf(false);
+			await leaf?.setViewState({ type: VIEW_TYPE_TIMESHEET, active: true });
+		}
+
+		if (leaf) workspace.revealLeaf(leaf);
+	}
+
+	/** Re-render every open timesheet view (used after settings changes). */
+	refreshTimesheetViews(): void {
+		for (const leaf of this.app.workspace.getLeavesOfType(VIEW_TYPE_TIMESHEET)) {
+			const view = leaf.view;
+			if (view instanceof TimesheetView) view.refresh();
+		}
 	}
 
 	/** Re-render every open tasks view (used after settings changes). */

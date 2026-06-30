@@ -7,3 +7,7 @@ node_modules/
 # editor / OS
 .DS_Store
 *.log
+
+# local
+.fallow/
+Untitled-*.md

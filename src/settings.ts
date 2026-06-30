@@ -39,6 +39,41 @@ export interface SectionConfig {
 	collapsedByDefault: boolean;
 }
 
+/** One user-defined organisation for timesheet tracking. */
+export interface TimesheetOrg {
+	id: string;
+	name: string;
+	colour: string;
+	/** Hourly rate in dollars (0 = unpaid). */
+	rate: number;
+}
+
+/**
+ * Persisted running-timer state so it survives Obsidian restarts.
+ * `null` means no timer is active.
+ */
+export interface ActiveTimer {
+	org: string;
+	/** Epoch ms when work started. */
+	startTime: number;
+	/** Epoch ms when the current break started, or null if not on break. */
+	breakStart: number | null;
+	/** Completed breaks in this session (each fully resolved with end times). */
+	breaks: { start: number; end: number }[];
+}
+
+/** Default colours assigned to new orgs, cycling through the list. */
+export const TIMESHEET_ORG_COLORS = [
+	"#6366f1", // indigo
+	"#0ea5e9", // sky
+	"#14b8a6", // teal
+	"#f59e0b", // amber
+	"#ec4899", // pink
+	"#8b5cf6", // violet
+	"#84cc16", // lime
+	"#06b6d4", // cyan
+];
+
 export interface TasksPluginSettings {
 	/** Path to the markdown file used as the task store. */
 	tasksFilePath: string;
@@ -56,6 +91,13 @@ export interface TasksPluginSettings {
 	calendars: CalendarSource[];
 	/** Editable Columns feature: render `%% columns %%` blocks in Live Preview. */
 	editableColumnsEnabled: boolean;
+
+	/** Path to the markdown file used as the timesheet store. */
+	timesheetFilePath: string;
+	/** User-defined organisations for timesheet tracking. */
+	timesheetOrgs: TimesheetOrg[];
+	/** Persisted running-timer state (null = no active timer). */
+	activeTimer: ActiveTimer | null;
 }
 
 /** Persistence key for the always-present Completed section. */
@@ -69,6 +111,9 @@ export const DEFAULT_SETTINGS: TasksPluginSettings = {
 	icsUrl: "",
 	calendars: [],
 	editableColumnsEnabled: true,
+	timesheetFilePath: "timesheet.md",
+	timesheetOrgs: [],
+	activeTimer: null,
 };
 
 /** Generate a reasonably unique id for a new section. */
@@ -79,6 +124,11 @@ export function newSectionId(): string {
 /** Generate a reasonably unique id for a new calendar source. */
 export function newCalendarId(): string {
 	return "cal-" + Math.random().toString(36).slice(2, 9);
+}
+
+/** Generate a reasonably unique id for a new timesheet org. */
+export function newOrgId(): string {
+	return "org-" + Math.random().toString(36).slice(2, 9);
 }
 
 /**
@@ -192,6 +242,51 @@ export class TasksSettingTab extends PluginSettingTab {
 					this.plugin.applyEditableColumns();
 				})
 			);
+
+		containerEl.createEl("h2", { text: "Timesheet" });
+
+		new Setting(containerEl)
+			.setName("Timesheet file path")
+			.setDesc("Path to the markdown file used as the timesheet store (relative to the vault root).")
+			.addText((text) =>
+				text
+					.setPlaceholder("timesheet.md")
+					.setValue(this.plugin.settings.timesheetFilePath)
+					.onChange(async (value) => {
+						this.plugin.settings.timesheetFilePath = value.trim() || "timesheet.md";
+						await this.plugin.saveSettings();
+						this.plugin.refreshTimesheetViews();
+					})
+			);
+
+		containerEl.createEl("h3", { text: "Organisations" });
+		containerEl.createEl("p", {
+			text: "Add the organisations you work for. Each one gets a colour and an optional hourly rate for earnings tracking.",
+			cls: "setting-item-description",
+		});
+
+		this.plugin.settings.timesheetOrgs.forEach((org, index) => {
+			this.renderOrgSetting(containerEl, org, index);
+		});
+
+		new Setting(containerEl).addButton((btn) =>
+			btn
+				.setButtonText("Add organisation")
+				.setCta()
+				.onClick(async () => {
+					this.plugin.settings.timesheetOrgs.push({
+						id: newOrgId(),
+						name: "New organisation",
+						colour: TIMESHEET_ORG_COLORS[
+							this.plugin.settings.timesheetOrgs.length % TIMESHEET_ORG_COLORS.length
+						],
+						rate: 0,
+					});
+					await this.plugin.saveSettings();
+					this.plugin.refreshTimesheetViews();
+					this.display();
+				})
+		);
 	}
 
 	private renderSectionSetting(containerEl: HTMLElement, section: SectionConfig, index: number): void {
@@ -343,6 +438,52 @@ export class TasksSettingTab extends PluginSettingTab {
 			el.setText("✗ Couldn't load — check the URL");
 			el.className = "tasks-cal-status is-error";
 		}
+	}
+
+	private renderOrgSetting(containerEl: HTMLElement, org: TimesheetOrg, index: number): void {
+		const wrapper = containerEl.createDiv({ cls: "tasks-section-setting" });
+
+		new Setting(wrapper)
+			.setName(`Organisation ${index + 1}`)
+			.addExtraButton((btn) =>
+				btn
+					.setIcon("trash-2")
+					.setTooltip("Delete organisation")
+					.onClick(async () => {
+						this.plugin.settings.timesheetOrgs.splice(index, 1);
+						await this.plugin.saveSettings();
+						this.plugin.refreshTimesheetViews();
+						this.display();
+					})
+			);
+
+		new Setting(wrapper).setName("Name").addText((text) =>
+			text.setValue(org.name).onChange(async (value) => {
+				org.name = value;
+				await this.plugin.saveSettings();
+				this.plugin.refreshTimesheetViews();
+			})
+		);
+
+		new Setting(wrapper).setName("Colour").addText((text) => {
+			text.setValue(org.colour).onChange(async (value) => {
+				org.colour = value;
+				await this.plugin.saveSettings();
+				this.plugin.refreshTimesheetViews();
+			});
+			text.inputEl.type = "color";
+		});
+
+		new Setting(wrapper)
+			.setName("Hourly rate ($)")
+			.setDesc("Hourly rate in dollars. Used to calculate estimated earnings.")
+			.addText((text) =>
+				text.setValue(String(org.rate || 0)).onChange(async (value) => {
+					org.rate = parseFloat(value) || 0;
+					await this.plugin.saveSettings();
+					this.plugin.refreshTimesheetViews();
+				})
+			);
 	}
 
 	private async moveSection(from: number, to: number): Promise<void> {

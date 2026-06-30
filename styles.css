@@ -745,6 +745,506 @@
 	margin-top: 14px;
 }
 
+/* ── Timesheet panel ──────────────────────────────────────────────────── */
+.timesheet-panel-content {
+	padding: 0 10px 28px;
+}
+
+.timesheet-header {
+	position: sticky;
+	top: 0;
+	z-index: 5;
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	padding: 14px 2px 12px;
+	margin-bottom: 6px;
+	background-color: var(--background-secondary);
+	border-bottom: 1px solid var(--background-modifier-border);
+}
+
+.timesheet-header-title {
+	font-size: 1.05rem;
+	font-weight: 650;
+	color: var(--text-normal);
+}
+
+.timesheet-add-btn {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	width: 30px;
+	height: 30px;
+	padding: 0;
+	border-radius: 50%;
+	border: 1px solid var(--background-modifier-border);
+	background-color: var(--background-primary);
+	color: var(--text-muted);
+	cursor: pointer;
+	box-shadow: none;
+	transition: border-color 0.12s ease, color 0.12s ease, transform 0.12s ease;
+}
+
+.timesheet-add-btn:hover {
+	color: var(--text-on-accent);
+	background-color: var(--interactive-accent);
+	border-color: var(--interactive-accent);
+	transform: rotate(90deg);
+}
+
+.timesheet-add-btn svg {
+	width: 17px;
+	height: 17px;
+}
+
+/* ── Timer section ──────────────────────────────────────────────────── */
+.timesheet-timer {
+	background-color: var(--background-primary);
+	border: 1px solid var(--background-modifier-border);
+	border-radius: 10px;
+	padding: 10px;
+	margin-bottom: 12px;
+}
+
+.timesheet-timer-empty {
+	font-size: 0.82rem;
+	color: var(--text-muted);
+	font-style: italic;
+}
+
+.timesheet-timer-org {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	margin-bottom: 8px;
+}
+
+.timesheet-timer-select {
+	flex: 1;
+}
+
+.timesheet-timer-display {
+	margin: 8px 0;
+}
+
+.timesheet-timer-row {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	padding: 2px 0;
+}
+
+.timesheet-timer-label {
+	font-size: 0.8rem;
+	color: var(--text-muted);
+}
+
+.timesheet-timer-value {
+	font-family: var(--font-monospace);
+	font-size: 1.3rem;
+	font-variant-numeric: tabular-nums;
+	font-weight: 700;
+	color: var(--text-normal);
+}
+
+.timesheet-timer-value.is-working {
+	color: var(--color-green, #22c55e);
+}
+
+.timesheet-timer-value.is-break {
+	color: var(--text-warning, #f59e0b);
+}
+
+.timesheet-timer-buttons {
+	display: flex;
+	gap: 6px;
+	margin-top: 6px;
+}
+
+.timesheet-timer-buttons button {
+	flex: 1;
+	padding: 6px 12px;
+	font-size: 0.82rem;
+	font-weight: 600;
+	border-radius: 6px;
+	cursor: pointer;
+	border: 1px solid var(--background-modifier-border);
+	background-color: var(--background-primary);
+	color: var(--text-normal);
+	transition: background-color 0.1s ease, color 0.1s ease;
+}
+
+.timesheet-btn-start {
+	background-color: var(--color-green, #22c55e) !important;
+	color: white !important;
+	border-color: var(--color-green, #22c55e) !important;
+}
+
+.timesheet-btn-start:hover {
+	opacity: 0.85;
+}
+
+.timesheet-btn-break {
+	background-color: var(--text-warning, #f59e0b) !important;
+	color: white !important;
+	border-color: var(--text-warning, #f59e0b) !important;
+}
+
+.timesheet-btn-break:hover {
+	opacity: 0.85;
+}
+
+.timesheet-btn-resume {
+	background-color: var(--color-green, #22c55e) !important;
+	color: white !important;
+	border-color: var(--color-green, #22c55e) !important;
+}
+
+.timesheet-btn-resume:hover {
+	opacity: 0.85;
+}
+
+.timesheet-btn-stop {
+	background-color: var(--text-error, #ef4444) !important;
+	color: white !important;
+	border-color: var(--text-error, #ef4444) !important;
+}
+
+.timesheet-btn-stop:hover {
+	opacity: 0.85;
+}
+
+/* ── Section cards ─────────────────────────────────────────────────── */
+.timesheet-section {
+	background-color: var(--background-primary);
+	border: 1px solid var(--background-modifier-border);
+	border-radius: 10px;
+	padding: 8px 10px;
+	margin-bottom: 10px;
+}
+
+.timesheet-section-header {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	padding-bottom: 6px;
+	border-bottom: 1px solid var(--background-modifier-border);
+	margin-bottom: 6px;
+}
+
+.timesheet-section-title {
+	font-size: 0.95rem;
+	font-weight: 700;
+	color: var(--text-normal);
+	flex: 1;
+}
+
+.timesheet-section-date {
+	font-family: var(--font-monospace);
+	font-size: 0.7rem;
+	color: var(--text-faint);
+	letter-spacing: 0.04em;
+}
+
+.timesheet-empty {
+	color: var(--text-faint);
+	font-size: 0.8rem;
+	font-style: italic;
+	padding: 4px 2px;
+}
+
+/* ── Entry rows ────────────────────────────────────────────────────── */
+.timesheet-entry-list {
+	display: flex;
+	flex-direction: column;
+	gap: 4px;
+}
+
+.timesheet-entry {
+	display: flex;
+	align-items: flex-start;
+	gap: 6px;
+	padding: 6px 4px;
+	border-radius: 6px;
+	position: relative;
+}
+
+.timesheet-entry:hover {
+	background-color: var(--background-modifier-hover);
+}
+
+.timesheet-entry-dot {
+	width: 7px;
+	height: 7px;
+	border-radius: 50%;
+	background-color: var(--org-colour, var(--text-muted));
+	flex-shrink: 0;
+	margin-top: 6px;
+}
+
+.timesheet-entry-body {
+	flex: 1;
+	min-width: 0;
+}
+
+.timesheet-entry-main {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	flex-wrap: wrap;
+}
+
+.timesheet-entry-org {
+	font-size: 0.88rem;
+	font-weight: 600;
+	color: var(--text-normal);
+}
+
+.timesheet-entry-time {
+	font-family: var(--font-monospace);
+	font-size: 0.78rem;
+	color: var(--text-muted);
+}
+
+.timesheet-entry-hours {
+	font-family: var(--font-monospace);
+	font-size: 0.78rem;
+	font-variant-numeric: tabular-nums;
+	color: var(--text-accent);
+	margin-left: auto;
+}
+
+.timesheet-entry-breaks {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 4px;
+	margin-top: 3px;
+}
+
+.timesheet-break-line {
+	font-family: var(--font-monospace);
+	font-size: 0.7rem;
+	color: var(--text-faint);
+}
+
+.timesheet-entry-actions {
+	display: flex;
+	align-items: center;
+	gap: 1px;
+	flex-shrink: 0;
+	opacity: 0;
+	transition: opacity 0.1s ease;
+}
+
+.timesheet-entry:hover .timesheet-entry-actions {
+	opacity: 1;
+}
+
+.timesheet-icon-btn {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	width: 26px;
+	height: 26px;
+	padding: 0;
+	background: transparent;
+	border: none;
+	box-shadow: none;
+	cursor: pointer;
+	color: var(--text-faint);
+	border-radius: 5px;
+}
+
+.timesheet-icon-btn:hover {
+	background-color: var(--background-modifier-border);
+	color: var(--text-normal);
+}
+
+.timesheet-icon-btn svg {
+	width: 14px;
+	height: 14px;
+}
+
+.timesheet-delete-btn:hover {
+	color: var(--text-error);
+}
+
+.timesheet-total-row {
+	display: flex;
+	justify-content: space-between;
+	align-items: center;
+	padding: 6px 4px 2px;
+	margin-top: 4px;
+	border-top: 1px solid var(--background-modifier-border);
+	font-size: 0.85rem;
+	font-weight: 700;
+	color: var(--text-normal);
+}
+
+.timesheet-total-value {
+	font-family: var(--font-monospace);
+	font-size: 0.8rem;
+	font-variant-numeric: tabular-nums;
+	color: var(--text-accent);
+}
+
+/* ── Weekly summary ────────────────────────────────────────────────── */
+.timesheet-week-summary {
+	display: flex;
+	flex-direction: column;
+	gap: 2px;
+}
+
+.timesheet-week-row {
+	display: grid;
+	grid-template-columns: 10px 1fr auto auto;
+	gap: 6px;
+	align-items: center;
+	padding: 4px 2px;
+	font-size: 0.84rem;
+}
+
+.timesheet-week-dot {
+	width: 6px;
+	height: 6px;
+	border-radius: 50%;
+	background-color: var(--org-colour, var(--text-muted));
+}
+
+.timesheet-week-org {
+	color: var(--text-normal);
+	font-weight: 500;
+}
+
+.timesheet-week-hours {
+	font-family: var(--font-monospace);
+	font-size: 0.78rem;
+	font-variant-numeric: tabular-nums;
+	color: var(--text-muted);
+	text-align: right;
+}
+
+.timesheet-week-days {
+	font-family: var(--font-monospace);
+	font-size: 0.78rem;
+	font-variant-numeric: tabular-nums;
+	color: var(--text-accent);
+	text-align: right;
+	width: 48px;
+}
+
+.timesheet-week-earnings {
+	font-family: var(--font-monospace);
+	font-size: 0.78rem;
+	font-variant-numeric: tabular-nums;
+	color: var(--color-green, #22c55e);
+	text-align: right;
+}
+
+.timesheet-week-row.is-total {
+	border-top: 1px solid var(--background-modifier-border);
+	margin-top: 4px;
+	padding-top: 6px;
+	font-weight: 700;
+}
+
+.timesheet-week-row.is-earnings {
+	padding-top: 4px;
+	margin-top: 2px;
+}
+
+/* ── Timesheet form modal ──────────────────────────────────────────── */
+.timesheet-form-modal h3 {
+	margin-top: 0;
+	font-family: var(--font-monospace);
+	font-size: 0.72rem;
+	letter-spacing: 0.14em;
+	text-transform: uppercase;
+	color: var(--text-muted);
+}
+
+.timesheet-form-label {
+	margin: 12px 0 6px;
+	font-family: var(--font-monospace);
+	font-size: 0.66rem;
+	letter-spacing: 0.12em;
+	text-transform: uppercase;
+	color: var(--text-muted);
+}
+
+.timesheet-form-breaks {
+	display: flex;
+	flex-direction: column;
+	gap: 4px;
+	margin-bottom: 8px;
+}
+
+.timesheet-break-row {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	padding: 4px 0;
+}
+
+.timesheet-break-row label {
+	font-size: 0.78rem;
+	color: var(--text-muted);
+}
+
+.timesheet-break-input {
+	font-family: var(--font-monospace);
+	font-size: 0.82rem;
+	width: 100px;
+}
+
+.timesheet-break-del {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	width: 24px;
+	height: 24px;
+	padding: 0;
+	background: transparent;
+	border: none;
+	box-shadow: none;
+	cursor: pointer;
+	color: var(--text-faint);
+	border-radius: 4px;
+}
+
+.timesheet-break-del:hover {
+	color: var(--text-error);
+	background-color: var(--background-modifier-border);
+}
+
+.timesheet-break-del svg {
+	width: 14px;
+	height: 14px;
+}
+
+.timesheet-form-add-break {
+	font-size: 0.8rem;
+	padding: 4px 10px;
+	margin-bottom: 8px;
+	cursor: pointer;
+	border: 1px dashed var(--background-modifier-border);
+	border-radius: 5px;
+	background: transparent;
+	color: var(--text-muted);
+}
+
+.timesheet-form-add-break:hover {
+	color: var(--text-normal);
+	border-color: var(--interactive-accent);
+}
+
+.timesheet-form-footer {
+	display: flex;
+	justify-content: flex-end;
+	gap: 8px;
+	margin-top: 16px;
+}
+
 /* ── Reduced motion ───────────────────────────────────────────────────── */
 @media (prefers-reduced-motion: reduce) {
 	.tasks-add,
