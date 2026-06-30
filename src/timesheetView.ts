@@ -242,10 +242,23 @@ export class TimesheetView extends ItemView {
 			return;
 		}
 
+		// Timer is active — org selector updates the timer's org
+		orgSelect.addEventListener("change", () => this.updateTimerOrg(orgSelect));
+
 		// Timer is active — show running state
 		const isOnBreak = activeTimer.breakStart !== null;
 
 		const displayEl = timer.createDiv({ cls: "timesheet-timer-display" });
+
+		// Editable start time
+		const startRow = displayEl.createDiv({ cls: "timesheet-timer-row" });
+		startRow.createSpan({ cls: "timesheet-timer-label", text: "Started" });
+		const startInput = startRow.createEl("input", {
+			cls: "timesheet-timer-time-input",
+			type: "time",
+			value: this.msToTime(activeTimer.startTime),
+		});
+		startInput.addEventListener("change", () => this.updateTimerStartTime(startInput.value));
 
 		if (isOnBreak) {
 			const breakEl = displayEl.createDiv({ cls: "timesheet-timer-row" });
@@ -276,6 +289,29 @@ export class TimesheetView extends ItemView {
 
 		const stopBtn = btnRow.createEl("button", { cls: "timesheet-btn-stop", text: "■ Stop" });
 		stopBtn.addEventListener("click", () => this.stopTimer());
+	}
+
+	/** Persist a change to the timer's start time from an HH:MM input. */
+	private async updateTimerStartTime(timeStr: string): Promise<void> {
+		const timer = this.plugin.settings.activeTimer;
+		if (!timer) return;
+		const [h, m] = timeStr.split(":").map(Number);
+		const d = new Date(timer.startTime);
+		d.setHours(h, m, 0, 0);
+		timer.startTime = d.getTime();
+		await this.plugin.saveSettings();
+		this.updateTimerDisplay();
+	}
+
+	/** Persist a change to the timer's org from the select element. */
+	private async updateTimerOrg(select: HTMLSelectElement): Promise<void> {
+		const timer = this.plugin.settings.activeTimer;
+		if (!timer) return;
+		const name = select.options[select.selectedIndex]?.text ?? "";
+		if (name) {
+			timer.org = name;
+			await this.plugin.saveSettings();
+		}
 	}
 
 	/** Update the timer display in-place without a full re-render. */
@@ -613,8 +649,21 @@ export class TimesheetView extends ItemView {
 			return;
 		}
 
+		// Timer is active — org selector updates the timer's org
+		orgSelect.addEventListener("change", () => this.updateTimerOrg(orgSelect));
+
 		const isOnBreak = activeTimer.breakStart !== null;
 		const displayEl = parent.createDiv({ cls: "timesheet-timer-display" });
+
+		// Editable start time
+		const startRow = displayEl.createDiv({ cls: "timesheet-timer-row" });
+		startRow.createSpan({ cls: "timesheet-timer-label", text: "Started" });
+		const startInput = startRow.createEl("input", {
+			cls: "timesheet-timer-time-input",
+			type: "time",
+			value: this.msToTime(activeTimer.startTime),
+		});
+		startInput.addEventListener("change", () => this.updateTimerStartTime(startInput.value));
 
 		if (isOnBreak) {
 			const breakEl = displayEl.createDiv({ cls: "timesheet-timer-row" });

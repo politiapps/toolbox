@@ -847,6 +847,17 @@
 	color: var(--text-normal);
 }
 
+.timesheet-timer-time-input {
+	font-family: var(--font-monospace);
+	font-size: 0.85rem;
+	color: var(--text-normal);
+	background-color: var(--background-primary);
+	border: 1px solid var(--background-modifier-border);
+	border-radius: 4px;
+	padding: 1px 4px;
+	width: auto;
+}
+
 .timesheet-timer-value.is-working {
 	color: var(--color-green, #22c55e);
 }
