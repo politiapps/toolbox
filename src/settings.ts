@@ -18,6 +18,16 @@ export const SORT_ORDER_LABELS: Record<SortOrder, string> = {
 	file: "File order",
 };
 
+/** One subscribed calendar feed. */
+export interface CalendarSource {
+	/** Stable id (unused for now, but keeps React-free list edits unambiguous). */
+	id: string;
+	/** User-facing label for the calendar. */
+	title: string;
+	/** iCalendar subscription URL (https or webcal). */
+	url: string;
+}
+
 /** One user-defined section in the sidebar. */
 export interface SectionConfig {
 	/** Stable id used as the persistence key for collapse state. */
@@ -37,8 +47,13 @@ export interface TasksPluginSettings {
 	recentTags: string[];
 	/** Persisted collapse state keyed by section id (and the completed key). */
 	collapseState: Record<string, boolean>;
-	/** Public .ics subscription URL for the "Today" calendar (empty = hidden). */
+	/**
+	 * Deprecated: legacy single/newline-separated .ics URL field. Migrated into
+	 * `calendars` on load and no longer read directly. Kept so old data parses.
+	 */
 	icsUrl: string;
+	/** Subscribed calendar feeds shown in the "Today" panel. */
+	calendars: CalendarSource[];
 	/** Editable Columns feature: render `%% columns %%` blocks in Live Preview. */
 	editableColumnsEnabled: boolean;
 }
@@ -52,6 +67,7 @@ export const DEFAULT_SETTINGS: TasksPluginSettings = {
 	recentTags: [],
 	collapseState: {},
 	icsUrl: "",
+	calendars: [],
 	editableColumnsEnabled: true,
 };
 
@@ -60,8 +76,30 @@ export function newSectionId(): string {
 	return "sec-" + Math.random().toString(36).slice(2, 9);
 }
 
+/** Generate a reasonably unique id for a new calendar source. */
+export function newCalendarId(): string {
+	return "cal-" + Math.random().toString(36).slice(2, 9);
+}
+
+/**
+ * One-time migration of the legacy newline-separated `icsUrl` into `calendars`.
+ * Mutates and returns whether anything changed (so the caller can persist).
+ */
+export function migrateCalendars(settings: TasksPluginSettings): boolean {
+	if (settings.calendars.length > 0 || !settings.icsUrl.trim()) return false;
+	settings.calendars = settings.icsUrl
+		.split("\n")
+		.map((u) => u.trim())
+		.filter((u) => u.length > 0)
+		.map((url, i) => ({ id: newCalendarId(), title: `Calendar ${i + 1}`, url }));
+	settings.icsUrl = "";
+	return settings.calendars.length > 0;
+}
+
 export class TasksSettingTab extends PluginSettingTab {
 	plugin: TasksPlugin;
+	/** Debounce timers for per-calendar sync checks, keyed by calendar id. */
+	private syncTimers: Record<string, number> = {};
 
 	constructor(app: App, plugin: TasksPlugin) {
 		super(app, plugin);
@@ -88,23 +126,30 @@ export class TasksSettingTab extends PluginSettingTab {
 					})
 			);
 
-		new Setting(containerEl)
-			.setName("Calendar (.ics) URLs")
-			.setDesc(
-				"iCalendar subscription URLs, one per line. Today's events from all of them are merged above your tasks. For a Google calendar use its 'Secret address in iCal format'. Leave empty to hide the calendar."
-			)
-			.addTextArea((text) => {
-				text
-					.setPlaceholder("https://…/basic.ics\nhttps://…/another/basic.ics")
-					.setValue(this.plugin.settings.icsUrl)
-					.onChange(async (value) => {
-						this.plugin.settings.icsUrl = value;
-						await this.plugin.saveSettings();
-						this.plugin.fetchCalendar();
+		containerEl.createEl("h3", { text: "Calendars" });
+		containerEl.createEl("p", {
+			text: "Subscribe to one or more iCalendar feeds. Today's events from all of them are merged above your tasks. For a Google calendar use its 'Secret address in iCal format'.",
+			cls: "setting-item-description",
+		});
+
+		this.plugin.settings.calendars.forEach((cal, index) => {
+			this.renderCalendarSetting(containerEl, cal, index);
+		});
+
+		new Setting(containerEl).addButton((btn) =>
+			btn
+				.setButtonText("Add calendar")
+				.setCta()
+				.onClick(async () => {
+					this.plugin.settings.calendars.push({
+						id: newCalendarId(),
+						title: "New calendar",
+						url: "",
 					});
-				text.inputEl.rows = 4;
-				text.inputEl.addClass("tasks-ics-input");
-			});
+					await this.plugin.saveSettings();
+					this.display();
+				})
+		);
 
 		containerEl.createEl("h3", { text: "Sections" });
 		containerEl.createEl("p", {
@@ -223,6 +268,81 @@ export class TasksSettingTab extends PluginSettingTab {
 				await this.plugin.saveSettings();
 			})
 		);
+	}
+
+	private renderCalendarSetting(containerEl: HTMLElement, cal: CalendarSource, index: number): void {
+		const wrapper = containerEl.createDiv({ cls: "tasks-section-setting" });
+
+		new Setting(wrapper).setName(`Calendar ${index + 1}`).addExtraButton((btn) =>
+			btn
+				.setIcon("trash-2")
+				.setTooltip("Delete calendar")
+				.onClick(async () => {
+					this.plugin.settings.calendars.splice(index, 1);
+					await this.plugin.saveSettings();
+					this.plugin.fetchCalendar();
+					this.display();
+				})
+		);
+
+		new Setting(wrapper).setName("Title").addText((text) =>
+			text
+				.setPlaceholder("My calendar")
+				.setValue(cal.title)
+				.onChange(async (value) => {
+					cal.title = value;
+					await this.plugin.saveSettings();
+					this.plugin.refreshViews();
+				})
+		);
+
+		// Declared before the URL field so its onChange closure can update it.
+		let statusEl: HTMLElement;
+
+		new Setting(wrapper)
+			.setName("iCal URL")
+			.setDesc("https or webcal — e.g. a Google 'Secret address in iCal format'.")
+			.addText((text) =>
+				text
+					.setPlaceholder("https://…/basic.ics")
+					.setValue(cal.url)
+					.onChange(async (value) => {
+						cal.url = value.trim();
+						await this.plugin.saveSettings();
+						this.plugin.fetchCalendar();
+						this.scheduleSync(cal, statusEl);
+					})
+			);
+
+		statusEl = wrapper.createDiv({ cls: "tasks-cal-status" });
+		this.syncCalendar(cal, statusEl);
+	}
+
+	/** Debounce a per-calendar sync check while the user is typing a URL. */
+	private scheduleSync(cal: CalendarSource, el: HTMLElement): void {
+		window.clearTimeout(this.syncTimers[cal.id]);
+		el.setText("Syncing…");
+		el.className = "tasks-cal-status is-syncing";
+		this.syncTimers[cal.id] = window.setTimeout(() => this.syncCalendar(cal, el), 500);
+	}
+
+	/** Fetch one calendar and report success / failure inline. */
+	private async syncCalendar(cal: CalendarSource, el: HTMLElement): Promise<void> {
+		if (!cal.url.trim()) {
+			el.setText("No URL set");
+			el.className = "tasks-cal-status is-idle";
+			return;
+		}
+		el.setText("Syncing…");
+		el.className = "tasks-cal-status is-syncing";
+		const res = await this.plugin.fetchOneCalendar(cal.url);
+		if (res.ok) {
+			el.setText(`✓ Synced — ${res.count} event${res.count === 1 ? "" : "s"} today`);
+			el.className = "tasks-cal-status is-ok";
+		} else {
+			el.setText("✗ Couldn't load — check the URL");
+			el.className = "tasks-cal-status is-error";
+		}
 	}
 
 	private async moveSection(from: number, to: number): Promise<void> {

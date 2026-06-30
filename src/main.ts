@@ -23,6 +23,7 @@ import {
 	DEFAULT_SETTINGS,
 	TasksPluginSettings,
 	TasksSettingTab,
+	migrateCalendars,
 } from "./settings";
 import { TasksView, VIEW_TYPE_TASKS } from "./taskView";
 import { CalendarOccurrence, getEventsForToday, mergeOccurrences } from "./calendar";
@@ -202,9 +203,8 @@ export default class TasksPlugin extends Plugin {
 	 * feeds load, we show what we have rather than nag about a partial failure.
 	 */
 	async fetchCalendar(): Promise<void> {
-		const urls = this.settings.icsUrl
-			.split("\n")
-			.map((u) => u.trim())
+		const urls = this.settings.calendars
+			.map((c) => c.url.trim())
 			.filter((u) => u.length > 0)
 			// webcal:// is just https with another scheme.
 			.map((u) => u.replace(/^webcal:\/\//i, "https://"));
@@ -234,6 +234,21 @@ export default class TasksPlugin extends Plugin {
 		this.refreshViews();
 	}
 
+	/**
+	 * Fetch a single feed and report whether it loaded and how many events it has
+	 * today. Used by the settings UI to show per-calendar sync status.
+	 */
+	async fetchOneCalendar(url: string): Promise<{ ok: boolean; count: number }> {
+		const u = url.trim().replace(/^webcal:\/\//i, "https://");
+		if (!u) return { ok: false, count: 0 };
+		try {
+			const res = await requestUrl({ url: u });
+			return { ok: true, count: getEventsForToday(res.text).length };
+		} catch {
+			return { ok: false, count: 0 };
+		}
+	}
+
 	onunload(): void {
 		// Leaves are detached by Obsidian; nothing else to clean up because all
 		// event listeners were registered via this.registerEvent().
@@ -241,6 +256,8 @@ export default class TasksPlugin extends Plugin {
 
 	async loadSettings(): Promise<void> {
 		this.settings = Object.assign({}, DEFAULT_SETTINGS, await this.loadData());
+		// One-time: fold the legacy newline-separated icsUrl into the calendar list.
+		if (migrateCalendars(this.settings)) await this.saveSettings();
 	}
 
 	async saveSettings(): Promise<void> {

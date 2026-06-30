@@ -53,12 +53,15 @@ manifest.json        Plugin id (`toolbox`) / name (`Toolbox`) / minAppVersion (1
   being created or renamed into the path — it calls `refreshViews()`.
 - `activateView()` opens/reveals the view in the right sidebar.
 - `refreshViews()` re-renders every open `TasksView`.
-- `fetchCalendar()` pulls every configured `.ics` feed (one URL per line) via
-  `requestUrl` (no CORS), in parallel (`Promise.allSettled`), merges today's
-  events with `mergeOccurrences`, and caches them on the plugin
-  (`calendarEvents` / `calendarError`). An error is surfaced only when *all*
-  feeds fail; partial successes show what loaded. Called on load, on a 30-minute
-  `registerInterval`, and when the URLs change in settings.
+- `fetchCalendar()` pulls every feed in `settings.calendars` via `requestUrl`
+  (no CORS), in parallel (`Promise.allSettled`), merges today's events with
+  `mergeOccurrences`, and caches them on the plugin (`calendarEvents` /
+  `calendarError`). An error is surfaced only when *all* feeds fail; partial
+  successes show what loaded. Called on load, on a 30-minute `registerInterval`,
+  and when calendars change in settings. `fetchOneCalendar(url)` fetches a single
+  feed (used by the settings UI for per-calendar sync status).
+- `loadSettings()` runs `migrateCalendars()` once to fold the legacy
+  newline-separated `icsUrl` into the `calendars` list.
 - **Editable Columns wiring:** registers a mutable editor-extension array via
   `registerEditorExtension`; `applyEditableColumns()` fills/empties it to match
   the setting and calls `workspace.updateOptions()`. A single
@@ -99,7 +102,12 @@ manifest.json        Plugin id (`toolbox`) / name (`Toolbox`) / minAppVersion (1
 
 ### `settings.ts`
 - `TasksPluginSettings`: `tasksFilePath`, `sections[]`, `recentTags[]`,
-  `collapseState{}`, `icsUrl`, `editableColumnsEnabled`.
+  `collapseState{}`, `calendars[]`, `editableColumnsEnabled` (plus deprecated
+  `icsUrl`, migrated into `calendars`).
+- `CalendarSource`: `id`, `title`, `url`. `migrateCalendars()` converts the legacy
+  `icsUrl`; `newCalendarId()` mints ids. The settings tab manages calendars
+  (add / title / URL / delete) with an inline per-calendar sync check
+  (`fetchOneCalendar`).
 - `SectionConfig`: `id`, `name`, `tag`, `sort`, `collapsedByDefault`.
 - `SortOrder`: `due | priority-due | priority | file`.
 - `TasksSettingTab`: native settings UI to edit the file path and manage

@@ -654,12 +654,22 @@
 	margin-top: 18px;
 }
 
-/* Calendar URLs: a full-width, monospace multi-line input. */
-.tasks-ics-input {
-	width: 100%;
-	resize: vertical;
+/* Per-calendar sync status line in settings. */
+.tasks-cal-status {
+	font-size: 0.78rem;
+	margin: -6px 0 10px;
 	font-family: var(--font-monospace);
-	font-size: 0.82rem;
+	color: var(--text-muted);
+}
+.tasks-cal-status.is-ok {
+	color: var(--text-success, #22c55e);
+}
+.tasks-cal-status.is-error {
+	color: var(--text-error);
+}
+.tasks-cal-status.is-syncing,
+.tasks-cal-status.is-idle {
+	color: var(--text-faint);
 }
 
 /* ── Editable Columns (Live Preview layout) ───────────────────────────── */

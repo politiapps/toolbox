@@ -276,7 +276,7 @@ export class TasksView extends ItemView {
 
 	/** "Today" calendar block above the tasks (only when an .ics URL is set). */
 	private renderCalendar(root: HTMLElement): void {
-		if (!this.plugin.settings.icsUrl) return;
+		if (this.plugin.settings.calendars.length === 0) return;
 		renderTodayCalendar(root, this.plugin.calendarEvents, this.plugin.calendarError);
 	}
 
