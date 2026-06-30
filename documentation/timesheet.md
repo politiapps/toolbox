@@ -71,7 +71,14 @@ Manual edits are picked up automatically when the file changes.
 
 The **Generate invoice** button (or `Generate invoice from timesheet` command) opens a
 modal that aggregates timesheet entries for a selected org and date range into a
-formatted markdown invoice.
+formatted **PDF** invoice (drawn with pdf-lib), saved to the vault and opened in
+Obsidian's PDF viewer straight away. The org's colour is the invoice's accent.
+
+In the modal you can also:
+- Edit the **line item description** applied to each tracked-hours line (default
+  "Professional services").
+- Add **custom items** (description + quantity + rate) for anything beyond tracked
+  hours — they're appended as line items and included in the amount due.
 
 **Global invoice settings** (Settings → Toolbox → Invoice):
 - Business name, ABN, business address (your details).
@@ -85,7 +92,7 @@ formatted markdown invoice.
 
 The invoice number format is `{prefix}-{number:03d}` (e.g. `INV-001`).
 Date range defaults from the day after the last invoice to today.
-Invoices are saved as markdown in the configured output folder with no file auto-open.
+Invoices are saved as PDF in the configured output folder and opened automatically.
 
 ## Settings
 

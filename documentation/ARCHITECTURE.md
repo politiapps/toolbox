@@ -25,7 +25,10 @@ feature's views, commands, and settings.
   `timesheet.md`). Tracks start/end times, multiple breaks per session, and
   supports multiple organisations per day. Shows today's entries and a weekly
   summary with hours, fractional days (7h = 1 day), and earnings (from hourly
-  rates configured in settings).
+  rates configured in settings). It can also **generate a PDF invoice** from the
+  tracked hours for an org and date range (with an editable line-item description
+  and arbitrary custom items), saved to the vault and opened in Obsidian's PDF
+  viewer.
 
 As each new feature lands it gets its own module(s) under `src/` and its own
 doc under `documentation/`, and is added to the list above.
@@ -45,9 +48,13 @@ src/
   timesheetParser.ts THE ONLY place timesheet entries are parsed / serialised
   timesheetView.ts   Sidebar ItemView, running timer, entries, weekly summary,
                      add/edit modal
+  invoiceGenerator.ts Build the invoice PDF (pdf-lib) + aggregate hours; save
+                     binary to the vault
+  invoiceModal.ts    Generate-invoice modal: org/date range, editable description,
+                     custom items, preview; opens the saved PDF
   editableColumns.ts Editable Columns: CM6 extension, marker parsing, cell render
   embedEditor.ts     Editable Columns: resolve a clicked embed → floating editor
-styles.css           Sidebar + columns + timesheet + modal styling
+styles.css           Sidebar + columns + timesheet + invoice + modal styling
 manifest.json        Plugin id (`toolbox`) / name (`Toolbox`) / minAppVersion (1.4.0)
 ```
 

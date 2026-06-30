@@ -1500,254 +1500,88 @@
 	color: var(--text-muted);
 }
 
-/* ── Invoice document (the generated note, reading view + print) ──────── */
-/* Emitted by invoiceGenerator.ts as HTML wrapped in .toolbox-invoice. Rendered
-   as a self-contained "sheet" so it reads as a document in any theme and prints
-   cleanly. Figures use the tabular-mono ledger register shared across Toolbox;
-   the Amount-due band is the single bold moment. */
-.toolbox-invoice {
-	--ti-ink: var(--text-normal);
-	--ti-muted: var(--text-muted);
-	--ti-line: var(--background-modifier-border);
-	--ti-accent: var(--interactive-accent);
-	max-width: 720px;
-	margin: 8px auto;
-	padding: 40px 44px 36px;
-	background: var(--background-primary);
-	border: 1px solid var(--ti-line);
-	border-radius: 10px;
-	color: var(--ti-ink);
-	font-size: 14px;
-	line-height: 1.5;
-}
-
-.toolbox-invoice .ti-eyebrow {
-	display: block;
-	font-family: var(--font-monospace);
-	font-size: 0.62rem;
-	font-weight: 600;
-	letter-spacing: 0.16em;
-	text-transform: uppercase;
-	color: var(--ti-muted);
-	margin-bottom: 4px;
-}
-
-/* Masthead */
-.toolbox-invoice .ti-masthead {
-	display: flex;
-	justify-content: space-between;
-	align-items: flex-start;
-	gap: 24px;
-	padding-bottom: 18px;
-	border-bottom: 2px solid var(--ti-ink);
-}
-
-.toolbox-invoice .ti-issuer-name {
-	font-size: 1.5rem;
-	font-weight: 700;
-	letter-spacing: -0.02em;
-	line-height: 1.1;
-}
-
-.toolbox-invoice .ti-issuer-meta {
-	font-size: 0.8rem;
-	color: var(--ti-muted);
-	margin-top: 3px;
-}
-
-.toolbox-invoice .ti-doclabel {
-	text-align: right;
-	flex-shrink: 0;
-}
-
-.toolbox-invoice .ti-doctype {
-	font-family: var(--font-monospace);
-	font-size: 0.78rem;
-	font-weight: 700;
-	letter-spacing: 0.28em;
-	text-transform: uppercase;
-	color: var(--ti-accent);
-}
-
-.toolbox-invoice .ti-docnum {
-	font-family: var(--font-monospace);
-	font-size: 1.05rem;
-	font-weight: 700;
-	font-variant-numeric: tabular-nums;
-	margin-top: 2px;
-}
-
-/* Meta strip */
-.toolbox-invoice .ti-meta {
-	display: flex;
-	flex-wrap: wrap;
-	gap: 28px;
-	margin: 22px 0 26px;
-}
-
-.toolbox-invoice .ti-meta-block {
-	display: flex;
-	flex-direction: column;
-}
-
-.toolbox-invoice .ti-meta-val {
-	font-weight: 600;
-}
-
-.toolbox-invoice .ti-billto {
-	margin-left: auto;
-	text-align: right;
-}
-
-.toolbox-invoice .ti-meta-sub {
-	font-size: 0.82rem;
-	color: var(--ti-muted);
-}
-
-/* Services ledger */
-.toolbox-invoice .ti-table {
-	width: 100%;
-	border-collapse: collapse;
-	margin-top: 6px;
-	font-size: 0.88rem;
-}
-
-.toolbox-invoice .ti-table th {
-	text-align: left;
-	font-family: var(--font-monospace);
-	font-size: 0.6rem;
-	font-weight: 600;
-	letter-spacing: 0.12em;
-	text-transform: uppercase;
-	color: var(--ti-muted);
-	padding: 0 10px 8px;
-	border-bottom: 1px solid var(--ti-ink);
-}
-
-.toolbox-invoice .ti-table td {
-	padding: 9px 10px;
-	border-bottom: 1px solid var(--ti-line);
-	vertical-align: top;
-}
-
-.toolbox-invoice .ti-num {
-	text-align: right;
-	font-family: var(--font-monospace);
-	font-variant-numeric: tabular-nums;
-	white-space: nowrap;
-}
-
-.toolbox-invoice .ti-table tfoot td {
-	border-bottom: none;
-	padding-top: 10px;
-}
-
-.toolbox-invoice .ti-foot-label {
-	text-align: right;
-	font-family: var(--font-monospace);
-	font-size: 0.6rem;
-	letter-spacing: 0.12em;
-	text-transform: uppercase;
-	color: var(--ti-muted);
-}
-
-.toolbox-invoice .ti-foot {
-	font-weight: 700;
-}
-
-/* Hero — the bottom line */
-.toolbox-invoice .ti-total {
-	display: flex;
-	align-items: baseline;
-	justify-content: flex-end;
-	gap: 18px;
-	margin-top: 16px;
-	padding-top: 16px;
-	border-top: 2px solid var(--ti-accent);
-}
-
-.toolbox-invoice .ti-total-label {
+/* ── Custom line items (in the generate-invoice modal) ────────────────── */
+.invoice-items-label {
+	margin: 14px 0 6px;
 	font-family: var(--font-monospace);
 	font-size: 0.66rem;
 	font-weight: 600;
-	letter-spacing: 0.18em;
+	letter-spacing: 0.12em;
 	text-transform: uppercase;
-	color: var(--ti-muted);
+	color: var(--text-muted);
 }
 
-.toolbox-invoice .ti-total-amount {
+.invoice-items {
+	display: flex;
+	flex-direction: column;
+	gap: 5px;
+}
+
+.invoice-items-empty {
+	font-size: 0.8rem;
+	font-style: italic;
+	color: var(--text-faint);
+	padding: 2px 0;
+}
+
+.invoice-item-row {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+}
+
+.invoice-item-desc {
+	flex: 1;
+	min-width: 0;
+}
+
+.invoice-item-num {
+	width: 72px;
+	flex-shrink: 0;
 	font-family: var(--font-monospace);
-	font-size: 2rem;
-	font-weight: 700;
 	font-variant-numeric: tabular-nums;
-	letter-spacing: -0.01em;
-	line-height: 1;
+	text-align: right;
 }
 
-/* Notes + payment */
-.toolbox-invoice .ti-notes {
-	margin-top: 26px;
-	padding-top: 16px;
-	border-top: 1px solid var(--ti-line);
+.invoice-item-del {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	width: 26px;
+	height: 26px;
+	flex-shrink: 0;
+	padding: 0;
+	background: transparent;
+	border: none;
+	box-shadow: none;
+	cursor: pointer;
+	color: var(--text-faint);
+	border-radius: 5px;
 }
 
-.toolbox-invoice .ti-notes p {
-	margin: 0;
+.invoice-item-del:hover {
+	color: var(--text-error);
+	background-color: var(--background-modifier-border);
 }
 
-.toolbox-invoice .ti-pay {
-	margin-top: 22px;
-	padding: 16px 18px;
-	background: var(--background-secondary);
-	border-radius: 8px;
+.invoice-item-del svg {
+	width: 14px;
+	height: 14px;
 }
 
-.toolbox-invoice .ti-paylist {
-	display: flex;
-	flex-wrap: wrap;
-	gap: 6px 32px;
-	margin: 6px 0 0;
+.invoice-items-add {
+	align-self: flex-start;
+	margin-top: 8px;
+	padding: 4px 10px;
+	font-size: 0.8rem;
+	cursor: pointer;
+	border: 1px dashed var(--background-modifier-border);
+	border-radius: 5px;
+	background: transparent;
+	color: var(--text-muted);
 }
 
-.toolbox-invoice .ti-paylist > div {
-	display: flex;
-	align-items: baseline;
-	gap: 8px;
-}
-
-.toolbox-invoice .ti-paylist dt {
-	min-width: 56px;
-	font-size: 0.78rem;
-	color: var(--ti-muted);
-}
-
-.toolbox-invoice .ti-paylist dd {
-	margin: 0;
-	font-weight: 600;
-}
-
-@media (max-width: 600px) {
-	.toolbox-invoice {
-		padding: 24px 20px;
-	}
-	.toolbox-invoice .ti-masthead {
-		flex-direction: column;
-		gap: 12px;
-	}
-	.toolbox-invoice .ti-doclabel {
-		text-align: left;
-	}
-	.toolbox-invoice .ti-billto {
-		margin-left: 0;
-		text-align: left;
-	}
-}
-
-@media print {
-	.toolbox-invoice {
-		max-width: none;
-		margin: 0;
-		padding: 0;
-		border: none;
-	}
+.invoice-items-add:hover {
+	color: var(--text-normal);
+	border-color: var(--interactive-accent);
 }

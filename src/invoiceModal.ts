@@ -2,16 +2,17 @@
  * invoiceModal.ts — Modal UI for generating an invoice from timesheet entries.
  */
 
-import { App, Modal, Setting, Notice } from "obsidian";
+import { App, Modal, Setting, Notice, TFile, setIcon } from "obsidian";
 import type TasksPlugin from "./main";
 import { TimesheetOrg } from "./settings";
 import {
 	generateInvoice,
 	nextInvoiceLabel,
 	aggregateEntries,
+	customItemsTotal,
+	CustomInvoiceItem,
 } from "./invoiceGenerator";
 import { parseTimesheet } from "./timesheetParser";
-import { TFile } from "obsidian";
 
 /** Format a Date as YYYY-MM-DD. */
 function fmtDate(d: Date): string {
@@ -38,6 +39,8 @@ export class InvoiceModal extends Modal {
 	private notes = "";
 	private invoiceLabel = "";
 	private invoiceNumber = 0;
+	private serviceDescription = "Professional services";
+	private customItems: CustomInvoiceItem[] = [];
 	private previewEl: HTMLElement | null = null;
 
 	constructor(app: App, plugin: TasksPlugin) {
@@ -136,6 +139,33 @@ export class InvoiceModal extends Modal {
 				text.setValue(this.invoiceLabel).setDisabled(true),
 			);
 
+		// Description used for each tracked-hours line
+		new Setting(contentEl)
+			.setName("Line item description")
+			.setDesc("Shown against each tracked-hours line on the invoice.")
+			.addText((text) =>
+				text
+					.setValue(this.serviceDescription)
+					.setPlaceholder("Professional services")
+					.onChange((val) => {
+						this.serviceDescription = val;
+					}),
+			);
+
+		// Custom line items — anything beyond tracked hours
+		contentEl.createEl("div", { cls: "invoice-items-label", text: "Custom items" });
+		const itemsWrap = contentEl.createDiv({ cls: "invoice-items" });
+		this.renderCustomItems(itemsWrap);
+		const addItemBtn = contentEl.createEl("button", {
+			cls: "invoice-items-add",
+			text: "+ Add item",
+		});
+		addItemBtn.addEventListener("click", () => {
+			this.customItems.push({ description: "", quantity: 1, rate: this.selectedOrg?.rate ?? 0 });
+			this.renderCustomItems(itemsWrap);
+			this.updatePreview();
+		});
+
 		// Notes
 		new Setting(contentEl)
 			.setName("Notes")
@@ -162,6 +192,57 @@ export class InvoiceModal extends Modal {
 					await this.doGenerate();
 				}),
 		);
+	}
+
+	private renderCustomItems(wrap: HTMLElement): void {
+		wrap.empty();
+		if (this.customItems.length === 0) {
+			wrap.createDiv({
+				cls: "invoice-items-empty",
+				text: "Nothing extra. Add an item for anything beyond tracked hours.",
+			});
+			return;
+		}
+		this.customItems.forEach((item, i) => {
+			const row = wrap.createDiv({ cls: "invoice-item-row" });
+
+			const desc = row.createEl("input", { cls: "invoice-item-desc", type: "text" });
+			desc.value = item.description;
+			desc.placeholder = "Description";
+			desc.addEventListener("input", () => {
+				item.description = desc.value;
+				this.updatePreview();
+			});
+
+			const qty = row.createEl("input", { cls: "invoice-item-num", type: "number" });
+			qty.value = String(item.quantity);
+			qty.min = "0";
+			qty.step = "any";
+			qty.setAttr("aria-label", "Quantity");
+			qty.addEventListener("input", () => {
+				item.quantity = parseFloat(qty.value) || 0;
+				this.updatePreview();
+			});
+
+			const rate = row.createEl("input", { cls: "invoice-item-num", type: "number" });
+			rate.value = String(item.rate);
+			rate.min = "0";
+			rate.step = "any";
+			rate.setAttr("aria-label", "Rate");
+			rate.addEventListener("input", () => {
+				item.rate = parseFloat(rate.value) || 0;
+				this.updatePreview();
+			});
+
+			const del = row.createEl("button", { cls: "invoice-item-del" });
+			setIcon(del, "x");
+			del.setAttr("aria-label", "Remove item");
+			del.addEventListener("click", () => {
+				this.customItems.splice(i, 1);
+				this.renderCustomItems(wrap);
+				this.updatePreview();
+			});
+		});
 	}
 
 	private updateInvoiceLabel(): void {
@@ -197,24 +278,31 @@ export class InvoiceModal extends Modal {
 			this.selectedOrg.rate,
 		);
 
-		if (entries.length === 0) {
+		const customRows = this.customItems.filter((it) => it.description.trim());
+		if (entries.length === 0 && customRows.length === 0) {
 			this.previewEl.createEl("p", {
-				text: "No entries for this org in this date range. Adjust the dates above.",
+				text: "No entries for this org in this date range. Adjust the dates, or add a custom item.",
 				cls: "invoice-preview-empty",
 			});
 			return;
 		}
 
+		const grandTotal = totalAmount + customItemsTotal(this.customItems);
+		const parts: string[] = [];
+		if (entries.length > 0) {
+			parts.push(`${entries.length} ${entries.length === 1 ? "entry" : "entries"}`);
+		}
+		if (customRows.length > 0) {
+			parts.push(`${customRows.length} item${customRows.length === 1 ? "" : "s"}`);
+		}
+		parts.push(`${totalHours.toFixed(1)} h`);
+
 		this.previewEl.createEl("span", { cls: "invoice-preview-eyebrow", text: "Preview" });
 		const line = this.previewEl.createDiv({ cls: "invoice-preview-line" });
-		const count = `${entries.length} ${entries.length === 1 ? "entry" : "entries"}`;
-		line.createSpan({
-			cls: "invoice-preview-meta",
-			text: `${count} · ${totalHours.toFixed(1)} h`,
-		});
+		line.createSpan({ cls: "invoice-preview-meta", text: parts.join(" · ") });
 		line.createSpan({
 			cls: "invoice-preview-amount",
-			text: `$${totalAmount.toFixed(2)}`,
+			text: `$${grandTotal.toFixed(2)}`,
 		});
 	}
 
@@ -237,7 +325,7 @@ export class InvoiceModal extends Modal {
 		this.updateInvoiceLabel();
 
 		try {
-			const path = await generateInvoice(this.plugin, {
+			const file = await generateInvoice(this.plugin, {
 				org: this.selectedOrg,
 				clientName: this.selectedOrg.clientName || this.selectedOrg.name,
 				clientAddress: this.selectedOrg.clientAddress,
@@ -246,9 +334,13 @@ export class InvoiceModal extends Modal {
 				invoiceNumber: this.invoiceNumber,
 				invoiceLabel: this.invoiceLabel,
 				notes: this.notes,
+				serviceDescription: this.serviceDescription || "Professional services",
+				customItems: this.customItems.filter((it) => it.description.trim()),
 			});
-			new Notice(`Invoice saved to ${path}`);
+			new Notice(`Invoice saved to ${file.path}`);
 			this.close();
+			// Open the PDF straight away in Obsidian's viewer.
+			await this.app.workspace.getLeaf(true).openFile(file);
 		} catch (err) {
 			new Notice(err instanceof Error ? err.message : String(err));
 		}

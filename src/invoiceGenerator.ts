@@ -1,15 +1,25 @@
 /**
- * invoiceGenerator.ts — Build and save invoice markdown files.
+ * invoiceGenerator.ts — Build and save invoices as PDF files.
  *
- * Generates a formatted markdown invoice from timesheet entries for a given
- * org and date range, saves it to the configured invoice folder, and updates
- * the last-invoice tracking data.
+ * Generates a formatted PDF invoice from timesheet entries (plus any custom
+ * line items) for a given org and date range, saves it to the configured
+ * invoice folder via the vault's binary API, and updates the last-invoice
+ * tracking data. The PDF is drawn with pdf-lib (pure JS — no native deps), so
+ * it works on desktop and mobile and opens in Obsidian's built-in PDF viewer.
  */
 
-import { App, TFile } from "obsidian";
+import { TFile } from "obsidian";
+import { PDFDocument, PDFFont, PDFPage, StandardFonts, rgb, RGB } from "pdf-lib";
 import type TasksPlugin from "./main";
 import { parseTimesheet, entryWorkMinutes } from "./timesheetParser";
 import { TimesheetOrg } from "./settings";
+
+/** A user-added line item beyond the tracked timesheet hours. */
+export interface CustomInvoiceItem {
+	description: string;
+	quantity: number;
+	rate: number;
+}
 
 export interface InvoiceOptions {
 	org: TimesheetOrg;
@@ -20,9 +30,13 @@ export interface InvoiceOptions {
 	invoiceNumber: number;
 	invoiceLabel: string;
 	notes: string;
+	/** Description applied to each tracked-hours line. */
+	serviceDescription: string;
+	/** Extra line items added by the user. */
+	customItems: CustomInvoiceItem[];
 }
 
-/** Format a Date as "30 June 2026". */
+/** Format an ISO date as "30 June 2026". */
 function formatDateLong(iso: string): string {
 	const [y, m, d] = iso.split("-").map(Number);
 	const date = new Date(y, m - 1, d);
@@ -33,15 +47,6 @@ function formatDateLong(iso: string): string {
 	});
 }
 
-/** Escape user-supplied text for safe inclusion in the invoice HTML. */
-function esc(s: string): string {
-	return s
-		.replace(/&/g, "&amp;")
-		.replace(/</g, "&lt;")
-		.replace(/>/g, "&gt;")
-		.replace(/"/g, "&quot;");
-}
-
 /** Money in the document's currency style: $1,234.00. */
 function money(n: number): string {
 	return (
@@ -50,109 +55,235 @@ function money(n: number): string {
 	);
 }
 
+/** Parse a #rrggbb colour into a pdf-lib RGB, falling back to slate ink. */
+function hexToRgb(hex: string): RGB {
+	const m = /^#?([0-9a-fA-F]{6})$/.exec((hex || "").trim());
+	if (!m) return rgb(0.16, 0.17, 0.21);
+	const n = parseInt(m[1], 16);
+	return rgb(((n >> 16) & 255) / 255, ((n >> 8) & 255) / 255, (n & 255) / 255);
+}
+
+/** Greedy word-wrap to a pixel width. */
+function wrapText(text: string, font: PDFFont, size: number, maxWidth: number): string[] {
+	const words = text.split(/\s+/);
+	const lines: string[] = [];
+	let line = "";
+	for (const w of words) {
+		const next = line ? `${line} ${w}` : w;
+		if (font.widthOfTextAtSize(next, size) > maxWidth && line) {
+			lines.push(line);
+			line = w;
+		} else {
+			line = next;
+		}
+	}
+	if (line) lines.push(line);
+	return lines;
+}
+
+/** Truncate to a pixel width, adding an ellipsis if it doesn't fit. */
+function ellipsize(text: string, font: PDFFont, size: number, maxWidth: number): string {
+	if (font.widthOfTextAtSize(text, size) <= maxWidth) return text;
+	let s = text;
+	while (s.length > 1 && font.widthOfTextAtSize(s + "…", size) > maxWidth) {
+		s = s.slice(0, -1);
+	}
+	return s + "…";
+}
+
+/** One rendered ledger row (a tracked-hours day or a custom item). */
+interface RenderRow {
+	date: string;
+	description: string;
+	qty: string;
+	rate: string;
+	amount: string;
+}
+
 /**
- * Build the saved invoice document. It is written into a `.md` note but emitted
- * as a self-contained HTML document wrapped in `.toolbox-invoice`, so the
- * plugin's stylesheet renders it as a proper invoice in reading view (and in
- * print/PDF export) across any theme. Figures use the tabular-mono ledger
- * register shared across Toolbox; the "Amount due" band is the one bold moment.
+ * Draw the invoice and return the PDF bytes. The org's own colour is the single
+ * accent (doc label + amount-due rule); figures use Courier — the tabular-mono
+ * ledger register shared across Toolbox. The "Amount due" band is the hero.
  */
-export function buildInvoiceMarkdown(
+export async function buildInvoicePdf(
 	plugin: TasksPlugin,
 	options: InvoiceOptions,
-	entries: { date: string; hours: number; amount: number }[],
+	rows: RenderRow[],
 	totalHours: number,
-	totalAmount: number,
-): string {
+	grandTotal: number,
+): Promise<Uint8Array> {
 	const inv = plugin.settings.invoice;
 	const { org } = options;
-	const issued = formatDateLong(new Date().toISOString().slice(0, 10));
-	const period = `${formatDateLong(options.dateFrom)} – ${formatDateLong(options.dateTo)}`;
-	const clientName = options.clientName || org.name;
 
-	const out: string[] = [];
-	out.push(`<div class="toolbox-invoice">`);
+	const pdf = await PDFDocument.create();
+	const helv = await pdf.embedFont(StandardFonts.Helvetica);
+	const helvBold = await pdf.embedFont(StandardFonts.HelveticaBold);
+	const courier = await pdf.embedFont(StandardFonts.Courier);
+	const courierBold = await pdf.embedFont(StandardFonts.CourierBold);
 
-	// Masthead — issuer as letterhead, "Invoice" + number as the document label.
-	out.push(`<header class="ti-masthead">`);
-	out.push(`<div class="ti-issuer">`);
-	out.push(`<div class="ti-issuer-name">${esc(inv.businessName || "Your business")}</div>`);
-	if (inv.abn) out.push(`<div class="ti-issuer-meta">ABN ${esc(inv.abn)}</div>`);
-	if (inv.businessAddress) {
-		out.push(`<div class="ti-issuer-meta">${esc(inv.businessAddress.replace(/\n/g, ", "))}</div>`);
+	const ink = rgb(0.13, 0.13, 0.15);
+	const muted = rgb(0.45, 0.46, 0.5);
+	const hair = rgb(0.85, 0.86, 0.88);
+	const accent = hexToRgb(org.colour);
+
+	const pageW = 595.28;
+	const pageH = 841.89;
+	const margin = 50;
+	const cols = {
+		date: margin,
+		desc: margin + 92,
+		hours: margin + 352,
+		rate: margin + 430,
+		amount: pageW - margin,
+	};
+
+	let page: PDFPage = pdf.addPage([pageW, pageH]);
+	let cur = 0; // baseline position measured from the top of the page
+
+	type Opts = { font?: PDFFont; size?: number; color?: RGB; align?: "left" | "right" };
+	const draw = (s: string, x: number, baselineTop: number, o: Opts = {}): void => {
+		const font = o.font ?? helv;
+		const size = o.size ?? 10;
+		const w = font.widthOfTextAtSize(s, size);
+		const drawX = o.align === "right" ? x - w : x;
+		page.drawText(s, { x: drawX, y: pageH - baselineTop, size, font, color: o.color ?? ink });
+	};
+	const rule = (y: number, thickness: number, color: RGB): void => {
+		page.drawLine({
+			start: { x: margin, y: pageH - y },
+			end: { x: pageW - margin, y: pageH - y },
+			thickness,
+			color,
+		});
+	};
+	const drawTableHead = (): void => {
+		const o: Opts = { font: courier, size: 7.5, color: muted };
+		draw("DATE", cols.date, cur, o);
+		draw("DESCRIPTION", cols.desc, cur, o);
+		draw("HOURS / QTY", cols.hours, cur, { ...o, align: "right" });
+		draw("RATE", cols.rate, cur, { ...o, align: "right" });
+		draw("AMOUNT", cols.amount, cur, { ...o, align: "right" });
+		cur += 8;
+		rule(cur, 1, ink);
+		cur += 16;
+	};
+
+	// ── Masthead ───────────────────────────────────────────────────────────
+	cur = 66;
+	draw(inv.businessName || "Your business", margin, cur, { font: helvBold, size: 19 });
+	draw("INVOICE", pageW - margin, cur - 1, { font: courierBold, size: 10, color: accent, align: "right" });
+	draw(options.invoiceLabel, pageW - margin, cur + 16, { font: courierBold, size: 13, align: "right" });
+
+	let ly = cur;
+	const issuerMeta: string[] = [];
+	if (inv.abn) issuerMeta.push(`ABN ${inv.abn}`);
+	if (inv.businessAddress) issuerMeta.push(inv.businessAddress.replace(/\n/g, ", "));
+	for (const line of issuerMeta) {
+		ly += 14;
+		draw(line, margin, ly, { font: helv, size: 9, color: muted });
 	}
-	out.push(`</div>`);
-	out.push(
-		`<div class="ti-doclabel"><div class="ti-doctype">Invoice</div>` +
-			`<div class="ti-docnum">${esc(options.invoiceLabel)}</div></div>`,
-	);
-	out.push(`</header>`);
+	cur = Math.max(ly, cur + 16) + 20;
+	rule(cur, 1.4, ink);
+	cur += 26;
 
-	// Meta strip — issued / period / bill-to.
-	out.push(`<section class="ti-meta">`);
-	out.push(
-		`<div class="ti-meta-block"><span class="ti-eyebrow">Issued</span>` +
-			`<span class="ti-meta-val">${esc(issued)}</span></div>`,
+	// ── Meta strip: issued / period / bill-to ──────────────────────────────
+	const metaTop = cur;
+	draw("ISSUED", cols.date, metaTop, { font: courier, size: 7.5, color: muted });
+	draw(formatDateLong(new Date().toISOString().slice(0, 10)), cols.date, metaTop + 14, {
+		font: helvBold,
+		size: 10,
+	});
+	draw("PERIOD", margin + 175, metaTop, { font: courier, size: 7.5, color: muted });
+	draw(
+		`${formatDateLong(options.dateFrom)} – ${formatDateLong(options.dateTo)}`,
+		margin + 175,
+		metaTop + 14,
+		{ font: helvBold, size: 10 },
 	);
-	out.push(
-		`<div class="ti-meta-block"><span class="ti-eyebrow">Period</span>` +
-			`<span class="ti-meta-val">${esc(period)}</span></div>`,
-	);
-	out.push(
-		`<div class="ti-meta-block ti-billto"><span class="ti-eyebrow">Bill to</span>` +
-			`<span class="ti-meta-val">${esc(clientName)}</span>`,
-	);
+
+	draw("BILL TO", pageW - margin, metaTop, { font: courier, size: 7.5, color: muted, align: "right" });
+	draw(options.clientName || org.name, pageW - margin, metaTop + 14, {
+		font: helvBold,
+		size: 10,
+		align: "right",
+	});
+	let by = metaTop + 14;
 	if (options.clientAddress) {
-		for (const addrLine of options.clientAddress.split("\n")) {
-			if (addrLine.trim()) out.push(`<span class="ti-meta-sub">${esc(addrLine.trim())}</span>`);
+		for (const addr of options.clientAddress.split("\n")) {
+			if (!addr.trim()) continue;
+			by += 12;
+			draw(addr.trim(), pageW - margin, by, { font: helv, size: 9, color: muted, align: "right" });
 		}
 	}
-	out.push(`</div></section>`);
+	cur = Math.max(metaTop + 14, by) + 32;
 
-	// Services ledger — money right-aligned; the footer subtotals hours only,
-	// leaving the dollar figure to the Amount-due hero below.
-	out.push(`<table class="ti-table"><thead><tr>`);
-	out.push(`<th>Date</th><th>Description</th>`);
-	out.push(`<th class="ti-num">Hours</th><th class="ti-num">Rate</th><th class="ti-num">Amount</th>`);
-	out.push(`</tr></thead><tbody>`);
-	for (const entry of entries) {
-		out.push(
-			`<tr><td>${esc(formatDateLong(entry.date))}</td><td>Professional services</td>` +
-				`<td class="ti-num">${entry.hours.toFixed(2)}</td>` +
-				`<td class="ti-num">${money(org.rate)}</td>` +
-				`<td class="ti-num">${money(entry.amount)}</td></tr>`,
-		);
-	}
-	out.push(`</tbody><tfoot><tr>`);
-	out.push(`<td class="ti-foot-label" colspan="2">Total hours</td>`);
-	out.push(`<td class="ti-num ti-foot">${totalHours.toFixed(2)}</td><td></td><td></td>`);
-	out.push(`</tr></tfoot></table>`);
-
-	// Hero — the bottom line.
-	out.push(
-		`<div class="ti-total"><span class="ti-total-label">Amount due</span>` +
-			`<span class="ti-total-amount">${money(totalAmount)}</span></div>`,
-	);
-
-	if (options.notes) {
-		out.push(
-			`<div class="ti-notes"><span class="ti-eyebrow">Notes</span>` +
-				`<p>${esc(options.notes).replace(/\n/g, "<br>")}</p></div>`,
-		);
+	// ── Services ledger ────────────────────────────────────────────────────
+	drawTableHead();
+	const descMax = cols.hours - 14 - cols.desc;
+	for (const row of rows) {
+		if (cur > pageH - 150) {
+			page = pdf.addPage([pageW, pageH]);
+			cur = 60;
+			drawTableHead();
+		}
+		draw(row.date, cols.date, cur, { font: helv, size: 9.5, color: muted });
+		draw(ellipsize(row.description, helv, 9.5, descMax), cols.desc, cur, { font: helv, size: 9.5 });
+		draw(row.qty, cols.hours, cur, { font: courier, size: 9.5, align: "right" });
+		draw(row.rate, cols.rate, cur, { font: courier, size: 9.5, align: "right" });
+		draw(row.amount, cols.amount, cur, { font: courier, size: 9.5, align: "right" });
+		cur += 9;
+		rule(cur, 0.5, hair);
+		cur += 15;
 	}
 
+	// Hours subtotal (money is reserved for the Amount-due hero).
+	cur += 2;
+	draw("Total hours", cols.desc, cur, { font: helv, size: 9, color: muted });
+	draw(totalHours.toFixed(2), cols.hours, cur, { font: courierBold, size: 9.5, align: "right" });
+	cur += 26;
+
+	// ── Hero: amount due ───────────────────────────────────────────────────
+	rule(cur, 1.6, accent);
+	cur += 24;
+	draw("AMOUNT DUE", margin, cur, { font: courierBold, size: 10, color: accent });
+	draw(money(grandTotal), cols.amount, cur + 4, { font: helvBold, size: 22, align: "right" });
+	cur += 22;
+
+	// ── Notes ──────────────────────────────────────────────────────────────
+	if (options.notes.trim()) {
+		cur += 20;
+		rule(cur, 0.5, hair);
+		cur += 18;
+		draw("NOTES", margin, cur, { font: courier, size: 7.5, color: muted });
+		cur += 15;
+		for (const para of options.notes.split("\n")) {
+			const wrapped = para.trim() ? wrapText(para, helv, 9.5, pageW - margin * 2) : [""];
+			for (const line of wrapped) {
+				draw(line, margin, cur, { font: helv, size: 9.5 });
+				cur += 13;
+			}
+		}
+	}
+
+	// ── Payment details ────────────────────────────────────────────────────
 	if (inv.bankName || inv.bsb || inv.accountNumber) {
-		out.push(`<section class="ti-pay"><span class="ti-eyebrow">Payment details</span><dl class="ti-paylist">`);
-		if (inv.bankName) out.push(`<div><dt>Bank</dt><dd>${esc(inv.bankName)}</dd></div>`);
-		if (inv.bsb) out.push(`<div><dt>BSB</dt><dd class="ti-num">${esc(inv.bsb)}</dd></div>`);
-		if (inv.accountNumber) {
-			out.push(`<div><dt>Account</dt><dd class="ti-num">${esc(inv.accountNumber)}</dd></div>`);
+		cur += 18;
+		rule(cur, 0.5, hair);
+		cur += 18;
+		draw("PAYMENT DETAILS", margin, cur, { font: courier, size: 7.5, color: muted });
+		cur += 16;
+		const payFields: [string, string, PDFFont][] = [];
+		if (inv.bankName) payFields.push(["Bank", inv.bankName, helv]);
+		if (inv.bsb) payFields.push(["BSB", inv.bsb, courier]);
+		if (inv.accountNumber) payFields.push(["Account", inv.accountNumber, courier]);
+		for (const [label, value, valFont] of payFields) {
+			draw(label, margin, cur, { font: helv, size: 9, color: muted });
+			draw(value, margin + 64, cur, { font: valFont, size: 9.5 });
+			cur += 14;
 		}
-		out.push(`</dl></section>`);
 	}
 
-	out.push(`</div>`);
-	return out.join("\n");
+	return pdf.save();
 }
 
 /** Aggregate timesheet entries into daily line items for an invoice. */
@@ -167,11 +298,8 @@ export function aggregateEntries(
 	let totalHours = 0;
 	let totalAmount = 0;
 
-	const fromDate = dateFrom;
-	const toDate = dateTo;
-
 	for (const day of parsed.days) {
-		if (day.date < fromDate || day.date > toDate) continue;
+		if (day.date < dateFrom || day.date > dateTo) continue;
 		for (const entry of day.entries) {
 			if (entry.org !== orgName) continue;
 			const mins = entryWorkMinutes(entry);
@@ -187,10 +315,15 @@ export function aggregateEntries(
 	return { entries, totalHours, totalAmount };
 }
 
+/** Sum of all custom line items (quantity × rate), ignoring blank rows. */
+export function customItemsTotal(items: CustomInvoiceItem[]): number {
+	return items.reduce((sum, it) => sum + (it.description.trim() ? it.quantity * it.rate : 0), 0);
+}
+
 /** Compute the next invoice label for an org (e.g. "INV-005"). */
 export function nextInvoiceLabel(org: TimesheetOrg): { number: number; label: string } {
 	const prefix = org.invoicePrefix || "INV";
-	const nextNum = (org.lastInvoiceNumber ?? org.invoiceStartNumber ?? 1);
+	const nextNum = org.lastInvoiceNumber ?? org.invoiceStartNumber ?? 1;
 	return {
 		number: nextNum,
 		label: `${prefix}-${String(nextNum).padStart(3, "0")}`,
@@ -198,27 +331,26 @@ export function nextInvoiceLabel(org: TimesheetOrg): { number: number; label: st
 }
 
 /** Ensure the invoice output folder exists, creating it if needed. */
-async function ensureInvoiceFolder(app: App, path: string): Promise<void> {
+async function ensureInvoiceFolder(plugin: TasksPlugin, path: string): Promise<void> {
 	const parts = path.split("/");
 	let current = "";
 	for (const part of parts) {
 		current = current ? `${current}/${part}` : part;
 		if (!current) continue;
-		const exists = app.vault.getAbstractFileByPath(current);
-		if (!exists) {
-			await app.vault.createFolder(current);
+		if (!plugin.app.vault.getAbstractFileByPath(current)) {
+			await plugin.app.vault.createFolder(current);
 		}
 	}
 }
 
 /**
- * Generate an invoice markdown file and save it.
- * Returns the path of the saved file.
+ * Generate an invoice PDF and save it to the vault. Returns the saved file so
+ * the caller can open it in the PDF viewer.
  */
 export async function generateInvoice(
 	plugin: TasksPlugin,
 	options: InvoiceOptions,
-): Promise<string> {
+): Promise<TFile> {
 	const file = plugin.app.vault.getAbstractFileByPath(plugin.settings.timesheetFilePath);
 	if (!(file instanceof TFile)) {
 		throw new Error("Timesheet file not found.");
@@ -235,35 +367,53 @@ export async function generateInvoice(
 		options.org.rate,
 	);
 
-	if (entries.length === 0) {
-		throw new Error("No timesheet entries found for this org and date range.");
+	const customRows = options.customItems.filter((it) => it.description.trim());
+	if (entries.length === 0 && customRows.length === 0) {
+		throw new Error("No timesheet entries or custom items to invoice for this range.");
 	}
 
-	const markdown = buildInvoiceMarkdown(plugin, options, entries, totalHours, totalAmount);
+	// Build the rendered ledger: tracked-hours days first, then custom items.
+	const rows: RenderRow[] = [];
+	for (const e of entries) {
+		rows.push({
+			date: formatDateLong(e.date),
+			description: options.serviceDescription || "Professional services",
+			qty: e.hours.toFixed(2),
+			rate: money(options.org.rate),
+			amount: money(e.amount),
+		});
+	}
+	for (const it of customRows) {
+		rows.push({
+			date: "",
+			description: it.description.trim(),
+			qty: String(it.quantity),
+			rate: money(it.rate),
+			amount: money(it.quantity * it.rate),
+		});
+	}
 
-	// Ensure folder exists
+	const grandTotal = totalAmount + customItemsTotal(options.customItems);
+	const bytes = await buildInvoicePdf(plugin, options, rows, totalHours, grandTotal);
+
 	const folder = plugin.settings.invoice.invoiceFolder || "toolbox/Invoices";
-	await ensureInvoiceFolder(plugin.app, folder);
+	await ensureInvoiceFolder(plugin, folder);
 
-	// Build file path
-	const filename = `${options.invoiceLabel}-${options.org.name.replace(/[^a-zA-Z0-9]/g, "-")}.md`;
-	const filePath = `${folder}/${filename}`;
-
-	// Check if file already exists and append a suffix
-	let finalPath = filePath;
+	const safeOrg = options.org.name.replace(/[^a-zA-Z0-9]/g, "-");
+	const basePath = `${folder}/${options.invoiceLabel}-${safeOrg}`;
+	let finalPath = `${basePath}.pdf`;
 	let counter = 1;
 	while (plugin.app.vault.getAbstractFileByPath(finalPath) instanceof TFile) {
-		const base = filePath.replace(/\.md$/, "");
-		finalPath = `${base}-${counter}.md`;
+		finalPath = `${basePath}-${counter}.pdf`;
 		counter++;
 	}
 
-	await plugin.app.vault.create(finalPath, markdown);
+	const created = await plugin.app.vault.createBinary(finalPath, bytes.slice().buffer);
 
-	// Update org tracking data
+	// Update org tracking data.
 	options.org.lastInvoiceDate = options.dateTo;
 	options.org.lastInvoiceNumber = options.invoiceNumber + 1;
 	await plugin.saveSettings();
 
-	return finalPath;
+	return created;
 }
