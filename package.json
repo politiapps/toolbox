@@ -1,6 +1,6 @@
 {
 	"name": "obsidian-toolbox",
-	"version": "1.0.1-beta.10",
+	"version": "1.0.2",
 	"description": "A toolbox of Obsidian utilities (currently a sidebar Tasks panel; custom columns and timesheet planned).",
 	"main": "main.js",
 	"scripts": {
