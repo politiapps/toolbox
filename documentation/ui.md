@@ -7,38 +7,51 @@ lives in `src/taskView.ts`; styles in `styles.css`.
 
 The panel is framed as a campaign-operator's **triage board for "today"**. It
 inherits Obsidian theme variables (native in light/dark). Sections are **cards**
-so each life-area reads as a distinct block. Colour is used in two deliberate,
-separate languages: a small **section-identity dot** (a stable hashed hue per
-section) and a **priority urgency ramp** (warm = urgent) on priority chips.
-Personality comes from type *treatment*, not imported fonts:
+so each life-area reads as a distinct block. Colour is used in deliberate,
+separate languages: a per-section **identity spine** (a stable hashed hue down
+the card's left edge), a **priority urgency ramp** (warm = urgent) on priority
+chips, and a **due-date proximity ramp** (overdue red → today orange) that the
+header's triage status line reuses. Personality comes from type *treatment*, not
+imported fonts:
 
 - **Uppercase, letter-spaced monospace eyebrows** for structure (section titles,
   the "Today" label, modal heading).
 - **Tabular monospace** for counts and dates — an "ops console" register.
 - The theme's body face for task descriptions.
-- Overdue is the only element allowed to shout (theme `--text-error`).
+- Overdue is the only element allowed to shout (alarm red).
+
+The **hero** is the header's triage status line (`.tasks-pressure`): below the
+date it reports today's load as a typeset console readout — `N overdue · N due
+today`, overdue in the alarm red — or "Nothing due today" when clear. Counts come
+from `countPressure(flat)` over all incomplete dated tasks. It is deliberately a
+status line in the existing mono register, not a dashboard stat card.
 
 Per-section colour comes from `sectionAccent(section.id)` in `taskView.ts` — a
 stable hue hashed from the section id (follows the section, not its position),
-applied via the `--section-accent` CSS custom property to the header dot only.
+applied via the `--section-accent` CSS custom property as the card's left spine.
 
 ## Layout (top to bottom)
 
 ```
 ┌─ .tasks-panel-content ────────────────┐
 │  .tasks-header (sticky)               │
-│    .tasks-today                       │
-│      .tasks-today-eyebrow "TODAY"     │
-│      .tasks-today-date "Wednesday 24th"│
-│    button.tasks-add  (circular "+", right)
+│    .tasks-header-top                  │
+│      .tasks-today                     │
+│        .tasks-today-eyebrow "TODAY"   │
+│        .tasks-today-date "Wednesday 24th"
+│      button.tasks-add  (circular "+", right)
+│    .tasks-pressure  (triage status line)
+│      .tasks-stat.is-overdue  "N overdue"
+│      .tasks-stat-sep  "·"             │
+│      .tasks-stat.is-today  "N due today"
+│      (or .tasks-pressure-clear "Nothing due today")
 │  .tasks-calendar  (card, only if ics URL set)
 │    .tasks-calendar-header "Today's events"
 │    .tasks-event (time + title) …      │
 │  ── for each configured section ──    │
-│  .tasks-section  (card) [--section-accent]
+│  .tasks-section  (card, left spine [--section-accent])
 │    .tasks-section-header              │
 │      .tasks-chevron                   │
-│      .tasks-section-dot   (identity hue)
 │      .tasks-section-title (heading)   │
 │      .tasks-count-badge   (incomplete)│
 │      button.tasks-section-add ("+", hover)
@@ -46,8 +59,8 @@ applied via the `--section-accent` CSS custom property to the header dot only.
 │      .tasks-row …                     │
 │  ── always last ──                    │
 │  .tasks-section.tasks-section-completed
-│    (dashed card, "Completed", no dot, │
-│     collapsed by default)             │
+│    (dashed card, "Completed", neutral │
+│     spine, collapsed by default)      │
 └────────────────────────────────────────┘
 ```
 

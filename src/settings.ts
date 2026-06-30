@@ -46,6 +46,36 @@ export interface TimesheetOrg {
 	colour: string;
 	/** Hourly rate in dollars (0 = unpaid). */
 	rate: number;
+	/** Client name for invoicing (defaults to org name). */
+	clientName: string;
+	/** Client address for invoicing. */
+	clientAddress: string;
+	/** Invoice number prefix, e.g. "INV". */
+	invoicePrefix: string;
+	/** Starting invoice number (1 = first invoice). */
+	invoiceStartNumber: number;
+	/** Date of the last invoice generated (ISO YYYY-MM-DD), for default date range. */
+	lastInvoiceDate: string | null;
+	/** Last invoice number used (for auto-increment). */
+	lastInvoiceNumber: number | null;
+}
+
+/** Global invoice settings. */
+export interface InvoiceSettings {
+	/** Your business name. */
+	businessName: string;
+	/** Australian Business Number. */
+	abn: string;
+	/** Your business address. */
+	businessAddress: string;
+	/** Bank name. */
+	bankName: string;
+	/** BSB (e.g. 123-456). */
+	bsb: string;
+	/** Account number. */
+	accountNumber: string;
+	/** Folder where invoice markdown files are saved, relative to vault root. */
+	invoiceFolder: string;
 }
 
 /**
@@ -98,6 +128,9 @@ export interface TasksPluginSettings {
 	timesheetOrgs: TimesheetOrg[];
 	/** Persisted running-timer state (null = no active timer). */
 	activeTimer: ActiveTimer | null;
+
+	/** Invoice generation settings. */
+	invoice: InvoiceSettings;
 }
 
 /** Persistence key for the always-present Completed section. */
@@ -114,6 +147,15 @@ export const DEFAULT_SETTINGS: TasksPluginSettings = {
 	timesheetFilePath: "timesheet.md",
 	timesheetOrgs: [],
 	activeTimer: null,
+	invoice: {
+		businessName: "",
+		abn: "",
+		businessAddress: "",
+		bankName: "",
+		bsb: "",
+		accountNumber: "",
+		invoiceFolder: "toolbox/Invoices",
+	},
 };
 
 /** Generate a reasonably unique id for a new section. */
@@ -281,12 +323,90 @@ export class TasksSettingTab extends PluginSettingTab {
 							this.plugin.settings.timesheetOrgs.length % TIMESHEET_ORG_COLORS.length
 						],
 						rate: 0,
+						clientName: "",
+						clientAddress: "",
+						invoicePrefix: "INV",
+						invoiceStartNumber: 1,
+						lastInvoiceDate: null,
+						lastInvoiceNumber: null,
 					});
 					await this.plugin.saveSettings();
 					this.plugin.refreshTimesheetViews();
 					this.display();
 				})
 		);
+
+		// ── Invoice settings ──────────────────────────────────────────
+		containerEl.createEl("h2", { text: "Invoice" });
+
+		new Setting(containerEl)
+			.setName("Your business name")
+			.addText((text) =>
+				text.setValue(this.plugin.settings.invoice.businessName).onChange(async (value) => {
+					this.plugin.settings.invoice.businessName = value;
+					await this.plugin.saveSettings();
+				})
+			);
+
+		new Setting(containerEl)
+			.setName("ABN")
+			.addText((text) =>
+				text.setValue(this.plugin.settings.invoice.abn).onChange(async (value) => {
+					this.plugin.settings.invoice.abn = value;
+					await this.plugin.saveSettings();
+				})
+			);
+
+		new Setting(containerEl)
+			.setName("Business address")
+			.addTextArea((text) =>
+				text.setValue(this.plugin.settings.invoice.businessAddress).onChange(async (value) => {
+					this.plugin.settings.invoice.businessAddress = value;
+					await this.plugin.saveSettings();
+				})
+			);
+
+		containerEl.createEl("h3", { text: "Bank details" });
+
+		new Setting(containerEl)
+			.setName("Bank name")
+			.addText((text) =>
+				text.setValue(this.plugin.settings.invoice.bankName).onChange(async (value) => {
+					this.plugin.settings.invoice.bankName = value;
+					await this.plugin.saveSettings();
+				})
+			);
+
+		new Setting(containerEl)
+			.setName("BSB")
+			.addText((text) =>
+				text.setValue(this.plugin.settings.invoice.bsb).onChange(async (value) => {
+					this.plugin.settings.invoice.bsb = value;
+					await this.plugin.saveSettings();
+				})
+			);
+
+		new Setting(containerEl)
+			.setName("Account number")
+			.addText((text) =>
+				text.setValue(this.plugin.settings.invoice.accountNumber).onChange(async (value) => {
+					this.plugin.settings.invoice.accountNumber = value;
+					await this.plugin.saveSettings();
+				})
+			);
+
+		new Setting(containerEl)
+			.setName("Invoice output folder")
+			.setDesc("Folder where generated invoice markdown files are saved, relative to vault root.")
+			.addText((text) =>
+				text
+					.setPlaceholder("toolbox/Invoices")
+					.setValue(this.plugin.settings.invoice.invoiceFolder)
+					.onChange(async (value) => {
+						this.plugin.settings.invoice.invoiceFolder = value.trim() || "toolbox/Invoices";
+						await this.plugin.saveSettings();
+					})
+			);
 	}
 
 	private renderSectionSetting(containerEl: HTMLElement, section: SectionConfig, index: number): void {
@@ -482,6 +602,42 @@ export class TasksSettingTab extends PluginSettingTab {
 					org.rate = parseFloat(value) || 0;
 					await this.plugin.saveSettings();
 					this.plugin.refreshTimesheetViews();
+				})
+			);
+
+		wrapper.createEl("h4", { text: "Invoicing" });
+
+		new Setting(wrapper).setName("Client name").addText((text) =>
+			text.setValue(org.clientName || org.name).onChange(async (value) => {
+				org.clientName = value;
+				await this.plugin.saveSettings();
+			})
+		);
+
+		new Setting(wrapper).setName("Client address").addTextArea((text) =>
+			text.setValue(org.clientAddress).onChange(async (value) => {
+				org.clientAddress = value;
+				await this.plugin.saveSettings();
+			})
+		);
+
+		new Setting(wrapper)
+			.setName("Invoice prefix")
+			.setDesc("e.g. INV → INV-001, INV-002")
+			.addText((text) =>
+				text.setValue(org.invoicePrefix || "INV").onChange(async (value) => {
+					org.invoicePrefix = value.trim() || "INV";
+					await this.plugin.saveSettings();
+				})
+			);
+
+		new Setting(wrapper)
+			.setName("Starting invoice number")
+			.setDesc("The first invoice number for this org (1 = start from INV-001).")
+			.addText((text) =>
+				text.setValue(String(org.invoiceStartNumber || 1)).onChange(async (value) => {
+					org.invoiceStartNumber = Math.max(1, parseInt(value) || 1);
+					await this.plugin.saveSettings();
 				})
 			);
 	}

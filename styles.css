@@ -13,19 +13,72 @@
 	padding: 0 10px 28px;
 }
 
-/* ── Header: TODAY + add ──────────────────────────────────────────────── */
+/* ── Header: TODAY + triage status line + add ─────────────────────────── */
 .tasks-header {
 	position: sticky;
 	top: 0;
 	z-index: 5;
 	display: flex;
-	align-items: flex-start;
-	justify-content: space-between;
-	gap: 8px;
+	flex-direction: column;
 	padding: 14px 2px 12px;
 	margin-bottom: 6px;
 	background-color: var(--background-secondary);
 	border-bottom: 1px solid var(--background-modifier-border);
+}
+
+.tasks-header-top {
+	display: flex;
+	align-items: flex-start;
+	justify-content: space-between;
+	gap: 8px;
+}
+
+/* The hero: today's load as a typeset console readout, not a stat card.
+   Overdue shouts; both segments reuse the due-date proximity colours. */
+.tasks-pressure {
+	display: flex;
+	align-items: baseline;
+	flex-wrap: wrap;
+	gap: 8px;
+	margin-top: 9px;
+	font-family: var(--font-monospace);
+	font-size: 0.66rem;
+	letter-spacing: 0.12em;
+	text-transform: uppercase;
+}
+
+.tasks-stat {
+	display: inline-flex;
+	align-items: baseline;
+	gap: 4px;
+	color: var(--text-muted);
+}
+
+.tasks-stat-num {
+	font-size: 0.82rem;
+	font-weight: 700;
+	font-variant-numeric: tabular-nums;
+	letter-spacing: 0;
+}
+
+.tasks-stat-label {
+	opacity: 0.82;
+}
+
+.tasks-stat.is-overdue {
+	color: var(--color-red, #ef4444);
+}
+
+.tasks-stat.is-today {
+	color: var(--color-orange, #f97316);
+}
+
+.tasks-stat-sep {
+	color: var(--text-faint);
+}
+
+.tasks-pressure-clear {
+	color: var(--text-muted);
 }
 
 .tasks-today-eyebrow {
@@ -174,18 +227,24 @@
 }
 
 /* ── Section cards ────────────────────────────────────────────────────── */
+/* Each lane's identity is its left spine, tinted by --section-accent (set
+   inline per section). This is the one place colour is spent. */
 .tasks-section {
 	background-color: var(--background-primary);
 	border: 1px solid var(--background-modifier-border);
+	border-left: 3px solid var(--section-accent, var(--background-modifier-border));
 	border-radius: 10px;
 	padding: 3px 10px 8px;
 	margin-bottom: 10px;
 }
 
-/* Completed reads as a quieter, dashed card. */
+/* Completed reads as a quieter, dashed card with no lane colour — its left edge
+   matches the others rather than carrying a spine. */
 .tasks-section-completed {
 	background-color: transparent;
 	border-style: dashed;
+	border-left-width: 1px;
+	border-left-color: var(--background-modifier-border);
 }
 
 .tasks-section-header {
@@ -205,14 +264,6 @@
 .tasks-chevron svg {
 	width: 14px;
 	height: 14px;
-}
-
-.tasks-section-dot {
-	width: 7px;
-	height: 7px;
-	border-radius: 50%;
-	background-color: var(--section-accent, var(--text-muted));
-	flex-shrink: 0;
 }
 
 .tasks-section-title {
@@ -453,21 +504,23 @@
 	color: var(--text-muted);
 }
 
-/* Proximity ramp: sooner is warmer. */
+/* Proximity ramp: sooner is warmer. Theme `--color-*` tokens (so the ramp moves
+   with the active theme), with the original hexes as fallbacks for themes that
+   don't define them. */
 .tasks-due.is-overdue {
-	color: #ef4444;
+	color: var(--color-red, #ef4444);
 	font-weight: 700;
 }
 .tasks-due.is-today {
-	color: #f97316;
+	color: var(--color-orange, #f97316);
 	font-weight: 700;
 }
 .tasks-due.is-tomorrow {
-	color: #eab308;
+	color: var(--color-yellow, #eab308);
 	font-weight: 600;
 }
 .tasks-due.is-soon {
-	color: #22c55e;
+	color: var(--color-green, #22c55e);
 	font-weight: 600;
 }
 .tasks-due.is-upcoming {
@@ -480,7 +533,7 @@
 
 /* Priority: a labeled chip on a fixed urgency ramp (warm = urgent). The dot
    carries the colour; the label keeps all six levels unambiguous. This is a
-   separate colour language from the section-identity dots, by design. */
+   separate colour language from the section-identity spine, by design. */
 .tasks-priority {
 	display: inline-flex;
 	align-items: center;
@@ -498,19 +551,19 @@
 }
 
 .tasks-priority-highest {
-	--priority-color: #ef4444;
+	--priority-color: var(--color-red, #ef4444);
 }
 .tasks-priority-high {
-	--priority-color: #f97316;
+	--priority-color: var(--color-orange, #f97316);
 }
 .tasks-priority-medium {
-	--priority-color: #f59e0b;
+	--priority-color: var(--color-yellow, #f59e0b);
 }
 .tasks-priority-low {
-	--priority-color: #3b82f6;
+	--priority-color: var(--color-blue, #3b82f6);
 }
 .tasks-priority-lowest {
-	--priority-color: #94a3b8;
+	--priority-color: var(--text-muted, #94a3b8);
 }
 
 /* ── Row actions (reveal on hover) ────────────────────────────────────── */
@@ -746,8 +799,26 @@
 }
 
 /* ── Timesheet panel ──────────────────────────────────────────────────── */
+/* Signature: a live chronograph. The running session is the hero — large
+   tabular numerals, a breathing status dot, and a card that tints to the
+   active org's own colour (amber on break). Labels share one micro-caps
+   eyebrow treatment; time data is uniformly mono tabular-nums. */
 .timesheet-panel-content {
 	padding: 0 10px 28px;
+	/* Action semantics, theme-derived with safe fallbacks. */
+	--ts-go: var(--color-green, #2ea043);
+	--ts-break: var(--color-orange, #d98326);
+	--ts-stop: var(--color-red, #e5484d);
+}
+
+/* The unifying structural device: a mono micro-caps eyebrow for every label. */
+.timesheet-eyebrow {
+	font-family: var(--font-monospace);
+	font-size: 0.62rem;
+	font-weight: 600;
+	letter-spacing: 0.16em;
+	text-transform: uppercase;
+	color: var(--text-muted);
 }
 
 .timesheet-header {
@@ -766,6 +837,7 @@
 .timesheet-header-title {
 	font-size: 1.05rem;
 	font-weight: 650;
+	letter-spacing: -0.01em;
 	color: var(--text-normal);
 }
 
@@ -797,13 +869,25 @@
 	height: 17px;
 }
 
-/* ── Timer section ──────────────────────────────────────────────────── */
+/* ── Timer card (the hero) ──────────────────────────────────────────── */
 .timesheet-timer {
 	background-color: var(--background-primary);
 	border: 1px solid var(--background-modifier-border);
-	border-radius: 10px;
-	padding: 10px;
-	margin-bottom: 12px;
+	border-radius: 12px;
+	padding: 12px;
+	margin-bottom: 14px;
+	transition: border-color 0.2s ease, background-color 0.2s ease;
+}
+
+/* Running: card carries the org's colour as a faint wash + matching edge. */
+.timesheet-timer.is-active {
+	border-color: color-mix(in srgb, var(--org-colour, var(--ts-go)) 42%, var(--background-modifier-border));
+	background-color: color-mix(in srgb, var(--org-colour, var(--ts-go)) 7%, var(--background-primary));
+}
+
+.timesheet-timer.is-active.is-break {
+	border-color: color-mix(in srgb, var(--ts-break) 42%, var(--background-modifier-border));
+	background-color: color-mix(in srgb, var(--ts-break) 8%, var(--background-primary));
 }
 
 .timesheet-timer-empty {
@@ -816,136 +900,196 @@
 	display: flex;
 	align-items: center;
 	gap: 8px;
-	margin-bottom: 8px;
+	margin-bottom: 4px;
+}
+
+.timesheet-timer-org .timesheet-eyebrow {
+	flex-shrink: 0;
 }
 
 .timesheet-timer-select {
 	flex: 1;
 }
 
-.timesheet-timer-display {
-	margin: 8px 0;
+.timesheet-timer-live {
+	margin: 10px 0 12px;
 }
 
-.timesheet-timer-row {
+/* Status line: a breathing dot + the state, in the live colour. */
+.timesheet-timer-status {
 	display: flex;
 	align-items: center;
-	justify-content: space-between;
-	padding: 2px 0;
+	gap: 7px;
+	margin-bottom: 2px;
 }
 
-.timesheet-timer-label {
-	font-size: 0.8rem;
-	color: var(--text-muted);
+.timesheet-live-dot {
+	width: 8px;
+	height: 8px;
+	border-radius: 50%;
+	color: var(--org-colour, var(--ts-go));
+	background-color: currentColor;
+	flex-shrink: 0;
 }
 
-.timesheet-timer-value {
+.is-break .timesheet-live-dot {
+	color: var(--ts-break);
+}
+
+.timesheet-timer.is-active .timesheet-live-dot {
+	animation: ts-pulse 2.2s ease-out infinite;
+}
+
+@keyframes ts-pulse {
+	0% { box-shadow: 0 0 0 0 color-mix(in srgb, currentColor 55%, transparent); }
+	70% { box-shadow: 0 0 0 7px transparent; }
+	100% { box-shadow: 0 0 0 0 transparent; }
+}
+
+.timesheet-status-text {
 	font-family: var(--font-monospace);
-	font-size: 1.3rem;
-	font-variant-numeric: tabular-nums;
+	font-size: 0.64rem;
+	font-weight: 600;
+	letter-spacing: 0.16em;
+	text-transform: uppercase;
+	color: var(--org-colour, var(--ts-go));
+}
+
+.is-break .timesheet-status-text {
+	color: var(--ts-break);
+}
+
+/* The chronograph face. */
+.timesheet-timer-clock {
+	font-family: var(--font-monospace);
+	font-size: 2.5rem;
+	line-height: 1;
 	font-weight: 700;
+	letter-spacing: -0.02em;
+	font-variant-numeric: tabular-nums;
 	color: var(--text-normal);
+	margin: 4px 0 10px;
+}
+
+.timesheet-timer-meta {
+	display: flex;
+	align-items: center;
+	gap: 16px;
+	flex-wrap: wrap;
+}
+
+.timesheet-meta-item {
+	display: flex;
+	align-items: center;
+	gap: 7px;
+}
+
+.timesheet-timer-subvalue {
+	font-family: var(--font-monospace);
+	font-size: 0.82rem;
+	font-variant-numeric: tabular-nums;
+	color: var(--text-muted);
 }
 
 .timesheet-timer-time-input {
 	font-family: var(--font-monospace);
-	font-size: 0.85rem;
+	font-size: 0.82rem;
 	color: var(--text-normal);
 	background-color: var(--background-primary);
 	border: 1px solid var(--background-modifier-border);
-	border-radius: 4px;
-	padding: 1px 4px;
+	border-radius: 5px;
+	padding: 1px 5px;
 	width: auto;
-}
-
-.timesheet-timer-value.is-working {
-	color: var(--color-green, #22c55e);
-}
-
-.timesheet-timer-value.is-break {
-	color: var(--text-warning, #f59e0b);
 }
 
 .timesheet-timer-buttons {
 	display: flex;
 	gap: 6px;
-	margin-top: 6px;
+	margin-top: 4px;
 }
 
-.timesheet-timer-buttons button {
+.timesheet-timer-btn {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	gap: 6px;
 	flex: 1;
-	padding: 6px 12px;
-	font-size: 0.82rem;
+	padding: 8px 10px;
+	font-size: 0.8rem;
 	font-weight: 600;
-	border-radius: 6px;
+	border-radius: 8px;
 	cursor: pointer;
 	border: 1px solid var(--background-modifier-border);
 	background-color: var(--background-primary);
 	color: var(--text-normal);
-	transition: background-color 0.1s ease, color 0.1s ease;
+	transition: background-color 0.12s ease, color 0.12s ease, border-color 0.12s ease;
 }
 
-.timesheet-btn-start {
-	background-color: var(--color-green, #22c55e) !important;
-	color: white !important;
-	border-color: var(--color-green, #22c55e) !important;
+.timesheet-btn-icon {
+	display: inline-flex;
+	align-items: center;
 }
 
-.timesheet-btn-start:hover {
-	opacity: 0.85;
+.timesheet-btn-icon svg {
+	width: 15px;
+	height: 15px;
+}
+
+/* Primary actions are filled in their semantic colour; Stop stays a quiet
+   ghost so the colour weight sits on "what's next", not "finish". */
+.timesheet-btn-start,
+.timesheet-btn-resume {
+	background-color: var(--ts-go);
+	border-color: var(--ts-go);
+	color: #fff;
 }
 
 .timesheet-btn-break {
-	background-color: var(--text-warning, #f59e0b) !important;
-	color: white !important;
-	border-color: var(--text-warning, #f59e0b) !important;
+	background-color: var(--ts-break);
+	border-color: var(--ts-break);
+	color: #fff;
 }
 
+.timesheet-btn-start:hover,
+.timesheet-btn-resume:hover,
 .timesheet-btn-break:hover {
-	opacity: 0.85;
-}
-
-.timesheet-btn-resume {
-	background-color: var(--color-green, #22c55e) !important;
-	color: white !important;
-	border-color: var(--color-green, #22c55e) !important;
-}
-
-.timesheet-btn-resume:hover {
-	opacity: 0.85;
+	filter: brightness(1.07);
 }
 
 .timesheet-btn-stop {
-	background-color: var(--text-error, #ef4444) !important;
-	color: white !important;
-	border-color: var(--text-error, #ef4444) !important;
+	background-color: transparent;
+	color: var(--ts-stop);
+	border-color: color-mix(in srgb, var(--ts-stop) 38%, var(--background-modifier-border));
 }
 
 .timesheet-btn-stop:hover {
-	opacity: 0.85;
+	background-color: color-mix(in srgb, var(--ts-stop) 12%, transparent);
+	border-color: var(--ts-stop);
 }
 
 /* ── Section cards ─────────────────────────────────────────────────── */
 .timesheet-section {
 	background-color: var(--background-primary);
 	border: 1px solid var(--background-modifier-border);
-	border-radius: 10px;
-	padding: 8px 10px;
+	border-radius: 12px;
+	padding: 10px 12px;
 	margin-bottom: 10px;
 }
 
 .timesheet-section-header {
 	display: flex;
-	align-items: center;
+	align-items: baseline;
 	gap: 8px;
-	padding-bottom: 6px;
+	padding-bottom: 7px;
 	border-bottom: 1px solid var(--background-modifier-border);
-	margin-bottom: 6px;
+	margin-bottom: 7px;
 }
 
 .timesheet-section-title {
-	font-size: 0.95rem;
+	font-size: 0.7rem;
 	font-weight: 700;
+	letter-spacing: 0.14em;
+	text-transform: uppercase;
 	color: var(--text-normal);
 	flex: 1;
 }
@@ -954,7 +1098,7 @@
 	font-family: var(--font-monospace);
 	font-size: 0.7rem;
 	color: var(--text-faint);
-	letter-spacing: 0.04em;
+	letter-spacing: 0.03em;
 }
 
 .timesheet-empty {
@@ -968,29 +1112,21 @@
 .timesheet-entry-list {
 	display: flex;
 	flex-direction: column;
-	gap: 4px;
+	gap: 3px;
 }
 
 .timesheet-entry {
 	display: flex;
 	align-items: flex-start;
-	gap: 6px;
-	padding: 6px 4px;
+	gap: 8px;
+	padding: 6px 4px 6px 9px;
 	border-radius: 6px;
 	position: relative;
+	border-left: 2px solid color-mix(in srgb, var(--org-colour, var(--text-muted)) 65%, transparent);
 }
 
 .timesheet-entry:hover {
 	background-color: var(--background-modifier-hover);
-}
-
-.timesheet-entry-dot {
-	width: 7px;
-	height: 7px;
-	border-radius: 50%;
-	background-color: var(--org-colour, var(--text-muted));
-	flex-shrink: 0;
-	margin-top: 6px;
 }
 
 .timesheet-entry-body {
@@ -1001,7 +1137,7 @@
 .timesheet-entry-main {
 	display: flex;
 	align-items: center;
-	gap: 6px;
+	gap: 8px;
 	flex-wrap: wrap;
 }
 
@@ -1013,22 +1149,23 @@
 
 .timesheet-entry-time {
 	font-family: var(--font-monospace);
-	font-size: 0.78rem;
+	font-size: 0.76rem;
 	color: var(--text-muted);
 }
 
 .timesheet-entry-hours {
 	font-family: var(--font-monospace);
 	font-size: 0.78rem;
+	font-weight: 600;
 	font-variant-numeric: tabular-nums;
-	color: var(--text-accent);
+	color: var(--text-normal);
 	margin-left: auto;
 }
 
 .timesheet-entry-breaks {
 	display: flex;
 	flex-wrap: wrap;
-	gap: 4px;
+	gap: 4px 10px;
 	margin-top: 3px;
 }
 
@@ -1083,20 +1220,25 @@
 .timesheet-total-row {
 	display: flex;
 	justify-content: space-between;
-	align-items: center;
-	padding: 6px 4px 2px;
-	margin-top: 4px;
+	align-items: baseline;
+	padding: 7px 4px 2px;
+	margin-top: 5px;
 	border-top: 1px solid var(--background-modifier-border);
-	font-size: 0.85rem;
+	font-size: 0.7rem;
 	font-weight: 700;
-	color: var(--text-normal);
+	letter-spacing: 0.12em;
+	text-transform: uppercase;
+	color: var(--text-muted);
 }
 
 .timesheet-total-value {
 	font-family: var(--font-monospace);
-	font-size: 0.8rem;
+	font-size: 0.9rem;
+	font-weight: 700;
+	letter-spacing: 0;
+	text-transform: none;
 	font-variant-numeric: tabular-nums;
-	color: var(--text-accent);
+	color: var(--text-normal);
 }
 
 /* ── Weekly summary ────────────────────────────────────────────────── */
@@ -1106,19 +1248,39 @@
 	gap: 2px;
 }
 
+/* Signature data element: the week's split across orgs as one proportion bar. */
+.timesheet-week-bar {
+	display: flex;
+	height: 7px;
+	border-radius: 4px;
+	overflow: hidden;
+	margin: 2px 0 10px;
+	background-color: var(--background-modifier-border);
+}
+
+.timesheet-week-bar-seg {
+	height: 100%;
+	min-width: 2px;
+	background-color: var(--text-muted);
+}
+
+.timesheet-week-bar-seg + .timesheet-week-bar-seg {
+	box-shadow: -1px 0 0 var(--background-primary);
+}
+
 .timesheet-week-row {
 	display: grid;
-	grid-template-columns: 10px 1fr auto auto;
-	gap: 6px;
+	grid-template-columns: 8px 1fr auto auto;
+	gap: 8px;
 	align-items: center;
 	padding: 4px 2px;
 	font-size: 0.84rem;
 }
 
 .timesheet-week-dot {
-	width: 6px;
-	height: 6px;
-	border-radius: 50%;
+	width: 8px;
+	height: 8px;
+	border-radius: 2px;
 	background-color: var(--org-colour, var(--text-muted));
 }
 
@@ -1148,20 +1310,36 @@
 	font-family: var(--font-monospace);
 	font-size: 0.78rem;
 	font-variant-numeric: tabular-nums;
-	color: var(--color-green, #22c55e);
+	color: var(--ts-go);
 	text-align: right;
 }
 
 .timesheet-week-row.is-total {
 	border-top: 1px solid var(--background-modifier-border);
-	margin-top: 4px;
-	padding-top: 6px;
+	margin-top: 5px;
+	padding-top: 7px;
 	font-weight: 700;
+}
+
+.timesheet-week-row.is-total .timesheet-week-org {
+	font-size: 0.7rem;
+	font-weight: 700;
+	letter-spacing: 0.12em;
+	text-transform: uppercase;
+	color: var(--text-muted);
 }
 
 .timesheet-week-row.is-earnings {
 	padding-top: 4px;
 	margin-top: 2px;
+}
+
+.timesheet-week-row.is-earnings .timesheet-week-org {
+	font-size: 0.7rem;
+	font-weight: 700;
+	letter-spacing: 0.12em;
+	text-transform: uppercase;
+	color: var(--text-muted);
 }
 
 /* ── Timesheet form modal ──────────────────────────────────────────── */
@@ -1265,5 +1443,311 @@
 	}
 	.tasks-add:hover {
 		transform: none;
+	}
+	.timesheet-timer.is-active .timesheet-live-dot {
+		animation: none;
+	}
+	.timesheet-add-btn:hover {
+		transform: none;
+	}
+}
+
+/* ── Invoice preview (in the generate-invoice modal) ──────────────────── */
+.invoice-preview {
+	margin: 14px 0 4px;
+	padding: 12px 14px;
+	border: 1px solid var(--background-modifier-border);
+	border-radius: 8px;
+	background: var(--background-secondary);
+}
+
+.invoice-preview-eyebrow {
+	display: block;
+	font-family: var(--font-monospace);
+	font-size: 0.6rem;
+	font-weight: 600;
+	letter-spacing: 0.14em;
+	text-transform: uppercase;
+	color: var(--text-muted);
+	margin-bottom: 6px;
+}
+
+.invoice-preview-line {
+	display: flex;
+	align-items: baseline;
+	justify-content: space-between;
+	gap: 12px;
+}
+
+.invoice-preview-meta {
+	font-family: var(--font-monospace);
+	font-size: 0.78rem;
+	font-variant-numeric: tabular-nums;
+	color: var(--text-muted);
+}
+
+.invoice-preview-amount {
+	font-family: var(--font-monospace);
+	font-size: 1.05rem;
+	font-weight: 700;
+	font-variant-numeric: tabular-nums;
+	color: var(--text-normal);
+}
+
+.invoice-preview-empty {
+	margin: 0;
+	font-size: 0.84rem;
+	color: var(--text-muted);
+}
+
+/* ── Invoice document (the generated note, reading view + print) ──────── */
+/* Emitted by invoiceGenerator.ts as HTML wrapped in .toolbox-invoice. Rendered
+   as a self-contained "sheet" so it reads as a document in any theme and prints
+   cleanly. Figures use the tabular-mono ledger register shared across Toolbox;
+   the Amount-due band is the single bold moment. */
+.toolbox-invoice {
+	--ti-ink: var(--text-normal);
+	--ti-muted: var(--text-muted);
+	--ti-line: var(--background-modifier-border);
+	--ti-accent: var(--interactive-accent);
+	max-width: 720px;
+	margin: 8px auto;
+	padding: 40px 44px 36px;
+	background: var(--background-primary);
+	border: 1px solid var(--ti-line);
+	border-radius: 10px;
+	color: var(--ti-ink);
+	font-size: 14px;
+	line-height: 1.5;
+}
+
+.toolbox-invoice .ti-eyebrow {
+	display: block;
+	font-family: var(--font-monospace);
+	font-size: 0.62rem;
+	font-weight: 600;
+	letter-spacing: 0.16em;
+	text-transform: uppercase;
+	color: var(--ti-muted);
+	margin-bottom: 4px;
+}
+
+/* Masthead */
+.toolbox-invoice .ti-masthead {
+	display: flex;
+	justify-content: space-between;
+	align-items: flex-start;
+	gap: 24px;
+	padding-bottom: 18px;
+	border-bottom: 2px solid var(--ti-ink);
+}
+
+.toolbox-invoice .ti-issuer-name {
+	font-size: 1.5rem;
+	font-weight: 700;
+	letter-spacing: -0.02em;
+	line-height: 1.1;
+}
+
+.toolbox-invoice .ti-issuer-meta {
+	font-size: 0.8rem;
+	color: var(--ti-muted);
+	margin-top: 3px;
+}
+
+.toolbox-invoice .ti-doclabel {
+	text-align: right;
+	flex-shrink: 0;
+}
+
+.toolbox-invoice .ti-doctype {
+	font-family: var(--font-monospace);
+	font-size: 0.78rem;
+	font-weight: 700;
+	letter-spacing: 0.28em;
+	text-transform: uppercase;
+	color: var(--ti-accent);
+}
+
+.toolbox-invoice .ti-docnum {
+	font-family: var(--font-monospace);
+	font-size: 1.05rem;
+	font-weight: 700;
+	font-variant-numeric: tabular-nums;
+	margin-top: 2px;
+}
+
+/* Meta strip */
+.toolbox-invoice .ti-meta {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 28px;
+	margin: 22px 0 26px;
+}
+
+.toolbox-invoice .ti-meta-block {
+	display: flex;
+	flex-direction: column;
+}
+
+.toolbox-invoice .ti-meta-val {
+	font-weight: 600;
+}
+
+.toolbox-invoice .ti-billto {
+	margin-left: auto;
+	text-align: right;
+}
+
+.toolbox-invoice .ti-meta-sub {
+	font-size: 0.82rem;
+	color: var(--ti-muted);
+}
+
+/* Services ledger */
+.toolbox-invoice .ti-table {
+	width: 100%;
+	border-collapse: collapse;
+	margin-top: 6px;
+	font-size: 0.88rem;
+}
+
+.toolbox-invoice .ti-table th {
+	text-align: left;
+	font-family: var(--font-monospace);
+	font-size: 0.6rem;
+	font-weight: 600;
+	letter-spacing: 0.12em;
+	text-transform: uppercase;
+	color: var(--ti-muted);
+	padding: 0 10px 8px;
+	border-bottom: 1px solid var(--ti-ink);
+}
+
+.toolbox-invoice .ti-table td {
+	padding: 9px 10px;
+	border-bottom: 1px solid var(--ti-line);
+	vertical-align: top;
+}
+
+.toolbox-invoice .ti-num {
+	text-align: right;
+	font-family: var(--font-monospace);
+	font-variant-numeric: tabular-nums;
+	white-space: nowrap;
+}
+
+.toolbox-invoice .ti-table tfoot td {
+	border-bottom: none;
+	padding-top: 10px;
+}
+
+.toolbox-invoice .ti-foot-label {
+	text-align: right;
+	font-family: var(--font-monospace);
+	font-size: 0.6rem;
+	letter-spacing: 0.12em;
+	text-transform: uppercase;
+	color: var(--ti-muted);
+}
+
+.toolbox-invoice .ti-foot {
+	font-weight: 700;
+}
+
+/* Hero — the bottom line */
+.toolbox-invoice .ti-total {
+	display: flex;
+	align-items: baseline;
+	justify-content: flex-end;
+	gap: 18px;
+	margin-top: 16px;
+	padding-top: 16px;
+	border-top: 2px solid var(--ti-accent);
+}
+
+.toolbox-invoice .ti-total-label {
+	font-family: var(--font-monospace);
+	font-size: 0.66rem;
+	font-weight: 600;
+	letter-spacing: 0.18em;
+	text-transform: uppercase;
+	color: var(--ti-muted);
+}
+
+.toolbox-invoice .ti-total-amount {
+	font-family: var(--font-monospace);
+	font-size: 2rem;
+	font-weight: 700;
+	font-variant-numeric: tabular-nums;
+	letter-spacing: -0.01em;
+	line-height: 1;
+}
+
+/* Notes + payment */
+.toolbox-invoice .ti-notes {
+	margin-top: 26px;
+	padding-top: 16px;
+	border-top: 1px solid var(--ti-line);
+}
+
+.toolbox-invoice .ti-notes p {
+	margin: 0;
+}
+
+.toolbox-invoice .ti-pay {
+	margin-top: 22px;
+	padding: 16px 18px;
+	background: var(--background-secondary);
+	border-radius: 8px;
+}
+
+.toolbox-invoice .ti-paylist {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 6px 32px;
+	margin: 6px 0 0;
+}
+
+.toolbox-invoice .ti-paylist > div {
+	display: flex;
+	align-items: baseline;
+	gap: 8px;
+}
+
+.toolbox-invoice .ti-paylist dt {
+	min-width: 56px;
+	font-size: 0.78rem;
+	color: var(--ti-muted);
+}
+
+.toolbox-invoice .ti-paylist dd {
+	margin: 0;
+	font-weight: 600;
+}
+
+@media (max-width: 600px) {
+	.toolbox-invoice {
+		padding: 24px 20px;
+	}
+	.toolbox-invoice .ti-masthead {
+		flex-direction: column;
+		gap: 12px;
+	}
+	.toolbox-invoice .ti-doclabel {
+		text-align: left;
+	}
+	.toolbox-invoice .ti-billto {
+		margin-left: 0;
+		text-align: left;
+	}
+}
+
+@media print {
+	.toolbox-invoice {
+		max-width: none;
+		margin: 0;
+		padding: 0;
+		border: none;
 	}
 }

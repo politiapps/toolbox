@@ -112,7 +112,9 @@ manifest.json        Plugin id (`toolbox`) / name (`Toolbox`) / minAppVersion (1
 ### `settings.ts`
 - `TasksPluginSettings`: `tasksFilePath`, `sections[]`, `recentTags[]`,
   `collapseState{}`, `calendars[]`, `editableColumnsEnabled`, `timesheetFilePath`,
-  `timesheetOrgs[]`, `activeTimer` (plus deprecated `icsUrl`, migrated into
+  `timesheetOrgs[]`, `activeTimer`, `invoice{businessName,abn,businessAddress,bankName,
+
+  bsb,accountNumber,invoiceFolder}` (plus deprecated `icsUrl`, migrated into
   `calendars`).
 - `CalendarSource`: `id`, `title`, `url`. `migrateCalendars()` converts the legacy
   `icsUrl`; `newCalendarId()` mints ids. The settings tab manages calendars
@@ -131,11 +133,17 @@ manifest.json        Plugin id (`toolbox`) / name (`Toolbox`) / minAppVersion (1
   section's collapse state.
 
 ### `taskView.ts` — `TasksView extends ItemView`
-- Rendering: header (today + add) → user sections (in settings order) →
-  Completed. If the configured file does not exist, renders a "No tasks file
-  found" notice (with a Create-file action) instead of empty sections.
+- Rendering: header (today + add + triage status line) → user sections (in
+  settings order) → Completed. If the configured file does not exist, renders a
+  "No tasks file found" notice (with a Create-file action) instead of empty
+  sections.
+- **Triage status line (the panel's hero):** below the date, `renderPanelHeader`
+  shows today's load — `countPressure(flat)` counts incomplete dated tasks that
+  are overdue / due today, rendered as a mono console readout (overdue in alarm
+  red, colour-bonded to the due-date ramp) or "Nothing due today" when clear.
 - Each section header shows display name + incomplete-count badge and toggles
-  collapse (persisted via `collapseState`).
+  collapse (persisted via `collapseState`). The section's hashed accent
+  (`sectionAccent(id)` → `--section-accent`) is rendered as the card's left spine.
 - Each task row: checkbox, description, tag pill(s), due date ("Thursday 25th",
   overdue in red), priority indicator, pencil (edit), trash (delete w/ inline
   confirm).
@@ -185,18 +193,47 @@ manifest.json        Plugin id (`toolbox`) / name (`Toolbox`) / minAppVersion (1
 
 ### `timesheetView.ts` — `TimesheetView extends ItemView`
 - New sidebar panel (view type `timesheet-view`, icon `clock`).
-- **Timer section:** org selector, Start/Break/Resume/Stop buttons, running elapsed
-  display (1s tick). Timer state persisted via `activeTimer` in settings (survives
-  Obsidian restart). Three-state machine: idle → working → on_break.
-- **Today section:** lists today's entries with org dot, time range, break lines,
-  hours, inline edit (pencil) and delete (trash). Total row at bottom.
-- **Weekly summary:** groups this week's entries by org. Shows hours, fractional
-  days (at 7h/day), and estimated earnings (rate × hours). Grand total and total
-  earnings at bottom.
+- **Timer section (the panel's hero):** a "live chronograph". `buildTimer(parent)`
+  is the single source of the timer card's DOM (used both for the initial render
+  and for in-place rebuilds via `rebuildTimer()`); `makeTimerBtn()` builds the
+  icon+label action buttons (play / coffee / square). When a session is running
+  the card tints to the active org's colour (`--org-colour`, set inline) via a
+  faint `color-mix` wash and a breathing status dot, and shifts amber on break.
+  Org selector + Start/Break/Resume/Stop. The big tabular-nums clock shows the
+  actively-counting value (work, or break time while on break); the off-clock value
+  is shown as meta. 1s tick patches `.timesheet-timer-clock` /
+  `.timesheet-timer-subvalue` in place (`updateTimerDisplay`). Timer state persisted
+  via `activeTimer` in settings (survives restart). Three states: idle → working →
+  on_break.
+- **Today section:** lists today's entries with an org-coloured left edge, time
+  range, break lines, hours, inline edit (pencil) and delete (trash). Total row at
+  bottom.
+- **Weekly summary:** groups this week's entries by org. A proportion bar
+  (`.timesheet-week-bar`, org-coloured segments) shows the week's split across orgs
+  at a glance; the per-org rows below are its legend. Each row shows hours,
+  fractional days (at 7h/day), and estimated earnings (rate × hours). Grand total
+  and total earnings at bottom.
 - `TimesheetEntryModal` — add/edit form with org dropdown, time inputs (type="time"),
   and dynamic break list (add/remove with start/end time inputs).
 - File IO goes through `this.app.vault`, read-before-write on all mutations.
 - Vault 'modify'/'create'/'rename' listeners in `main.ts` trigger re-render.
+
+### `invoiceGenerator.ts`
+
+- Exports `generateInvoice()` (orchestrator), `buildInvoiceMarkdown()` (content),
+  `aggregateEntries()` (timesheet → line items), and `nextInvoiceLabel()`.
+- Reads the timesheet file, parses via `timesheetParser.parseTimesheet()`, filters
+  for org + date range, multiplies hours × org rate for line-item amounts.
+- Saves the markdown file to the configured `invoiceFolder`, updating the org's
+  `lastInvoiceDate` and `lastInvoiceNumber`.
+
+### `invoiceModal.ts`
+
+- `InvoiceModal extends Modal` — dropdown for org, date-from / date-to text inputs,
+  auto-computed invoice number label, optional notes textarea, preview summary,
+  and a CTA "Generate Invoice" button.
+- Default date-from: day after `org.lastInvoiceDate`, or 30 days ago.
+- Launches `generateInvoice()` on submit, shows notice with the file path.
 
 ### `embedEditor.ts` — click-to-edit for embeds in cells
 - Adapted from Embed Editor (MIT). `resolveEmbed()` turns a clicked

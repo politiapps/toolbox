@@ -30,6 +30,7 @@ import {
 	TimesheetEntry,
 } from "./timesheetParser";
 import { TimesheetOrg, ActiveTimer } from "./settings";
+import { InvoiceModal } from "./invoiceModal";
 
 export const VIEW_TYPE_TIMESHEET = "timesheet-view";
 
@@ -202,39 +203,73 @@ export class TimesheetView extends ItemView {
 		setIcon(addBtn, "plus");
 		addBtn.setAttr("aria-label", "Add entry");
 		addBtn.addEventListener("click", () => this.openAddForm());
+
+		const invoiceBtn = header.createEl("button", { cls: "timesheet-add-btn" });
+		setIcon(invoiceBtn, "file-text");
+		invoiceBtn.setAttr("aria-label", "Generate invoice");
+		invoiceBtn.addEventListener("click", () => {
+			new InvoiceModal(this.app, this.plugin).open();
+		});
 	}
 
 	private renderTimer(root: HTMLElement): void {
 		const timer = root.createDiv({ cls: "timesheet-timer" });
 		this.timerSectionEl = timer;
+		this.buildTimer(timer);
+	}
+
+	/** Re-render the timer card in place after a state change. */
+	private rebuildTimer(): void {
+		if (this.timerSectionEl) this.buildTimer(this.timerSectionEl);
+	}
+
+	/** Build a labelled, icon-led timer action button. */
+	private makeTimerBtn(
+		parent: HTMLElement,
+		icon: string,
+		label: string,
+		cls: string,
+	): HTMLButtonElement {
+		const btn = parent.createEl("button", { cls: `timesheet-timer-btn ${cls}` });
+		setIcon(btn.createSpan({ cls: "timesheet-btn-icon" }), icon);
+		btn.createSpan({ cls: "timesheet-btn-label", text: label });
+		return btn;
+	}
+
+	/**
+	 * Render the whole timer card into `parent` (clearing it first). This card is
+	 * the panel's hero: a live chronograph that tints to the running org's colour
+	 * while working and shifts amber on break.
+	 */
+	private buildTimer(parent: HTMLElement): void {
+		parent.empty();
+		parent.removeClass("is-active");
+		parent.removeClass("is-break");
+		parent.style.removeProperty("--org-colour");
 
 		const activeTimer = this.plugin.settings.activeTimer;
 
 		if (this.plugin.settings.timesheetOrgs.length === 0) {
-			timer.createDiv({
+			parent.createDiv({
 				cls: "timesheet-timer-empty",
 				text: "Add an organisation in settings to start tracking time.",
 			});
 			return;
 		}
 
-		// Org selector
-		const orgRow = timer.createDiv({ cls: "timesheet-timer-org" });
-		orgRow.createSpan({ cls: "timesheet-timer-label", text: "Org" });
-
+		// Org selector — seeds a new timer, or re-tags the running one.
+		const orgRow = parent.createDiv({ cls: "timesheet-timer-org" });
+		orgRow.createSpan({ cls: "timesheet-eyebrow", text: "Org" });
 		const orgSelect = orgRow.createEl("select", { cls: "timesheet-timer-select" });
 		for (const org of this.plugin.settings.timesheetOrgs) {
 			const opt = orgSelect.createEl("option", { text: org.name, value: org.id });
 			if (activeTimer && activeTimer.org === org.name) opt.selected = true;
 		}
-		if (!activeTimer && this.plugin.settings.timesheetOrgs.length > 0) {
-			orgSelect.selectedIndex = 0;
-		}
+		if (!activeTimer) orgSelect.selectedIndex = 0;
 
 		if (!activeTimer) {
-			// Idle state — show Start button
-			const btnRow = timer.createDiv({ cls: "timesheet-timer-buttons" });
-			const startBtn = btnRow.createEl("button", { cls: "timesheet-btn-start", text: "▶ Start" });
+			const btnRow = parent.createDiv({ cls: "timesheet-timer-buttons" });
+			const startBtn = this.makeTimerBtn(btnRow, "play", "Start", "timesheet-btn-start");
 			startBtn.addEventListener("click", () => {
 				const selectedOrg = orgSelect.options[orgSelect.selectedIndex]?.text ?? "";
 				this.startTimer(selectedOrg);
@@ -242,18 +277,33 @@ export class TimesheetView extends ItemView {
 			return;
 		}
 
-		// Timer is active — org selector updates the timer's org
+		// Active — tint the card to the org's colour (amber when on break).
 		orgSelect.addEventListener("change", () => this.updateTimerOrg(orgSelect));
-
-		// Timer is active — show running state
+		const colour = this.orgColour(activeTimer.org);
+		if (colour) parent.style.setProperty("--org-colour", colour);
+		parent.addClass("is-active");
 		const isOnBreak = activeTimer.breakStart !== null;
+		if (isOnBreak) parent.addClass("is-break");
 
-		const displayEl = timer.createDiv({ cls: "timesheet-timer-display" });
+		const live = parent.createDiv({ cls: "timesheet-timer-live" });
 
-		// Editable start time
-		const startRow = displayEl.createDiv({ cls: "timesheet-timer-row" });
-		startRow.createSpan({ cls: "timesheet-timer-label", text: "Started" });
-		const startInput = startRow.createEl("input", {
+		const status = live.createDiv({ cls: "timesheet-timer-status" });
+		status.createSpan({ cls: "timesheet-live-dot" });
+		status.createSpan({
+			cls: "timesheet-status-text",
+			text: isOnBreak ? "On break" : "Working",
+		});
+
+		const clock = live.createDiv({ cls: "timesheet-timer-clock" });
+		clock.textContent = formatElapsed(
+			isOnBreak ? getTimerBreakMs(activeTimer) : getTimerWorkMs(activeTimer),
+		);
+
+		const meta = live.createDiv({ cls: "timesheet-timer-meta" });
+
+		const startedItem = meta.createDiv({ cls: "timesheet-meta-item" });
+		startedItem.createSpan({ cls: "timesheet-eyebrow", text: "Started" });
+		const startInput = startedItem.createEl("input", {
 			cls: "timesheet-timer-time-input",
 			type: "time",
 			value: this.msToTime(activeTimer.startTime),
@@ -261,34 +311,30 @@ export class TimesheetView extends ItemView {
 		startInput.addEventListener("change", () => this.updateTimerStartTime(startInput.value));
 
 		if (isOnBreak) {
-			const breakEl = displayEl.createDiv({ cls: "timesheet-timer-row" });
-			breakEl.createSpan({ cls: "timesheet-timer-label", text: "Break" });
-			const breakVal = breakEl.createSpan({ cls: "timesheet-timer-value is-break" });
-			breakVal.textContent = formatElapsed(getTimerBreakMs(activeTimer));
-
-			const workedEl = displayEl.createDiv({ cls: "timesheet-timer-row" });
-			workedEl.createSpan({ cls: "timesheet-timer-label", text: "Worked" });
-			const workedVal = workedEl.createSpan({ cls: "timesheet-timer-value" });
-			workedVal.textContent = formatElapsed(getTimerWorkMs(activeTimer));
-		} else {
-			const elapsedEl = displayEl.createDiv({ cls: "timesheet-timer-row" });
-			elapsedEl.createSpan({ cls: "timesheet-timer-label", text: "Working" });
-			const elapsedVal = elapsedEl.createSpan({ cls: "timesheet-timer-value is-working" });
-			elapsedVal.textContent = formatElapsed(getTimerWorkMs(activeTimer));
+			const workedItem = meta.createDiv({ cls: "timesheet-meta-item" });
+			workedItem.createSpan({ cls: "timesheet-eyebrow", text: "Worked" });
+			workedItem.createSpan({
+				cls: "timesheet-timer-subvalue",
+				text: formatElapsed(getTimerWorkMs(activeTimer)),
+			});
 		}
 
-		const btnRow = timer.createDiv({ cls: "timesheet-timer-buttons" });
-
+		const btnRow = parent.createDiv({ cls: "timesheet-timer-buttons" });
 		if (isOnBreak) {
-			const resumeBtn = btnRow.createEl("button", { cls: "timesheet-btn-resume", text: "▶ Resume" });
-			resumeBtn.addEventListener("click", () => this.resumeTimer());
+			this.makeTimerBtn(btnRow, "play", "Resume", "timesheet-btn-resume").addEventListener(
+				"click",
+				() => this.resumeTimer(),
+			);
 		} else {
-			const breakBtn = btnRow.createEl("button", { cls: "timesheet-btn-break", text: "⏸ Break" });
-			breakBtn.addEventListener("click", () => this.breakTimer());
+			this.makeTimerBtn(btnRow, "coffee", "Break", "timesheet-btn-break").addEventListener(
+				"click",
+				() => this.breakTimer(),
+			);
 		}
-
-		const stopBtn = btnRow.createEl("button", { cls: "timesheet-btn-stop", text: "■ Stop" });
-		stopBtn.addEventListener("click", () => this.stopTimer());
+		this.makeTimerBtn(btnRow, "square", "Stop", "timesheet-btn-stop").addEventListener(
+			"click",
+			() => this.stopTimer(),
+		);
 	}
 
 	/** Persist a change to the timer's start time from an HH:MM input. */
@@ -323,17 +369,16 @@ export class TimesheetView extends ItemView {
 		if (!activeTimer) return;
 
 		const isOnBreak = activeTimer.breakStart !== null;
+		const clock = timer.querySelector<HTMLElement>(".timesheet-timer-clock");
+		const sub = timer.querySelector<HTMLElement>(".timesheet-timer-subvalue");
 
-		const valueEls = timer.querySelectorAll(".timesheet-timer-value");
-		if (isOnBreak) {
-			if (valueEls.length >= 2) {
-				(valueEls[0] as HTMLElement).textContent = formatElapsed(getTimerBreakMs(activeTimer));
-				(valueEls[1] as HTMLElement).textContent = formatElapsed(getTimerWorkMs(activeTimer));
-			}
-		} else {
-			if (valueEls.length >= 1) {
-				(valueEls[0] as HTMLElement).textContent = formatElapsed(getTimerWorkMs(activeTimer));
-			}
+		if (clock) {
+			clock.textContent = formatElapsed(
+				isOnBreak ? getTimerBreakMs(activeTimer) : getTimerWorkMs(activeTimer),
+			);
+		}
+		if (isOnBreak && sub) {
+			sub.textContent = formatElapsed(getTimerWorkMs(activeTimer));
 		}
 	}
 
@@ -393,8 +438,6 @@ export class TimesheetView extends ItemView {
 
 		const colour = this.orgColour(entry.org);
 		if (colour) row.style.setProperty("--org-colour", colour);
-
-		const dot = row.createSpan({ cls: "timesheet-entry-dot" });
 
 		const body = row.createDiv({ cls: "timesheet-entry-body" });
 
@@ -461,10 +504,21 @@ export class TimesheetView extends ItemView {
 
 		const summary = section.createDiv({ cls: "timesheet-week-summary" });
 
-		// Per-org rows
-		let weekTotal = 0;
+		const weekTotal = [...orgTotals.values()].reduce((a, b) => a + b, 0);
+
+		// Proportion bar — how the week splits across orgs, at a glance. The dots
+		// in the rows below are its legend.
+		const bar = summary.createDiv({ cls: "timesheet-week-bar" });
 		for (const [org, mins] of orgTotals) {
-			weekTotal += mins;
+			const seg = bar.createDiv({ cls: "timesheet-week-bar-seg" });
+			seg.style.width = weekTotal > 0 ? `${(mins / weekTotal) * 100}%` : "0";
+			const segColour = this.orgColour(org);
+			if (segColour) seg.style.backgroundColor = segColour;
+			seg.setAttr("aria-label", `${org}: ${formatMinutes(mins)}`);
+		}
+
+		// Per-org rows
+		for (const [org, mins] of orgTotals) {
 			const row = summary.createDiv({ cls: "timesheet-week-row" });
 			const colour = this.orgColour(org);
 			if (colour) row.style.setProperty("--org-colour", colour);
@@ -537,10 +591,7 @@ export class TimesheetView extends ItemView {
 		};
 		await this.plugin.saveSettings();
 		// Re-render just the timer section
-		if (this.timerSectionEl) {
-			this.timerSectionEl.empty();
-			this.renderTimerSectionContent(this.timerSectionEl);
-		}
+		this.rebuildTimer();
 		this.startTimerTick();
 	}
 
@@ -549,10 +600,7 @@ export class TimesheetView extends ItemView {
 		if (!timer || timer.breakStart !== null) return;
 		timer.breakStart = Date.now();
 		await this.plugin.saveSettings();
-		if (this.timerSectionEl) {
-			this.timerSectionEl.empty();
-			this.renderTimerSectionContent(this.timerSectionEl);
-		}
+		this.rebuildTimer();
 	}
 
 	private async resumeTimer(): Promise<void> {
@@ -561,10 +609,7 @@ export class TimesheetView extends ItemView {
 		timer.breaks.push({ start: timer.breakStart, end: Date.now() });
 		timer.breakStart = null;
 		await this.plugin.saveSettings();
-		if (this.timerSectionEl) {
-			this.timerSectionEl.empty();
-			this.renderTimerSectionContent(this.timerSectionEl);
-		}
+		this.rebuildTimer();
 	}
 
 	private async stopTimer(): Promise<void> {
@@ -613,87 +658,6 @@ export class TimesheetView extends ItemView {
 		await this.plugin.saveSettings();
 		this.stopTimerTick();
 		await this.refresh();
-	}
-
-	/** Render only the timer section content (used for partial re-render). */
-	private renderTimerSectionContent(parent: HTMLElement): void {
-		const activeTimer = this.plugin.settings.activeTimer;
-
-		if (this.plugin.settings.timesheetOrgs.length === 0) {
-			parent.createDiv({
-				cls: "timesheet-timer-empty",
-				text: "Add an organisation in settings to start tracking time.",
-			});
-			return;
-		}
-
-		const orgRow = parent.createDiv({ cls: "timesheet-timer-org" });
-		orgRow.createSpan({ cls: "timesheet-timer-label", text: "Org" });
-
-		const orgSelect = parent.createEl("select", { cls: "timesheet-timer-select" });
-		for (const org of this.plugin.settings.timesheetOrgs) {
-			const opt = orgSelect.createEl("option", { text: org.name, value: org.id });
-			if (activeTimer && activeTimer.org === org.name) opt.selected = true;
-		}
-		if (!activeTimer && this.plugin.settings.timesheetOrgs.length > 0) {
-			orgSelect.selectedIndex = 0;
-		}
-
-		if (!activeTimer) {
-			const btnRow = parent.createDiv({ cls: "timesheet-timer-buttons" });
-			const startBtn = btnRow.createEl("button", { cls: "timesheet-btn-start", text: "▶ Start" });
-			startBtn.addEventListener("click", () => {
-				const selectedOrg = orgSelect.options[orgSelect.selectedIndex]?.text ?? "";
-				this.startTimer(selectedOrg);
-			});
-			return;
-		}
-
-		// Timer is active — org selector updates the timer's org
-		orgSelect.addEventListener("change", () => this.updateTimerOrg(orgSelect));
-
-		const isOnBreak = activeTimer.breakStart !== null;
-		const displayEl = parent.createDiv({ cls: "timesheet-timer-display" });
-
-		// Editable start time
-		const startRow = displayEl.createDiv({ cls: "timesheet-timer-row" });
-		startRow.createSpan({ cls: "timesheet-timer-label", text: "Started" });
-		const startInput = startRow.createEl("input", {
-			cls: "timesheet-timer-time-input",
-			type: "time",
-			value: this.msToTime(activeTimer.startTime),
-		});
-		startInput.addEventListener("change", () => this.updateTimerStartTime(startInput.value));
-
-		if (isOnBreak) {
-			const breakEl = displayEl.createDiv({ cls: "timesheet-timer-row" });
-			breakEl.createSpan({ cls: "timesheet-timer-label", text: "Break" });
-			const breakVal = breakEl.createSpan({ cls: "timesheet-timer-value is-break" });
-			breakVal.textContent = formatElapsed(getTimerBreakMs(activeTimer));
-
-			const workedEl = displayEl.createDiv({ cls: "timesheet-timer-row" });
-			workedEl.createSpan({ cls: "timesheet-timer-label", text: "Worked" });
-			const workedVal = workedEl.createSpan({ cls: "timesheet-timer-value" });
-			workedVal.textContent = formatElapsed(getTimerWorkMs(activeTimer));
-		} else {
-			const elapsedEl = displayEl.createDiv({ cls: "timesheet-timer-row" });
-			elapsedEl.createSpan({ cls: "timesheet-timer-label", text: "Working" });
-			const elapsedVal = elapsedEl.createSpan({ cls: "timesheet-timer-value is-working" });
-			elapsedVal.textContent = formatElapsed(getTimerWorkMs(activeTimer));
-		}
-
-		const btnRow = parent.createDiv({ cls: "timesheet-timer-buttons" });
-
-		if (isOnBreak) {
-			const resumeBtn = btnRow.createEl("button", { cls: "timesheet-btn-resume", text: "▶ Resume" });
-			resumeBtn.addEventListener("click", () => this.resumeTimer());
-		} else {
-			const breakBtn = btnRow.createEl("button", { cls: "timesheet-btn-break", text: "⏸ Break" });
-			breakBtn.addEventListener("click", () => this.breakTimer());
-		}
-
-		const stopBtn = btnRow.createEl("button", { cls: "timesheet-btn-stop", text: "■ Stop" });
-		stopBtn.addEventListener("click", () => this.stopTimer());
 	}
 
 	/** Convert epoch ms to HH:MM string. */

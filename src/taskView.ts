@@ -225,7 +225,7 @@ export class TasksView extends ItemView {
 		root.empty();
 		root.addClass("tasks-panel-content");
 
-		this.renderPanelHeader(root);
+		this.renderPanelHeader(root, countPressure(flat));
 		this.renderCalendar(root);
 
 		// No file at the configured path — say so plainly instead of showing an
@@ -260,18 +260,40 @@ export class TasksView extends ItemView {
 		return [...recent, ...rest];
 	}
 
-	private renderPanelHeader(root: HTMLElement): void {
+	private renderPanelHeader(root: HTMLElement, pressure: Pressure): void {
 		// The panel is framed around "today" — the lens for due-date triage.
 		const header = root.createDiv({ cls: "tasks-header" });
 
-		const date = header.createDiv({ cls: "tasks-today" });
+		const top = header.createDiv({ cls: "tasks-header-top" });
+		const date = top.createDiv({ cls: "tasks-today" });
 		date.createDiv({ cls: "tasks-today-eyebrow", text: "Today" });
 		date.createDiv({ cls: "tasks-today-date", text: formatDueDisplay(todayISO()) });
 
-		const add = header.createEl("button", { cls: "tasks-add" });
+		const add = top.createEl("button", { cls: "tasks-add" });
 		setIcon(add, "plus");
 		add.setAttr("aria-label", "Add task");
 		add.addEventListener("click", () => this.openAddForm());
+
+		// Triage status line: today's load, in the ops-console register. Overdue is
+		// the one thing allowed to shout, colour-bonded to the due-date ramp below.
+		const status = header.createDiv({ cls: "tasks-pressure" });
+		if (pressure.overdue === 0 && pressure.dueToday === 0) {
+			status.createSpan({ cls: "tasks-pressure-clear", text: "Nothing due today" });
+		} else {
+			if (pressure.overdue > 0) {
+				const s = status.createDiv({ cls: "tasks-stat is-overdue" });
+				s.createSpan({ cls: "tasks-stat-num", text: String(pressure.overdue) });
+				s.createSpan({ cls: "tasks-stat-label", text: "overdue" });
+			}
+			if (pressure.overdue > 0 && pressure.dueToday > 0) {
+				status.createSpan({ cls: "tasks-stat-sep", text: "·" });
+			}
+			if (pressure.dueToday > 0) {
+				const s = status.createDiv({ cls: "tasks-stat is-today" });
+				s.createSpan({ cls: "tasks-stat-num", text: String(pressure.dueToday) });
+				s.createSpan({ cls: "tasks-stat-label", text: "due today" });
+			}
+		}
 	}
 
 	/** "Today" calendar block above the tasks (only when an .ics URL is set). */
@@ -321,7 +343,7 @@ export class TasksView extends ItemView {
 		// place colour is spent. Rows indent off this left spine.
 		sectionEl.style.setProperty("--section-accent", sectionAccent(section.id));
 
-		const header = this.renderHeader(sectionEl, section.name, tasks.length, collapsed, true, async (next) => {
+		const header = this.renderHeader(sectionEl, section.name, tasks.length, collapsed, async (next) => {
 			await this.setCollapsed(section.id, next);
 			this.refresh();
 		});
@@ -352,7 +374,7 @@ export class TasksView extends ItemView {
 		const sorted = [...tasks].sort((a, b) => (b.doneDate ?? "").localeCompare(a.doneDate ?? ""));
 
 		const sectionEl = root.createDiv({ cls: "tasks-section tasks-section-completed" });
-		this.renderHeader(sectionEl, "Completed", tasks.length, collapsed, false, async (next) => {
+		this.renderHeader(sectionEl, "Completed", tasks.length, collapsed, async (next) => {
 			await this.setCollapsed(COMPLETED_KEY, next);
 			this.refresh();
 		});
@@ -372,7 +394,6 @@ export class TasksView extends ItemView {
 		title: string,
 		count: number,
 		collapsed: boolean,
-		showDot: boolean,
 		onToggle: (collapsed: boolean) => void
 	): HTMLElement {
 		const header = parent.createDiv({ cls: "tasks-section-header" });
@@ -381,7 +402,6 @@ export class TasksView extends ItemView {
 		const chevron = header.createSpan({ cls: "tasks-chevron" });
 		setIcon(chevron, collapsed ? "chevron-right" : "chevron-down");
 
-		if (showDot) header.createSpan({ cls: "tasks-section-dot" });
 		header.createSpan({ cls: "tasks-section-title", text: title });
 		header.createSpan({ cls: "tasks-count-badge", text: String(count) });
 
@@ -764,6 +784,24 @@ function hash32(s: string): number {
 /** Stable persistence key for a task's expand/collapse state. */
 function hashKey(s: string): string {
 	return hash32(s).toString(36);
+}
+
+/** Today's triage load: incomplete tasks already overdue or due today. */
+interface Pressure {
+	overdue: number;
+	dueToday: number;
+}
+
+function countPressure(flat: Task[]): Pressure {
+	let overdue = 0;
+	let dueToday = 0;
+	for (const t of flat) {
+		if (t.completed || !t.due) continue;
+		const d = daysUntil(t.due);
+		if (d < 0) overdue++;
+		else if (d === 0) dueToday++;
+	}
+	return { overdue, dueToday };
 }
 
 /** Total number of descendant tasks (subtasks at any depth). */

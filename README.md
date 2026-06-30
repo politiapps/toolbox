@@ -1,10 +1,17 @@
 # Toolbox
 
-Toolbox is an Obsidian plugin that bundles several utilities. Its first feature
-is a **Tasks panel** — a sidebar to view, add, edit, complete, and delete tasks
-stored in an Obsidian Tasks plugin-compatible markdown file. **Custom columns**
-and a **timesheet** feature are planned. See
-[`documentation/ARCHITECTURE.md`](documentation/ARCHITECTURE.md) for the design.
+Toolbox is an Obsidian plugin that bundles several utilities:
+
+- **Tasks panel** — a sidebar to view, add, edit, complete, and delete tasks
+  stored in an Obsidian Tasks plugin-compatible markdown file.
+- **Timesheet** — a sidebar panel with a running timer, today's entries, and
+  a weekly summary with hours, fractional days, and earnings by organisation.
+- **Editable Columns** — Live Preview multi-column layouts using `%% columns %%`
+  comment markers, with click-to-edit embeds.
+- **Today's calendar** — merge one or more iCalendar (.ics) feeds into a compact
+  sidebar list.
+
+See [`documentation/ARCHITECTURE.md`](documentation/ARCHITECTURE.md) for the design.
 
 ## Development
 

@@ -1,7 +1,7 @@
 {
 	"name": "obsidian-toolbox",
-	"version": "1.0.2",
-	"description": "A toolbox of Obsidian utilities (currently a sidebar Tasks panel; custom columns and timesheet planned).",
+	"version": "1.1.0-beta.1",
+	"description": "A toolbox of Obsidian utilities: Tasks panel, timesheet tracker with timer, editable columns, and calendar feed.",
 	"main": "main.js",
 	"scripts": {
 		"dev": "node esbuild.config.mjs",

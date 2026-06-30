@@ -31,6 +31,7 @@ import { CalendarOccurrence, getEventsForToday, mergeOccurrences } from "./calen
 import { renderTodayCalendar } from "./calendarView";
 import { COLUMNS_CLASS, editableColumnsExtension } from "./editableColumns";
 import { openEmbedEditor, resolveEmbed } from "./embedEditor";
+import { InvoiceModal } from "./invoiceModal";
 
 /** How often to re-fetch the calendar feed while the plugin is running. */
 const CALENDAR_REFRESH_MS = 30 * 60 * 1000;
@@ -129,6 +130,14 @@ export default class TasksPlugin extends Plugin {
 			id: "open-timesheet",
 			name: "Open timesheet",
 			callback: () => this.activateTimesheetView(),
+		});
+
+		this.addCommand({
+			id: "export-invoice",
+			name: "Generate invoice from timesheet",
+			callback: () => {
+				new InvoiceModal(this.app, this).open();
+			},
 		});
 
 		const isTimesheetFile = (file: TAbstractFile): boolean =>
