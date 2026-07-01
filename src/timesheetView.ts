@@ -53,12 +53,6 @@ function formatDateISO(d: Date): string {
 	return `${y}-${m}-${day}`;
 }
 
-function todayDisplay(): string {
-	const d = new Date();
-	const weekday = d.toLocaleDateString(undefined, { weekday: "long" });
-	return `${weekday} ${d.getDate()}`;
-}
-
 function ordinalSuffix(n: number): string {
 	const v = n % 100;
 	if (v >= 11 && v <= 13) return "th";
@@ -75,6 +69,28 @@ function formatDayDisplay(iso: string): string {
 	const date = new Date(y, m - 1, d);
 	const weekday = date.toLocaleDateString(undefined, { weekday: "short" });
 	return `${weekday} ${d}${ordinalSuffix(d)}`;
+}
+
+/** Relative day label: Today / Yesterday / Tomorrow, else the weekday name. */
+function dayTitle(iso: string): string {
+	const [ty, tm, td] = todayISO().split("-").map(Number);
+	const [y, m, d] = iso.split("-").map(Number);
+	const diff = Math.round(
+		(new Date(y, m - 1, d).getTime() - new Date(ty, tm - 1, td).getTime()) / 86_400_000,
+	);
+	if (diff === 0) return "Today";
+	if (diff === -1) return "Yesterday";
+	if (diff === 1) return "Tomorrow";
+	return new Date(y, m - 1, d).toLocaleDateString(undefined, { weekday: "long" });
+}
+
+/** Compact full day label that stays unambiguous across months, e.g. "Wed 1 Jul". */
+function formatDayFull(iso: string): string {
+	const [y, m, d] = iso.split("-").map(Number);
+	const date = new Date(y, m - 1, d);
+	const weekday = date.toLocaleDateString(undefined, { weekday: "short" });
+	const month = date.toLocaleDateString(undefined, { month: "short" });
+	return `${weekday} ${d} ${month}`;
 }
 
 function getWeekBounds(): { start: Date; end: Date } {
@@ -132,6 +148,8 @@ export class TimesheetView extends ItemView {
 	plugin: TasksPlugin;
 	private timerInterval: number | null = null;
 	private timerSectionEl: HTMLElement | null = null;
+	/** The day whose entries the panel is showing (ISO); defaults to today. */
+	private viewedDate: string = todayISO();
 
 	constructor(leaf: WorkspaceLeaf, plugin: TasksPlugin) {
 		super(leaf);
@@ -186,7 +204,7 @@ export class TimesheetView extends ItemView {
 
 		this.renderHeader(root);
 		this.renderTimer(root);
-		this.renderTodayEntries(root, parsed);
+		this.renderDayEntries(root, parsed);
 		this.renderWeekSummary(root, parsed);
 
 		// Start timer tick if timer is active
@@ -397,24 +415,49 @@ export class TimesheetView extends ItemView {
 		}
 	}
 
-	private renderTodayEntries(root: HTMLElement, parsed: ReturnType<typeof parseTimesheet>): void {
-		const today = todayISO();
-		const todayDays = parsed.days.filter((d) => d.date === today);
-		const todayEntries = todayDays.flatMap((d) => d.entries);
+	private renderDayEntries(root: HTMLElement, parsed: ReturnType<typeof parseTimesheet>): void {
+		const day = this.viewedDate;
+		const isToday = day === todayISO();
+		const dayEntries = parsed.days.filter((d) => d.date === day).flatMap((d) => d.entries);
 
 		const section = root.createDiv({ cls: "timesheet-section" });
-		const header = section.createDiv({ cls: "timesheet-section-header" });
-		header.createSpan({ cls: "timesheet-section-title", text: "Today" });
-		header.createSpan({ cls: "timesheet-section-date", text: todayDisplay() });
+		const header = section.createDiv({ cls: "timesheet-section-header timesheet-day-header" });
 
-		if (todayEntries.length === 0) {
-			section.createDiv({ cls: "timesheet-empty", text: "No entries yet today." });
+		// Day navigation — step back/forward through days so any day is reachable.
+		const prevBtn = header.createEl("button", { cls: "timesheet-day-nav" });
+		setIcon(prevBtn, "chevron-left");
+		prevBtn.setAttr("aria-label", "Previous day");
+		prevBtn.addEventListener("click", () => this.shiftDay(-1));
+
+		const titleWrap = header.createDiv({ cls: "timesheet-day-titlewrap" });
+		titleWrap.createSpan({ cls: "timesheet-section-title", text: dayTitle(day) });
+		titleWrap.createSpan({ cls: "timesheet-section-date", text: formatDayFull(day) });
+
+		const nextBtn = header.createEl("button", { cls: "timesheet-day-nav" });
+		setIcon(nextBtn, "chevron-right");
+		nextBtn.setAttr("aria-label", "Next day");
+		nextBtn.addEventListener("click", () => this.shiftDay(1));
+
+		if (!isToday) {
+			const todayBtn = header.createEl("button", { cls: "timesheet-day-today", text: "Today" });
+			todayBtn.setAttr("aria-label", "Jump to today");
+			todayBtn.addEventListener("click", () => {
+				this.viewedDate = todayISO();
+				this.refresh();
+			});
+		}
+
+		if (dayEntries.length === 0) {
+			section.createDiv({
+				cls: "timesheet-empty",
+				text: isToday ? "No entries yet today." : "No entries on this day.",
+			});
 			return;
 		}
 
 		const list = section.createDiv({ cls: "timesheet-entry-list" });
 		let dayTotal = 0;
-		for (const entry of todayEntries) {
+		for (const entry of dayEntries) {
 			const mins = entryWorkMinutes(entry);
 			dayTotal += mins;
 			this.renderEntryRow(list, entry, parsed.lines, mins);
@@ -426,6 +469,15 @@ export class TimesheetView extends ItemView {
 			cls: "timesheet-total-value",
 			text: `${formatMinutes(dayTotal)} (${minutesToDays(dayTotal)})`,
 		});
+	}
+
+	/** Move the viewed day by `delta` days and re-render. */
+	private shiftDay(delta: number): void {
+		const [y, m, d] = this.viewedDate.split("-").map(Number);
+		const dt = new Date(y, m - 1, d);
+		dt.setDate(dt.getDate() + delta);
+		this.viewedDate = formatDateISO(dt);
+		this.refresh();
 	}
 
 	private renderEntryRow(
@@ -673,26 +725,33 @@ export class TimesheetView extends ItemView {
 			new Notice("Add an organisation in settings first.");
 			return;
 		}
-		new TimesheetEntryModal(this, null, async (entry) => {
-			const today = todayISO();
-			const entryLines = serializeEntry(entry);
-			try {
-				const file = await this.ensureTimesheetFile();
-				const content = await this.app.vault.read(file);
-				const lines = content.split("\n");
-				const updated = addEntryToContent(lines, today, entryLines);
-				await this.app.vault.modify(file, updated.join("\n"));
-				await this.refresh();
-			} catch (e) {
-				new Notice("Couldn't save timesheet entry.");
-			}
-		}).open();
+		new TimesheetEntryModal(
+			this,
+			null,
+			async (entry) => {
+				const entryLines = serializeEntry(entry);
+				try {
+					const file = await this.ensureTimesheetFile();
+					const content = await this.app.vault.read(file);
+					const lines = content.split("\n");
+					const updated = addEntryToContent(lines, entry.date, entryLines);
+					await this.app.vault.modify(file, updated.join("\n"));
+					// Follow the entry to the day it landed on.
+					this.viewedDate = entry.date;
+					await this.refresh();
+				} catch (e) {
+					new Notice("Couldn't save timesheet entry.");
+				}
+			},
+			this.viewedDate,
+		).open();
 	}
 
 	private openEditForm(entry: TimesheetEntry, lines: string[]): void {
 		new TimesheetEntryModal(
 			this,
 			{
+				date: entry.date,
 				start: entry.start,
 				end: entry.end,
 				org: entry.org,
@@ -713,7 +772,15 @@ export class TimesheetView extends ItemView {
 						new Notice("Couldn't locate the entry in the file.");
 						return;
 					}
-					const result = updateEntryLines(parsed.lines, freshEntry, newLines);
+					let result: string[];
+					if (updated.date === entry.date) {
+						result = updateEntryLines(parsed.lines, freshEntry, newLines);
+					} else {
+						// Date changed — move it: drop from the old day, add to the new.
+						const removed = updateEntryLines(parsed.lines, freshEntry, null);
+						result = addEntryToContent(removed, updated.date, newLines);
+						this.viewedDate = updated.date;
+					}
 					await this.app.vault.modify(file, result.join("\n"));
 					await this.refresh();
 				} catch (e) {
@@ -750,6 +817,7 @@ export class TimesheetView extends ItemView {
 /* ------------------------------------------------------------------ */
 
 interface EntryFormData {
+	date: string;
 	start: string;
 	end: string;
 	org: string;
@@ -761,6 +829,7 @@ class TimesheetEntryModal extends Modal {
 	private initial: EntryFormData | null;
 	private onSubmit: (data: EntryFormData) => Promise<void>;
 
+	private date: string;
 	private start: string;
 	private end: string;
 	private org: string;
@@ -770,6 +839,7 @@ class TimesheetEntryModal extends Modal {
 		view: TimesheetView,
 		initial: EntryFormData | null,
 		onSubmit: (data: EntryFormData) => Promise<void>,
+		defaultDate?: string,
 	) {
 		super(view.app);
 		this.view = view;
@@ -777,6 +847,7 @@ class TimesheetEntryModal extends Modal {
 		this.onSubmit = onSubmit;
 
 		if (initial) {
+			this.date = initial.date;
 			this.start = initial.start;
 			this.end = initial.end;
 			this.org = initial.org;
@@ -785,6 +856,7 @@ class TimesheetEntryModal extends Modal {
 			const now = new Date();
 			const h = String(now.getHours()).padStart(2, "0");
 			const m = String(now.getMinutes()).padStart(2, "0");
+			this.date = defaultDate ?? todayISO();
 			this.start = `${h}:${m}`;
 			// Default end = now + 1h
 			const endH = String((now.getHours() + 1) % 24).padStart(2, "0");
@@ -809,8 +881,14 @@ class TimesheetEntryModal extends Modal {
 			dd.onChange((v) => (this.org = v));
 		});
 
-		// Date — not user-configurable for now, always today
-		// (we can add date later if needed)
+		// Date
+		new Setting(contentEl).setName("Date").addText((text) => {
+			text.setValue(this.date);
+			text.inputEl.type = "date";
+			text.onChange((v) => {
+				if (v) this.date = v;
+			});
+		});
 
 		// Start time
 		new Setting(contentEl).setName("Start time").addText((text) => {
@@ -882,6 +960,7 @@ class TimesheetEntryModal extends Modal {
 		}
 		this.close();
 		await this.onSubmit({
+			date: this.date,
 			start: this.start,
 			end: this.end,
 			org: this.org,

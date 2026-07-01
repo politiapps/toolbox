@@ -13,8 +13,10 @@ feature's views, commands, and settings.
 
 - **Tasks panel** (current) — a sidebar `ItemView` that reads and writes one
   user-configured markdown file (default `tasks.md`) whose lines use Obsidian
-  Tasks plugin-compatible syntax, so other Tasks queries keep working. Its
-  modules and behaviour are mapped in the rest of this document.
+  Tasks plugin-compatible syntax, so other Tasks queries keep working. Supports
+  **recurring tasks** via the Tasks `🔁` signifier (e.g. `every month on the 2nd
+  Monday`): completing one spawns its next occurrence. Its modules and behaviour
+  are mapped in the rest of this document.
 - **Editable Columns** (current) — a Live Preview multi-row / multi-column
   layout. `%% columns %%` comment-marker blocks are replaced by a CSS-grid
   widget whose cells are rendered through Obsidian's real markdown pipeline
@@ -40,7 +42,9 @@ src/
   main.ts            Plugin entry point + lifecycle + vault watcher + calendar
                      fetch + Editable Columns registration / embed-click listener
                      + Timesheet registration / vault watcher
-  taskParser.ts      THE ONLY place tasks are parsed / serialised
+  taskParser.ts      THE ONLY place task LINES are parsed / serialised
+  recurrence.ts      THE ONLY place 🔁 recurrence RULES are interpreted; pure
+                     rule grammar + next-occurrence date math (no vault access)
   calendar.ts        THE ONLY place .ics feeds are parsed (pure; no vault access)
   calendarView.ts    Shared DOM render of the "Today's events" list (pure view)
   settings.ts        Settings model, defaults, native settings tab + Org mgmt
@@ -110,11 +114,25 @@ manifest.json        Plugin id (`toolbox`) / name (`Toolbox`) / minAppVersion (1
   tree (indentation-based, with `children`/`notes`), `flat` is every task.
 - `serializeTask(input)` → canonical markdown line.
 - Pure structural editors over the line array: `setTaskNotes`,
-  `addChildTaskLine`, `removeTaskBlock`, `moveTaskAsChild` (re-parent a task's
-  whole block under another, re-indented; rejects cyclic moves), plus
-  `findTaskByRaw`, `childIndentOf`.
+  `addChildTaskLine`, `insertTaskLineBefore` (place a line at `blockStart`, used
+  for a recurring task's next occurrence), `removeTaskBlock`, `moveTaskAsChild`
+  (re-parent a task's whole block under another, re-indented; rejects cyclic
+  moves), plus `findTaskByRaw`, `childIndentOf`.
 - `collectTags(tasks)` → unique tags in first-seen order.
+- The `🔁` **token** is owned here: `recurrence` on `Task`/`TaskInput` holds the
+  raw rule text; its *meaning* is `recurrence.ts`'s job, not this file's.
 - **No other file may parse or build task line strings.**
+
+### `recurrence.ts`
+- Pure recurrence engine (no vault/DOM/network), modelled on `calendar.ts`.
+- `RecurrenceRule` (unit/interval + optional weekday, dayOfMonth, ordinal).
+- `parseRecurrence(text)` → structured rule; `recurrenceToText(rule)` → canonical
+  Tasks string (round-trips); `describeRecurrence`/`describeRecurrenceText` →
+  short UI labels; `nextDueDate(rule, dueISO)` → next occurrence **from the due
+  date** (day/week/month-by-date/month-by-nth-weekday/year; clamps day-of-month
+  and Feb-29 overflow to the month's last valid day).
+- `WEEKDAY_LABELS` (Sun=0…Sat=6) is exported for the modal's weekday dropdowns.
+- **No other file may interpret or build recurrence rule text.**
 
 ### `settings.ts`
 - `TasksPluginSettings`: `tasksFilePath`, `sections[]`, `recentTags[]`,
@@ -159,6 +177,13 @@ manifest.json        Plugin id (`toolbox`) / name (`Toolbox`) / minAppVersion (1
   `replaceLine` relocates the target line by exact text match so concurrent
   external edits don't clobber the wrong line.
 - Actions: `markDone` (sets `[x]` + `✅ today`), `markUndone`, delete, add, edit.
+  For a **recurring** task with a due date, `markDone` instead routes through
+  `applyStructural`: it completes the current line and `insertTaskLineBefore` a
+  fresh incomplete copy dated `nextDueDate(rule, due)` just above it.
+- **Recurrence UI:** `buildRecurrenceSetting()` (shared by the add and edit
+  modals) renders a "Repeat" toggle + revealed sub-fields (interval/unit, weekly
+  weekday, monthly day-of-month or Nth-weekday) and emits canonical rule text via
+  `recurrence.ts`. Recurring rows show a `🔁` pill (`describeRecurrenceText`).
 - **Drag-to-subtask:** each task row is draggable; dropping it on another row
   calls `moveTaskUnder` (re-read → locate both by raw → `moveTaskAsChild` → write),
   re-parenting the dragged block as a child of the drop target.

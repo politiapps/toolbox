@@ -531,6 +531,36 @@
 	color: var(--text-faint);
 }
 
+/* Recurrence: a quiet pill echoing the tag-pill register, with a 🔁 glyph. */
+.tasks-recur {
+	display: inline-flex;
+	align-items: center;
+	gap: 3px;
+	font-size: 0.66rem;
+	color: var(--text-muted);
+}
+
+.tasks-recur-icon {
+	display: inline-flex;
+	align-items: center;
+}
+
+.tasks-recur-icon svg {
+	width: 11px;
+	height: 11px;
+}
+
+/* Modal repeat sub-fields, revealed under the "Repeat" toggle. */
+.tasks-recur-fields:not(:empty) {
+	margin: 2px 0 6px;
+	padding-left: 10px;
+	border-left: 2px solid var(--background-modifier-border);
+}
+
+.tasks-recur-interval {
+	width: 4em;
+}
+
 /* Priority: a labeled chip on a fixed urgency ramp (warm = urgent). The dot
    carries the colour; the label keeps all six levels unambiguous. This is a
    separate colour language from the section-identity spine, by design. */
@@ -1099,6 +1129,66 @@
 	font-size: 0.7rem;
 	color: var(--text-faint);
 	letter-spacing: 0.03em;
+}
+
+/* Day view: prev/next navigation + a jump-to-today affordance. */
+.timesheet-day-header {
+	gap: 4px;
+}
+
+.timesheet-day-titlewrap {
+	flex: 1;
+	display: flex;
+	align-items: baseline;
+	gap: 8px;
+	min-width: 0;
+}
+
+.timesheet-day-titlewrap .timesheet-section-title {
+	flex: 0 0 auto;
+}
+
+.timesheet-day-nav {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	width: 24px;
+	height: 24px;
+	flex-shrink: 0;
+	padding: 0;
+	background: transparent;
+	border: none;
+	box-shadow: none;
+	cursor: pointer;
+	color: var(--text-muted);
+	border-radius: 5px;
+}
+
+.timesheet-day-nav:hover {
+	color: var(--text-normal);
+	background-color: var(--background-modifier-hover);
+}
+
+.timesheet-day-nav svg {
+	width: 16px;
+	height: 16px;
+}
+
+.timesheet-day-today {
+	flex-shrink: 0;
+	padding: 2px 8px;
+	font-size: 0.68rem;
+	font-weight: 600;
+	cursor: pointer;
+	border: 1px solid var(--background-modifier-border);
+	border-radius: 5px;
+	background: transparent;
+	color: var(--text-muted);
+}
+
+.timesheet-day-today:hover {
+	color: var(--text-normal);
+	border-color: var(--interactive-accent);
 }
 
 .timesheet-empty {

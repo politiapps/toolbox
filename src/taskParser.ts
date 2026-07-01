@@ -7,9 +7,14 @@
  * Supported task syntax (Obsidian Tasks plugin compatible):
  *   - [ ] Description #tag 📅 YYYY-MM-DD
  *   - [ ] Description #tag 📅 YYYY-MM-DD ⏫
+ *   - [ ] Description #tag 📅 YYYY-MM-DD 🔁 every week
  *   - [x] Description #tag 📅 YYYY-MM-DD ✅ YYYY-MM-DD
  *
  * Priority emojis: ⏫ highest, 🔼 high, 🔽 low, (none) = normal.
+ *
+ * The 🔁 recurrence *rule text* is stored verbatim here; its grammar and the
+ * next-occurrence date math live only in recurrence.ts (this file owns the
+ * task-line token, not the rule's meaning).
  */
 
 export type Priority = "highest" | "high" | "medium" | "normal" | "low" | "lowest";
@@ -30,6 +35,7 @@ export const PRIORITY_EMOJI: Record<Exclude<Priority, "normal">, string> = {
 /** Emoji markers used in the task syntax. */
 const DUE_EMOJI = "📅";
 const DONE_EMOJI = "✅";
+const RECUR_EMOJI = "🔁";
 
 /** A single parsed task. `raw` is the exact original line (used to relocate it on write). */
 export interface Task {
@@ -49,6 +55,8 @@ export interface Task {
 	priority: Priority;
 	/** Completion date as YYYY-MM-DD, or null. */
 	doneDate: string | null;
+	/** Recurrence rule text after 🔁 (e.g. "every month on the 1st"), or null. */
+	recurrence: string | null;
 
 	/* --- hierarchy & notes (filled by parseTasks) --- */
 	/** Nested subtasks (deeper-indented task lines directly under this one). */
@@ -75,12 +83,18 @@ export interface TaskInput {
 	priority: Priority;
 	completed?: boolean;
 	doneDate?: string | null;
+	/** Recurrence rule text after 🔁, or null/undefined for a one-off task. */
+	recurrence?: string | null;
 }
 
 const TASK_LINE_RE = /^(\s*)-\s+\[([ xX])\]\s+(.*)$/;
 const DATE_RE = "(\\d{4}-\\d{2}-\\d{2})";
 const DUE_RE = new RegExp(DUE_EMOJI + "\\s*" + DATE_RE);
 const DONE_RE = new RegExp(DONE_EMOJI + "\\s*" + DATE_RE);
+// Recurrence: 🔁 followed by rule words, up to the next known marker or EOL.
+// The character class stops the capture at any other token emoji so the rule
+// text never swallows a following due/done date or priority.
+const RECUR_RE = new RegExp(RECUR_EMOJI + "\\s*([^📅✅🔺⏫🔼🔽⏬\\n]*)");
 // Tags: '#' followed by at least one non-space, allowing letters, numbers,
 // '-', '_', and '/' for nested tags. Must contain a non-numeric character.
 const TAG_RE = /#[A-Za-z0-9_\-/]*[A-Za-z_\-/][A-Za-z0-9_\-/]*/g;
@@ -103,12 +117,15 @@ export function parseTask(line: string, lineIndex: number): Task | null {
 	const doneMatch = body.match(DONE_RE);
 	const doneDate = doneMatch ? doneMatch[1] : null;
 
+	const recurMatch = body.match(RECUR_RE);
+	const recurrence = recurMatch ? recurMatch[1].trim() || null : null;
+
 	const priority = detectPriority(body);
 
 	const tags = body.match(TAG_RE) ?? [];
 
 	// Strip every recognised token to leave a clean description.
-	let description = body.replace(DUE_RE, " ").replace(DONE_RE, " ");
+	let description = body.replace(DUE_RE, " ").replace(DONE_RE, " ").replace(RECUR_RE, " ");
 	for (const emoji of Object.values(PRIORITY_EMOJI)) {
 		description = description.split(emoji).join(" ");
 	}
@@ -124,6 +141,7 @@ export function parseTask(line: string, lineIndex: number): Task | null {
 		due,
 		priority,
 		doneDate,
+		recurrence,
 		children: [],
 		notes: "",
 		indentWidth: indentWidthOf(indent),
@@ -251,6 +269,16 @@ export function addChildTaskLine(lines: string[], parent: Task, childLine: strin
 	return out;
 }
 
+/**
+ * Insert a serialised line immediately above `task` (at its blockStart). Pure.
+ * Used to place a recurring task's next occurrence just above the completed one.
+ */
+export function insertTaskLineBefore(lines: string[], task: Task, line: string): string[] {
+	const out = lines.slice();
+	out.splice(task.blockStart, 0, line);
+	return out;
+}
+
 /** Remove a task and its entire block (notes + descendants). Pure. */
 export function removeTaskBlock(lines: string[], task: Task): string[] {
 	const out = lines.slice();
@@ -312,6 +340,8 @@ export function serializeTask(task: TaskInput & { indent?: string }): string {
 	if (task.due) parts.push(`${DUE_EMOJI} ${task.due}`);
 
 	if (task.priority !== "normal") parts.push(PRIORITY_EMOJI[task.priority]);
+
+	if (task.recurrence) parts.push(`${RECUR_EMOJI} ${task.recurrence}`);
 
 	if (task.completed && task.doneDate) parts.push(`${DONE_EMOJI} ${task.doneDate}`);
 

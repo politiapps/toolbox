@@ -12,6 +12,12 @@ so the constraints live next to the code. Violating any of these is a bug.
 3. **Never parse or build task line strings outside `src/taskParser.ts`.** If
    the format changes, change it there and only there. UI date formatting is not
    task parsing and is allowed in `taskView.ts`.
+   - The `🔁` **task-line token** (its place in the line, stripping it from the
+     description, emitting it) is owned by `taskParser.ts`, which stores the rule
+     as raw text. The recurrence **rule sub-grammar** (`every month on the 2nd
+     Monday` → structured rule) and the next-occurrence date math live only in
+     `src/recurrence.ts` (pure, like `calendar.ts`). Do not interpret rule text
+     anywhere else.
 
 ## Configuration
 4. **Never hardcode** tag names, section names, file paths, or sort orders.

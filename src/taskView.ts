@@ -32,7 +32,16 @@ import {
 	addChildTaskLine,
 	removeTaskBlock,
 	moveTaskAsChild,
+	insertTaskLineBefore,
 } from "./taskParser";
+import {
+	RecurrenceRule,
+	WEEKDAY_LABELS,
+	parseRecurrence,
+	recurrenceToText,
+	describeRecurrenceText,
+	nextDueDate,
+} from "./recurrence";
 import { renderTodayCalendar } from "./calendarView";
 import {
 	SectionConfig,
@@ -466,6 +475,12 @@ export class TasksView extends ItemView {
 			dueEl.addClass(dueClass(task.due));
 		}
 
+		if (task.recurrence) {
+			const recur = meta.createSpan({ cls: "tasks-recur" });
+			setIcon(recur.createSpan({ cls: "tasks-recur-icon" }), "repeat");
+			recur.createSpan({ cls: "tasks-recur-label", text: describeRecurrenceText(task.recurrence) });
+		}
+
 		if (hasChildren) {
 			const done = task.children.filter((c) => c.completed).length;
 			meta.createSpan({ cls: "tasks-progress", text: `${done}/${task.children.length}` });
@@ -506,12 +521,48 @@ export class TasksView extends ItemView {
 	/* --------------------------- task actions -------------------------- */
 
 	private async markDone(task: Task): Promise<void> {
+		// A recurring task with a due date spawns its next occurrence (above the
+		// now-completed line) instead of just being ticked off — matching the
+		// Obsidian Tasks plugin's per-line behaviour.
+		const rule = task.recurrence ? parseRecurrence(task.recurrence) : null;
+		if (rule && task.due) {
+			await this.applyStructural(task.raw, (lines, t) => {
+				lines[t.blockStart] = serializeTask({
+					indent: t.indent,
+					description: t.description,
+					tags: t.tags,
+					due: t.due,
+					priority: t.priority,
+					recurrence: t.recurrence,
+					completed: true,
+					doneDate: todayISO(),
+				});
+				// Guard the re-parsed due (a concurrent external edit could have
+				// dropped it); without one there's no occurrence to advance to.
+				if (!t.due) return lines;
+				const nextLine = serializeTask({
+					indent: t.indent,
+					description: t.description,
+					tags: t.tags,
+					due: nextDueDate(rule, t.due),
+					priority: t.priority,
+					recurrence: t.recurrence,
+					completed: false,
+					doneDate: null,
+				});
+				return insertTaskLineBefore(lines, t, nextLine);
+			});
+			await this.refresh();
+			return;
+		}
+
 		const updated = serializeTask({
 			indent: task.indent,
 			description: task.description,
 			tags: task.tags,
 			due: task.due,
 			priority: task.priority,
+			recurrence: task.recurrence,
 			completed: true,
 			doneDate: todayISO(),
 		});
@@ -526,6 +577,7 @@ export class TasksView extends ItemView {
 			tags: task.tags,
 			due: task.due,
 			priority: task.priority,
+			recurrence: task.recurrence,
 			completed: false,
 			doneDate: null,
 		});
@@ -562,6 +614,7 @@ export class TasksView extends ItemView {
 				tags: input.tags,
 				due: input.due,
 				priority: input.priority,
+				recurrence: input.recurrence,
 				completed: false,
 				doneDate: null,
 			});
@@ -711,6 +764,7 @@ export class TasksView extends ItemView {
 				tags: input.tags,
 				due: input.due,
 				priority: input.priority,
+				recurrence: input.recurrence,
 				completed: false,
 				doneDate: null,
 			});
@@ -730,6 +784,7 @@ export class TasksView extends ItemView {
 				tags: input.tags,
 				due: input.due,
 				priority: input.priority,
+				recurrence: input.recurrence,
 				completed: t.completed,
 				doneDate: t.doneDate,
 			});
@@ -841,6 +896,164 @@ function sortTasks(tasks: Task[], order: SortOrder): Task[] {
 	}
 }
 
+/**
+ * Build a "Repeat" control (a toggle plus revealed sub-fields) into `contentEl`,
+ * shared by the add and edit modals. It emits canonical recurrence rule text
+ * (via recurrence.ts) through `onChange`. `onChange` fires only on user
+ * interaction — never during setup — so a rule the control can't fully model is
+ * left untouched by the caller until the user actually edits the repeat fields.
+ */
+function buildRecurrenceSetting(
+	contentEl: HTMLElement,
+	initial: string | null,
+	getCurrentDue: () => string | null,
+	onChange: (rule: string | null) => void
+): void {
+	const parsed = initial ? parseRecurrence(initial) : null;
+
+	const dueDay = (): number => {
+		const iso = getCurrentDue();
+		const d = iso ? parseInt(iso.split("-")[2], 10) : NaN;
+		return Number.isFinite(d) ? d : new Date().getDate();
+	};
+
+	const state = {
+		enabled: parsed !== null,
+		interval: parsed?.interval ?? 1,
+		unit: (parsed?.unit ?? "week") as RecurrenceRule["unit"],
+		weekWeekday: parsed?.unit === "week" ? parsed.weekday ?? null : null,
+		monthMode: (parsed?.unit === "month" && parsed.ordinal != null && parsed.weekday != null
+			? "weekday"
+			: "dom") as "dom" | "weekday",
+		dayOfMonth: parsed?.dayOfMonth ?? null,
+		ordinal: parsed?.ordinal ?? 2,
+		monthWeekday: (parsed?.unit === "month" ? parsed.weekday : null) ?? 1,
+	};
+
+	const buildRule = (): RecurrenceRule => {
+		const interval = Math.max(1, Math.floor(state.interval) || 1);
+		switch (state.unit) {
+			case "day":
+				return { unit: "day", interval };
+			case "week":
+				return { unit: "week", interval, weekday: state.weekWeekday };
+			case "year":
+				return { unit: "year", interval };
+			case "month":
+				if (state.monthMode === "weekday") {
+					return { unit: "month", interval, ordinal: state.ordinal, weekday: state.monthWeekday };
+				}
+				return { unit: "month", interval, dayOfMonth: state.dayOfMonth ?? dueDay() };
+		}
+	};
+
+	const emit = (): void => onChange(state.enabled ? recurrenceToText(buildRule()) : null);
+
+	new Setting(contentEl).setName("Repeat").addToggle((toggle) => {
+		toggle.setValue(state.enabled).onChange((v) => {
+			state.enabled = v;
+			renderSub();
+			emit();
+		});
+	});
+
+	const sub = contentEl.createDiv({ cls: "tasks-recur-fields" });
+
+	function renderSub(): void {
+		sub.empty();
+		if (!state.enabled) return;
+
+		new Setting(sub)
+			.setName("Every")
+			.addText((text) => {
+				text.inputEl.type = "number";
+				text.inputEl.min = "1";
+				text.inputEl.addClass("tasks-recur-interval");
+				text.setValue(String(state.interval));
+				text.onChange((v) => {
+					state.interval = Math.max(1, parseInt(v, 10) || 1);
+					emit();
+				});
+			})
+			.addDropdown((dd) => {
+				dd.addOption("day", "day(s)");
+				dd.addOption("week", "week(s)");
+				dd.addOption("month", "month(s)");
+				dd.addOption("year", "year(s)");
+				dd.setValue(state.unit);
+				dd.onChange((v) => {
+					state.unit = v as RecurrenceRule["unit"];
+					renderSub();
+					emit();
+				});
+			});
+
+		if (state.unit === "week") {
+			new Setting(sub).setName("On day").addDropdown((dd) => {
+				dd.addOption("any", "Any day");
+				WEEKDAY_LABELS.forEach((label, i) => dd.addOption(String(i), label));
+				dd.setValue(state.weekWeekday == null ? "any" : String(state.weekWeekday));
+				dd.onChange((v) => {
+					state.weekWeekday = v === "any" ? null : parseInt(v, 10);
+					emit();
+				});
+			});
+		}
+
+		if (state.unit === "month") {
+			new Setting(sub).setName("On").addDropdown((dd) => {
+				dd.addOption("dom", "A day of the month");
+				dd.addOption("weekday", "A weekday of the month");
+				dd.setValue(state.monthMode);
+				dd.onChange((v) => {
+					state.monthMode = v as "dom" | "weekday";
+					renderSub();
+					emit();
+				});
+			});
+
+			if (state.monthMode === "dom") {
+				new Setting(sub).setName("Day of month").addText((text) => {
+					text.inputEl.type = "number";
+					text.inputEl.min = "1";
+					text.inputEl.max = "31";
+					text.setValue(String(state.dayOfMonth ?? dueDay()));
+					text.onChange((v) => {
+						const n = parseInt(v, 10);
+						state.dayOfMonth = Number.isFinite(n) ? Math.min(31, Math.max(1, n)) : null;
+						emit();
+					});
+				});
+			} else {
+				new Setting(sub)
+					.setName("Weekday")
+					.addDropdown((dd) => {
+						dd.addOption("1", "1st");
+						dd.addOption("2", "2nd");
+						dd.addOption("3", "3rd");
+						dd.addOption("4", "4th");
+						dd.addOption("-1", "last");
+						dd.setValue(String(state.ordinal));
+						dd.onChange((v) => {
+							state.ordinal = parseInt(v, 10);
+							emit();
+						});
+					})
+					.addDropdown((dd) => {
+						WEEKDAY_LABELS.forEach((label, i) => dd.addOption(String(i), label));
+						dd.setValue(String(state.monthWeekday));
+						dd.onChange((v) => {
+							state.monthWeekday = parseInt(v, 10);
+							emit();
+						});
+					});
+			}
+		}
+	}
+
+	renderSub();
+}
+
 /* ------------------------------------------------------------------ */
 /* Add / edit modal                                                    */
 /* ------------------------------------------------------------------ */
@@ -856,6 +1069,7 @@ class TaskFormModal extends Modal {
 	private tag = "";
 	private due: string | null = null;
 	private priority: Priority = "normal";
+	private recurrence: string | null = null;
 
 	constructor(
 		view: TasksView,
@@ -877,6 +1091,7 @@ class TaskFormModal extends Modal {
 			this.tag = initial.tags[0] ?? "";
 			this.due = initial.due;
 			this.priority = initial.priority;
+			this.recurrence = initial.recurrence ?? null;
 		} else if (prefillTag) {
 			// Adding from a section's "+": start with that category's tag.
 			this.tag = prefillTag;
@@ -963,6 +1178,13 @@ class TaskFormModal extends Modal {
 			dd.onChange((v) => (this.priority = v === "none" ? "normal" : (v as Priority)));
 		});
 
+		buildRecurrenceSetting(
+			contentEl,
+			this.recurrence,
+			() => this.due,
+			(rule) => (this.recurrence = rule)
+		);
+
 		new Setting(contentEl).addButton((btn) =>
 			btn
 				.setButtonText(this.initial ? "Save" : "Add task")
@@ -985,6 +1207,7 @@ class TaskFormModal extends Modal {
 			tags: tag ? [tag] : [],
 			due: this.due,
 			priority: this.priority,
+			recurrence: this.recurrence,
 		};
 		this.close();
 		await this.onSubmit(input);
@@ -1007,6 +1230,7 @@ class TaskDetailModal extends Modal {
 	private tag: string;
 	private due: string | null;
 	private priority: Priority;
+	private recurrence: string | null;
 	private notes: string;
 
 	constructor(view: TasksView, task: Task) {
@@ -1017,6 +1241,7 @@ class TaskDetailModal extends Modal {
 		this.tag = task.tags[0] ?? "";
 		this.due = task.due;
 		this.priority = task.priority;
+		this.recurrence = task.recurrence;
 		this.notes = task.notes;
 	}
 
@@ -1093,6 +1318,13 @@ class TaskDetailModal extends Modal {
 			dd.onChange((v) => (this.priority = v === "none" ? "normal" : (v as Priority)));
 		});
 
+		buildRecurrenceSetting(
+			contentEl,
+			this.recurrence,
+			() => this.due,
+			(rule) => (this.recurrence = rule)
+		);
+
 		// Notes
 		contentEl.createEl("div", { cls: "tasks-detail-label", text: "Notes" });
 		const notesArea = contentEl.createEl("textarea", { cls: "tasks-notes-input" });
@@ -1158,7 +1390,13 @@ class TaskDetailModal extends Modal {
 		this.close();
 		await this.view.saveTaskDetail(
 			this.task,
-			{ description, tags: tag ? [tag] : [], due: this.due, priority: this.priority },
+			{
+				description,
+				tags: tag ? [tag] : [],
+				due: this.due,
+				priority: this.priority,
+				recurrence: this.recurrence,
+			},
 			this.notes
 		);
 	}

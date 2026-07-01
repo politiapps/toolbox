@@ -8,6 +8,7 @@ this format lives in `src/taskParser.ts` and nowhere else.
 ```
 - [ ] Description #tag 📅 YYYY-MM-DD
 - [ ] Description #tag 📅 YYYY-MM-DD ⏫
+- [ ] Description #tag 📅 YYYY-MM-DD 🔁 every week
 - [x] Description #tag 📅 YYYY-MM-DD ✅ YYYY-MM-DD
 ```
 
@@ -28,6 +29,7 @@ A task line is any list item matching:
 |--------------|--------------------|-------------------------------------------|
 | `#tag`       | Tag (zero or more) | `#[A-Za-z0-9_\-/]*[A-Za-z_\-/][A-Za-z0-9_\-/]*` |
 | `📅 DATE`    | Due date           | `📅 YYYY-MM-DD`                           |
+| `🔁 RULE`    | Recurrence         | `🔁 <rule text>` (see below)             |
 | `✅ DATE`    | Completion date    | `✅ YYYY-MM-DD` (only on completed tasks) |
 | `🔺`         | Highest priority   | —                                         |
 | `⏫`         | High priority      | —                                         |
@@ -47,10 +49,11 @@ off-by-one errors.
 `serializeTask()` always emits tokens in this order:
 
 ```
-<indent>- [ |x] <description> <#tags…> <📅 due> <priority> <✅ done>
+<indent>- [ |x] <description> <#tags…> <📅 due> <priority> <🔁 recurrence> <✅ done>
 ```
 
 - `<priority>` is omitted entirely for normal priority.
+- `<🔁 recurrence>` is omitted when the task is not recurring.
 - `<✅ done>` is only emitted when the task is completed and has a done date.
 - A task read from the file and re-serialised may have its tokens reordered into
   this canonical order, but its meaning is preserved.
@@ -59,6 +62,38 @@ off-by-one errors.
 
 The description is the body with all tags, dates, and priority emoji stripped
 out and internal whitespace collapsed. It may contain any other text.
+
+## Recurrence (🔁)
+
+Recurrence uses the official Obsidian Tasks `🔁` signifier so the same file
+round-trips through both plugins. The rule text after `🔁` is stored verbatim by
+`taskParser.ts`; its grammar and the next-occurrence date math live in
+`src/recurrence.ts` (the only place recurrence rules are interpreted).
+
+Canonical rule strings the UI produces (all parse in the official Tasks plugin):
+
+```
+every day                    every N days
+every week                   every N weeks
+every <Weekday>              every N weeks on <Weekday>
+every month on the <Nth>     every N months on the <Nth>       (day of month)
+every month on the <ord> <Weekday>                             (ord = 1st–4th | last)
+every month on the last                                        (last day of month)
+every year                   every N years
+```
+
+Behaviour:
+
+- **Next occurrence is computed from the task's due date, not the completion
+  date.** e.g. due the 5th + `every 2 weeks` → next due the 19th, whenever it is
+  actually ticked off. A recurring task therefore needs a `📅` due date to
+  advance; without one it just completes.
+- Completing a recurring task inserts a fresh incomplete copy (with the next due
+  date) directly **above** the now-completed line, which keeps its `🔁` and gains
+  `✅ today`. Only that single line recurs — subtasks are not copied.
+- Day-of-month and Feb-29 overflows **clamp** to the target month's last valid
+  day (e.g. the 31st recurs to the 30th in a 30-day month) rather than skipping
+  the month as strict rrule would.
 
 ## Subtasks and notes
 

@@ -95,3 +95,19 @@ Add a note here whenever a non-obvious API behaviour bites you.
 - Parse `YYYY-MM-DD` with `new Date(y, m-1, d)` (local) — `new Date('YYYY-MM-DD')`
   parses as UTC midnight and can render the previous day in negative-offset
   timezones.
+- **Month/weekday arithmetic via `Date` overflow, not manual math.** `new Date(y,
+  monthIndex + n, 1)` rolls the year correctly for "advance n months"; `new
+  Date(y, month, 0).getDate()` gives the days-in-month (day 0 of the next month).
+  `recurrence.ts` uses these for next-occurrence dates and clamps day-of-month /
+  Feb-29 overflow to the target month's last valid day (a deliberate deviation
+  from strict rrule, which would skip a month lacking that day).
+
+## Recurrence (🔁)
+- Stored as the official Obsidian Tasks signifier so the same file round-trips
+  through both plugins: `🔁 every month on the 1st`, `🔁 every 2 weeks`, etc.
+- The next occurrence is computed from the task's **due date**, not the
+  completion date. Completing a recurring task inserts a fresh incomplete copy
+  (new due date) directly above the now-completed line via
+  `insertTaskLineBefore` — mirroring Tasks' per-line model. Only the single line
+  recurs; subtasks are not copied. A recurring task with no due date can't
+  advance, so it just completes normally.
