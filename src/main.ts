@@ -47,6 +47,8 @@ export default class TasksPlugin extends Plugin {
 	calendarFeeds: string[] = [];
 	/** Non-null when the last fetch failed — surfaced in the panel. */
 	calendarError: string | null = null;
+	/** Epoch ms of the last calendar fetch (throttles the on-focus refresh). */
+	lastCalendarFetch = 0;
 
 	/** Compute today's merged, de-duplicated events for the *current* date. */
 	getTodayEvents(): CalendarOccurrence[] {
@@ -100,6 +102,14 @@ export default class TasksPlugin extends Plugin {
 		// Calendar: fetch now and on a timer. registerInterval ensures cleanup.
 		this.fetchCalendar();
 		this.registerInterval(window.setInterval(() => this.fetchCalendar(), CALENDAR_REFRESH_MS));
+
+		// When you return to Obsidian (e.g. after the machine slept overnight),
+		// re-derive today's events for the current date immediately — no restart —
+		// and re-fetch if the cached feeds are stale.
+		this.registerDomEvent(window, "focus", () => {
+			this.refreshViews();
+			if (Date.now() - this.lastCalendarFetch > 5 * 60 * 1000) this.fetchCalendar();
+		});
 
 		// Editable Columns: register the (initially empty) editor-extension slot,
 		// then fill it if the feature is enabled. registerEditorExtension is
@@ -247,6 +257,7 @@ export default class TasksPlugin extends Plugin {
 	 * feeds load, we show what we have rather than nag about a partial failure.
 	 */
 	async fetchCalendar(): Promise<void> {
+		this.lastCalendarFetch = Date.now();
 		const urls = this.settings.calendars
 			.map((c) => c.url.trim())
 			.filter((u) => u.length > 0)
