@@ -1191,6 +1191,97 @@
 	border-color: var(--interactive-accent);
 }
 
+/* Week view: shifts grouped under a per-day header with its own total. */
+.timesheet-day-group {
+	margin-top: 12px;
+}
+
+.timesheet-day-group:first-of-type {
+	margin-top: 4px;
+}
+
+.timesheet-day-grouphead {
+	display: flex;
+	align-items: baseline;
+	gap: 8px;
+	padding: 0 4px 4px;
+	margin-bottom: 2px;
+	border-bottom: 1px solid var(--background-modifier-border);
+}
+
+.timesheet-day-grouplabel {
+	font-size: 0.78rem;
+	font-weight: 600;
+	color: var(--text-normal);
+}
+
+.timesheet-day-grouplabel.is-today {
+	color: var(--text-accent);
+}
+
+.timesheet-day-badge {
+	font-family: var(--font-monospace);
+	font-size: 0.56rem;
+	font-weight: 600;
+	letter-spacing: 0.1em;
+	text-transform: uppercase;
+	color: var(--text-on-accent);
+	background-color: var(--interactive-accent);
+	border-radius: 4px;
+	padding: 1px 5px;
+}
+
+.timesheet-day-grouptotal {
+	margin-left: auto;
+	font-family: var(--font-monospace);
+	font-size: 0.72rem;
+	font-variant-numeric: tabular-nums;
+	color: var(--text-muted);
+}
+
+/* Since-last-invoice accrual: per-org uninvoiced earnings. */
+.timesheet-inv-list {
+	display: flex;
+	flex-direction: column;
+	gap: 2px;
+}
+
+.timesheet-inv-row {
+	display: grid;
+	grid-template-columns: 8px 1fr auto;
+	gap: 8px;
+	align-items: center;
+	padding: 5px 2px;
+}
+
+.timesheet-inv-main {
+	min-width: 0;
+	display: flex;
+	flex-direction: column;
+	gap: 1px;
+}
+
+.timesheet-inv-org {
+	font-size: 0.86rem;
+	font-weight: 600;
+	color: var(--text-normal);
+}
+
+.timesheet-inv-since {
+	font-family: var(--font-monospace);
+	font-size: 0.68rem;
+	font-variant-numeric: tabular-nums;
+	color: var(--text-faint);
+}
+
+.timesheet-inv-amount {
+	font-family: var(--font-monospace);
+	font-size: 0.9rem;
+	font-weight: 700;
+	font-variant-numeric: tabular-nums;
+	color: var(--color-green, #22c55e);
+}
+
 .timesheet-empty {
 	color: var(--text-faint);
 	font-size: 0.8rem;

@@ -24,23 +24,29 @@ A sidebar panel for tracking work sessions with a running timer.
 Click the **+** button in the header to manually add an entry with times and
 breaks. Useful for backfilling or corrections.
 
-### Today's entries
+### Week view (shifts)
 
-Shows all entries for the current day with:
-- Colour-coded org dot
-- Time range and total hours
-- Indented break lines
-- Edit and delete actions (revealed on hover)
+Shows every shift in the selected week, grouped under a per-day header (with
+that day's total). Each shift row has its time range, total hours, break lines,
+and edit/delete actions (revealed on hover). Today's group is badged.
 
-### Weekly summary
+The `‹ ›` arrows at the top of this card **step through weeks**; a **This week**
+button jumps back to the current week. The whole panel (this list plus the
+Summary and Since-last-invoice sections) follows the selected week, so any past
+week's shifts are reachable and editable.
 
-Groups all entries from Monday–Sunday of the current week by organisation.
-Each org row shows:
-- Total hours worked
-- Fractional days (1 day = 7 hours)
-- Estimated earnings (rate × hours)
+### Summary
 
-Grand total and total earnings at the bottom.
+Groups the selected week's entries (Monday–Sunday) by organisation. Each org row
+shows total hours, fractional days (1 day = 7 hours), and estimated earnings
+(rate × hours), with a proportion bar for the split and a grand total.
+
+### Since last invoice
+
+Per-org **uninvoiced earnings** — hours tracked since each org's last invoice
+(entries on or before `lastInvoiceDate` are treated as billed), multiplied by the
+org's rate, with the accrual period and a total outstanding. Only orgs with an
+hourly rate appear. This is independent of the week navigation.
 
 ## File format
 

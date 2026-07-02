@@ -53,37 +53,6 @@ function formatDateISO(d: Date): string {
 	return `${y}-${m}-${day}`;
 }
 
-function ordinalSuffix(n: number): string {
-	const v = n % 100;
-	if (v >= 11 && v <= 13) return "th";
-	switch (n % 10) {
-		case 1: return "st";
-		case 2: return "nd";
-		case 3: return "rd";
-		default: return "th";
-	}
-}
-
-function formatDayDisplay(iso: string): string {
-	const [y, m, d] = iso.split("-").map(Number);
-	const date = new Date(y, m - 1, d);
-	const weekday = date.toLocaleDateString(undefined, { weekday: "short" });
-	return `${weekday} ${d}${ordinalSuffix(d)}`;
-}
-
-/** Relative day label: Today / Yesterday / Tomorrow, else the weekday name. */
-function dayTitle(iso: string): string {
-	const [ty, tm, td] = todayISO().split("-").map(Number);
-	const [y, m, d] = iso.split("-").map(Number);
-	const diff = Math.round(
-		(new Date(y, m - 1, d).getTime() - new Date(ty, tm - 1, td).getTime()) / 86_400_000,
-	);
-	if (diff === 0) return "Today";
-	if (diff === -1) return "Yesterday";
-	if (diff === 1) return "Tomorrow";
-	return new Date(y, m - 1, d).toLocaleDateString(undefined, { weekday: "long" });
-}
-
 /** Compact full day label that stays unambiguous across months, e.g. "Wed 1 Jul". */
 function formatDayFull(iso: string): string {
 	const [y, m, d] = iso.split("-").map(Number);
@@ -93,17 +62,31 @@ function formatDayFull(iso: string): string {
 	return `${weekday} ${d} ${month}`;
 }
 
-function getWeekBounds(): { start: Date; end: Date } {
-	const now = new Date();
-	const day = now.getDay();
+/** Monday–Sunday bounds of the week containing the given ISO date. */
+function weekBoundsOf(iso: string): { start: Date; end: Date } {
+	const [y, m, d] = iso.split("-").map(Number);
+	const base = new Date(y, m - 1, d);
+	const day = base.getDay();
 	const diffToMon = day === 0 ? 6 : day - 1;
-	const monday = new Date(now);
-	monday.setDate(now.getDate() - diffToMon);
+	const monday = new Date(base);
+	monday.setDate(base.getDate() - diffToMon);
 	monday.setHours(0, 0, 0, 0);
 	const sunday = new Date(monday);
 	sunday.setDate(monday.getDate() + 6);
 	sunday.setHours(23, 59, 59, 999);
 	return { start: monday, end: sunday };
+}
+
+/** Compact single date, e.g. "30 Jun". */
+function formatShort(iso: string): string {
+	const [y, m, d] = iso.split("-").map(Number);
+	const month = new Date(y, m - 1, d).toLocaleDateString(undefined, { month: "short" });
+	return `${d} ${month}`;
+}
+
+/** Compact date range, e.g. "30 Jun – 6 Jul". */
+function formatRange(startISO: string, endISO: string): string {
+	return `${formatShort(startISO)} – ${formatShort(endISO)}`;
 }
 
 function isInWeek(iso: string, weekStart: Date, weekEnd: Date): boolean {
@@ -204,8 +187,9 @@ export class TimesheetView extends ItemView {
 
 		this.renderHeader(root);
 		this.renderTimer(root);
-		this.renderDayEntries(root, parsed);
+		this.renderWeekEntries(root, parsed);
 		this.renderWeekSummary(root, parsed);
+		this.renderUninvoiced(root, parsed);
 
 		// Start timer tick if timer is active
 		if (this.plugin.settings.activeTimer) {
@@ -415,67 +399,89 @@ export class TimesheetView extends ItemView {
 		}
 	}
 
-	private renderDayEntries(root: HTMLElement, parsed: ReturnType<typeof parseTimesheet>): void {
-		const day = this.viewedDate;
-		const isToday = day === todayISO();
-		const dayEntries = parsed.days.filter((d) => d.date === day).flatMap((d) => d.entries);
+	private renderWeekEntries(root: HTMLElement, parsed: ReturnType<typeof parseTimesheet>): void {
+		const { start, end } = weekBoundsOf(this.viewedDate);
+		const startISO = formatDateISO(start);
+		const endISO = formatDateISO(end);
+		const isThisWeek = isInWeek(todayISO(), start, end);
 
 		const section = root.createDiv({ cls: "timesheet-section" });
 		const header = section.createDiv({ cls: "timesheet-section-header timesheet-day-header" });
 
-		// Day navigation — step back/forward through days so any day is reachable.
+		// Week navigation — step back/forward a week at a time.
 		const prevBtn = header.createEl("button", { cls: "timesheet-day-nav" });
 		setIcon(prevBtn, "chevron-left");
-		prevBtn.setAttr("aria-label", "Previous day");
-		prevBtn.addEventListener("click", () => this.shiftDay(-1));
+		prevBtn.setAttr("aria-label", "Previous week");
+		prevBtn.addEventListener("click", () => this.shiftWeek(-1));
 
 		const titleWrap = header.createDiv({ cls: "timesheet-day-titlewrap" });
-		titleWrap.createSpan({ cls: "timesheet-section-title", text: dayTitle(day) });
-		titleWrap.createSpan({ cls: "timesheet-section-date", text: formatDayFull(day) });
+		titleWrap.createSpan({
+			cls: "timesheet-section-title",
+			text: isThisWeek ? "This week" : "Week",
+		});
+		titleWrap.createSpan({ cls: "timesheet-section-date", text: formatRange(startISO, endISO) });
 
 		const nextBtn = header.createEl("button", { cls: "timesheet-day-nav" });
 		setIcon(nextBtn, "chevron-right");
-		nextBtn.setAttr("aria-label", "Next day");
-		nextBtn.addEventListener("click", () => this.shiftDay(1));
+		nextBtn.setAttr("aria-label", "Next week");
+		nextBtn.addEventListener("click", () => this.shiftWeek(1));
 
-		if (!isToday) {
-			const todayBtn = header.createEl("button", { cls: "timesheet-day-today", text: "Today" });
-			todayBtn.setAttr("aria-label", "Jump to today");
+		if (!isThisWeek) {
+			const todayBtn = header.createEl("button", { cls: "timesheet-day-today", text: "This week" });
+			todayBtn.setAttr("aria-label", "Jump to this week");
 			todayBtn.addEventListener("click", () => {
 				this.viewedDate = todayISO();
 				this.refresh();
 			});
 		}
 
-		if (dayEntries.length === 0) {
-			section.createDiv({
-				cls: "timesheet-empty",
-				text: isToday ? "No entries yet today." : "No entries on this day.",
-			});
+		// Days in this week that have shifts, earliest first.
+		const days = parsed.days
+			.filter((d) => d.entries.length > 0 && isInWeek(d.date, start, end))
+			.sort((a, b) => a.date.localeCompare(b.date));
+
+		if (days.length === 0) {
+			section.createDiv({ cls: "timesheet-empty", text: "No shifts this week." });
 			return;
 		}
 
-		const list = section.createDiv({ cls: "timesheet-entry-list" });
-		let dayTotal = 0;
-		for (const entry of dayEntries) {
-			const mins = entryWorkMinutes(entry);
-			dayTotal += mins;
-			this.renderEntryRow(list, entry, parsed.lines, mins);
+		let weekTotal = 0;
+		for (const day of days) {
+			const group = section.createDiv({ cls: "timesheet-day-group" });
+			const head = group.createDiv({ cls: "timesheet-day-grouphead" });
+			const label = head.createSpan({
+				cls: "timesheet-day-grouplabel",
+				text: formatDayFull(day.date),
+			});
+			if (day.date === todayISO()) {
+				label.addClass("is-today");
+				head.createSpan({ cls: "timesheet-day-badge", text: "Today" });
+			}
+
+			const list = group.createDiv({ cls: "timesheet-entry-list" });
+			let dayTotal = 0;
+			for (const entry of day.entries) {
+				const mins = entryWorkMinutes(entry);
+				dayTotal += mins;
+				weekTotal += mins;
+				this.renderEntryRow(list, entry, parsed.lines, mins);
+			}
+			head.createSpan({ cls: "timesheet-day-grouptotal", text: formatMinutes(dayTotal) });
 		}
 
 		const totalRow = section.createDiv({ cls: "timesheet-total-row" });
-		totalRow.createSpan({ text: "Total" });
+		totalRow.createSpan({ text: "Week total" });
 		totalRow.createSpan({
 			cls: "timesheet-total-value",
-			text: `${formatMinutes(dayTotal)} (${minutesToDays(dayTotal)})`,
+			text: `${formatMinutes(weekTotal)} (${minutesToDays(weekTotal)})`,
 		});
 	}
 
-	/** Move the viewed day by `delta` days and re-render. */
-	private shiftDay(delta: number): void {
+	/** Move the viewed week by `delta` weeks and re-render. */
+	private shiftWeek(delta: number): void {
 		const [y, m, d] = this.viewedDate.split("-").map(Number);
 		const dt = new Date(y, m - 1, d);
-		dt.setDate(dt.getDate() + delta);
+		dt.setDate(dt.getDate() + delta * 7);
 		this.viewedDate = formatDateISO(dt);
 		this.refresh();
 	}
@@ -530,16 +536,16 @@ export class TimesheetView extends ItemView {
 		root: HTMLElement,
 		parsed: ReturnType<typeof parseTimesheet>,
 	): void {
-		const { start, end } = getWeekBounds();
+		const { start, end } = weekBoundsOf(this.viewedDate);
 		const weekDays = parsed.days.filter((d) => isInWeek(d.date, start, end));
 		const weekEntries = weekDays.flatMap((d) => d.entries);
 
 		const section = root.createDiv({ cls: "timesheet-section" });
 		const header = section.createDiv({ cls: "timesheet-section-header" });
-		header.createSpan({ cls: "timesheet-section-title", text: "This Week" });
+		header.createSpan({ cls: "timesheet-section-title", text: "Summary" });
 		header.createSpan({
 			cls: "timesheet-section-date",
-			text: `${formatDayDisplay(formatDateISO(start))} – ${formatDayDisplay(formatDateISO(end))}`,
+			text: formatRange(formatDateISO(start), formatDateISO(end)),
 		});
 
 		if (weekEntries.length === 0) {
@@ -623,6 +629,63 @@ export class TimesheetView extends ItemView {
 			earnRow.createSpan({ cls: "timesheet-week-org", text: "Earnings" });
 			earnRow.createSpan({ cls: "timesheet-week-earnings", text: `$${totalEarnings.toFixed(2)}` });
 		}
+	}
+
+	/**
+	 * Per-org earnings accrued since each org's last invoice — i.e. work that is
+	 * tracked but not yet billed. Uses the org's `lastInvoiceDate` (entries on or
+	 * before it are treated as invoiced, matching the invoice generator).
+	 */
+	private renderUninvoiced(root: HTMLElement, parsed: ReturnType<typeof parseTimesheet>): void {
+		const orgs = this.plugin.settings.timesheetOrgs.filter((o) => o.rate > 0);
+		if (orgs.length === 0) return;
+
+		const section = root.createDiv({ cls: "timesheet-section" });
+		const header = section.createDiv({ cls: "timesheet-section-header" });
+		header.createSpan({ cls: "timesheet-section-title", text: "Since last invoice" });
+
+		const rows: { org: TimesheetOrg; mins: number; since: string | null }[] = [];
+		for (const org of orgs) {
+			const since = org.lastInvoiceDate || null;
+			let mins = 0;
+			for (const day of parsed.days) {
+				if (since && day.date <= since) continue;
+				for (const e of day.entries) {
+					if (e.org === org.name) mins += entryWorkMinutes(e);
+				}
+			}
+			if (mins > 0) rows.push({ org, mins, since });
+		}
+
+		if (rows.length === 0) {
+			section.createDiv({ cls: "timesheet-empty", text: "All caught up — nothing uninvoiced." });
+			return;
+		}
+
+		const list = section.createDiv({ cls: "timesheet-inv-list" });
+		let totalOutstanding = 0;
+		for (const r of rows) {
+			const earnings = (r.mins / 60) * r.org.rate;
+			totalOutstanding += earnings;
+
+			const row = list.createDiv({ cls: "timesheet-inv-row" });
+			if (r.org.colour) row.style.setProperty("--org-colour", r.org.colour);
+			row.createSpan({ cls: "timesheet-week-dot" });
+
+			const main = row.createDiv({ cls: "timesheet-inv-main" });
+			main.createSpan({ cls: "timesheet-inv-org", text: r.org.name });
+			const since = r.since ? `since ${formatShort(r.since)}` : "not yet invoiced";
+			main.createSpan({
+				cls: "timesheet-inv-since",
+				text: `${since} · ${formatMinutes(r.mins)}`,
+			});
+
+			row.createSpan({ cls: "timesheet-inv-amount", text: `$${earnings.toFixed(2)}` });
+		}
+
+		const totalRow = section.createDiv({ cls: "timesheet-total-row" });
+		totalRow.createSpan({ text: "Total outstanding" });
+		totalRow.createSpan({ cls: "timesheet-total-value", text: `$${totalOutstanding.toFixed(2)}` });
 	}
 
 	/** Look up an org's colour by name, return a hex or null. */
