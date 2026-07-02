@@ -77,6 +77,17 @@ function weekBoundsOf(iso: string): { start: Date; end: Date } {
 	return { start: monday, end: sunday };
 }
 
+/** Full readable date, e.g. "Wednesday 2 July 2026". */
+function formatNiceDate(iso: string): string {
+	const [y, m, d] = iso.split("-").map(Number);
+	return new Date(y, m - 1, d).toLocaleDateString(undefined, {
+		weekday: "long",
+		day: "numeric",
+		month: "long",
+		year: "numeric",
+	});
+}
+
 /** Compact single date, e.g. "30 Jun". */
 function formatShort(iso: string): string {
 	const [y, m, d] = iso.split("-").map(Number);
@@ -959,13 +970,34 @@ class TimesheetEntryModal extends Modal {
 			dd.onChange((v) => (this.org = v));
 		});
 
-		// Date
-		new Setting(contentEl).setName("Date").addText((text) => {
-			text.setValue(this.date);
-			text.inputEl.type = "date";
-			text.onChange((v) => {
-				if (v) this.date = v;
-			});
+		// Date — a tactile chip that opens the OS calendar on click and shows the
+		// day in plain language rather than a raw YYYY-MM-DD value.
+		contentEl.createEl("div", { cls: "timesheet-form-label", text: "Date" });
+		const dateField = contentEl.createDiv({ cls: "timesheet-date-field" });
+		setIcon(dateField.createSpan({ cls: "timesheet-date-icon" }), "calendar");
+		const dateDisplay = dateField.createSpan({ cls: "timesheet-date-display" });
+		dateField.createSpan({ cls: "timesheet-date-caret" });
+		setIcon(dateField.querySelector<HTMLElement>(".timesheet-date-caret")!, "chevron-down");
+		const dateInput = dateField.createEl("input", { cls: "timesheet-date-input", type: "date" });
+		dateInput.value = this.date;
+		const syncDate = (): void => {
+			dateDisplay.textContent = formatNiceDate(this.date);
+		};
+		syncDate();
+		const openPicker = (): void => {
+			const picker = dateInput as unknown as { showPicker?: () => void };
+			try {
+				picker.showPicker?.();
+			} catch (_) {
+				/* not user-activated or unsupported — the field is still typable */
+			}
+		};
+		dateField.addEventListener("click", openPicker);
+		dateInput.addEventListener("change", () => {
+			if (dateInput.value) {
+				this.date = dateInput.value;
+				syncDate();
+			}
 		});
 
 		// Start time
