@@ -442,6 +442,7 @@ export class TimesheetView extends ItemView {
 
 		if (days.length === 0) {
 			section.createDiv({ cls: "timesheet-empty", text: "No shifts this week." });
+			this.appendAddShift(section);
 			return;
 		}
 
@@ -467,6 +468,12 @@ export class TimesheetView extends ItemView {
 				this.renderEntryRow(list, entry, parsed.lines, mins);
 			}
 			head.createSpan({ cls: "timesheet-day-grouptotal", text: formatMinutes(dayTotal) });
+
+			// Per-day quick add (revealed on hover) — logs a shift on this exact day.
+			const addDayBtn = head.createEl("button", { cls: "timesheet-day-addshift" });
+			setIcon(addDayBtn, "plus");
+			addDayBtn.setAttr("aria-label", `Add a shift on ${formatDayFull(day.date)}`);
+			addDayBtn.addEventListener("click", () => this.openAddForm(day.date));
 		}
 
 		const totalRow = section.createDiv({ cls: "timesheet-total-row" });
@@ -475,6 +482,8 @@ export class TimesheetView extends ItemView {
 			cls: "timesheet-total-value",
 			text: `${formatMinutes(weekTotal)} (${minutesToDays(weekTotal)})`,
 		});
+
+		this.appendAddShift(section);
 	}
 
 	/** Move the viewed week by `delta` weeks and re-render. */
@@ -783,7 +792,7 @@ export class TimesheetView extends ItemView {
 
 	/* --------------------------- Add / Edit forms ---------------------- */
 
-	private openAddForm(): void {
+	private openAddForm(defaultDate?: string): void {
 		if (this.plugin.settings.timesheetOrgs.length === 0) {
 			new Notice("Add an organisation in settings first.");
 			return;
@@ -806,8 +815,14 @@ export class TimesheetView extends ItemView {
 					new Notice("Couldn't save timesheet entry.");
 				}
 			},
-			this.viewedDate,
+			defaultDate ?? this.viewedDate,
 		).open();
+	}
+
+	/** Append a dashed "+ Add shift" button that opens the manual entry form. */
+	private appendAddShift(section: HTMLElement, defaultDate?: string): void {
+		const btn = section.createEl("button", { cls: "timesheet-add-shift", text: "+ Add shift" });
+		btn.addEventListener("click", () => this.openAddForm(defaultDate));
 	}
 
 	private openEditForm(entry: TimesheetEntry, lines: string[]): void {

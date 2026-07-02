@@ -1239,6 +1239,59 @@
 	color: var(--text-muted);
 }
 
+/* Per-day quick add, revealed on hovering the day group. */
+.timesheet-day-addshift {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	align-self: center;
+	width: 20px;
+	height: 20px;
+	padding: 0;
+	background: transparent;
+	border: none;
+	box-shadow: none;
+	border-radius: 4px;
+	color: var(--text-faint);
+	cursor: pointer;
+	opacity: 0;
+	transition: opacity 0.1s ease, color 0.1s ease, background-color 0.1s ease;
+}
+
+.timesheet-day-group:hover .timesheet-day-addshift {
+	opacity: 1;
+}
+
+.timesheet-day-addshift:hover {
+	color: var(--text-on-accent);
+	background-color: var(--interactive-accent);
+}
+
+.timesheet-day-addshift svg {
+	width: 13px;
+	height: 13px;
+}
+
+/* Always-visible manual add at the bottom of the week card. */
+.timesheet-add-shift {
+	display: inline-flex;
+	align-items: center;
+	margin-top: 10px;
+	padding: 5px 12px;
+	font-size: 0.8rem;
+	font-weight: 600;
+	cursor: pointer;
+	border: 1px dashed var(--background-modifier-border);
+	border-radius: 6px;
+	background: transparent;
+	color: var(--text-muted);
+}
+
+.timesheet-add-shift:hover {
+	color: var(--text-normal);
+	border-color: var(--interactive-accent);
+}
+
 /* Since-last-invoice accrual: per-org uninvoiced earnings. */
 .timesheet-inv-list {
 	display: flex;

@@ -21,8 +21,13 @@ A sidebar panel for tracking work sessions with a running timer.
 
 ### Manual entry
 
-Click the **+** button in the header to manually add an entry with times and
-breaks. Useful for backfilling or corrections.
+You don't have to use the timer. Add a shift by hand from any of:
+- the **+** in the panel header,
+- the **+ Add shift** button at the bottom of the week card, or
+- the per-day **+** revealed when you hover a day group (pre-fills that day).
+
+The form takes the organisation, date, start/end times, and any number of
+**breaks** (each with its own start/end). Useful for backfilling or corrections.
 
 ### Week view (shifts)
 
