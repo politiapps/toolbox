@@ -39,10 +39,20 @@ const CALENDAR_REFRESH_MS = 30 * 60 * 1000;
 export default class TasksPlugin extends Plugin {
 	settings!: TasksPluginSettings;
 
-	/** Today's calendar events (cached; refreshed on a timer). */
-	calendarEvents: CalendarOccurrence[] = [];
+	/**
+	 * Raw text of every successfully-fetched feed (refreshed on a timer). Today's
+	 * events are computed from these at *render* time via `getTodayEvents()`, so a
+	 * long-running session never shows a stale day's events.
+	 */
+	calendarFeeds: string[] = [];
 	/** Non-null when the last fetch failed — surfaced in the panel. */
 	calendarError: string | null = null;
+
+	/** Compute today's merged, de-duplicated events for the *current* date. */
+	getTodayEvents(): CalendarOccurrence[] {
+		if (this.calendarFeeds.length === 0) return [];
+		return mergeOccurrences(this.calendarFeeds.map((text) => getEventsForToday(text)));
+	}
 
 	/**
 	 * Live mutable array handed to registerEditorExtension. Toggling the feature
@@ -167,7 +177,7 @@ export default class TasksPlugin extends Plugin {
 	/** Render today's merged events into a single `toolbox-calendar` host element. */
 	private renderCalendarBlock(host: HTMLElement): void {
 		host.empty();
-		renderTodayCalendar(host, this.calendarEvents, this.calendarError);
+		renderTodayCalendar(host, this.getTodayEvents(), this.calendarError);
 	}
 
 	/** Re-render every mounted `toolbox-calendar` block (after a feed refresh). */
@@ -244,7 +254,7 @@ export default class TasksPlugin extends Plugin {
 			.map((u) => u.replace(/^webcal:\/\//i, "https://"));
 
 		if (urls.length === 0) {
-			this.calendarEvents = [];
+			this.calendarFeeds = [];
 			this.calendarError = null;
 			this.refreshViews();
 			return;
@@ -252,16 +262,17 @@ export default class TasksPlugin extends Plugin {
 
 		const results = await Promise.allSettled(urls.map((url) => requestUrl({ url })));
 
-		const lists: CalendarOccurrence[][] = [];
+		const feeds: string[] = [];
 		let anySuccess = false;
 		for (const res of results) {
 			if (res.status === "fulfilled") {
-				lists.push(getEventsForToday(res.value.text));
+				feeds.push(res.value.text);
 				anySuccess = true;
 			}
 		}
 
-		this.calendarEvents = mergeOccurrences(lists);
+		// Cache the raw feeds; occurrences are derived per render for the real day.
+		this.calendarFeeds = feeds;
 		this.calendarError = anySuccess
 			? null
 			: "Couldn't load the calendar. Check the URL(s) in settings.";

@@ -29,6 +29,14 @@ so the constraints live next to the code. Violating any of these is a bug.
 6. **Persist collapse state and recent tags** via `loadData()`/`saveData()`
    (wrapped by `plugin.loadSettings()` / `saveSettings()`).
 
+## Time-relative data
+8. **Compute "today"/"now"-relative data at render, not at fetch.** Cache raw
+   inputs (e.g. the raw `.ics` feed text in `calendarFeeds`), and derive
+   date-dependent views (`getTodayEvents()`) each render against `new Date()`. A
+   long-running session (sleep/wake across midnight) otherwise shows a stale
+   day's data. Occurrences carry no date, so a cached list silently misrepresents
+   the current day.
+
 ## Testing
 7. **Always test in a separate development vault**, never the main vault.
 
