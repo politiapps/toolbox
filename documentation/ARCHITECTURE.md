@@ -104,8 +104,10 @@ manifest.json        Plugin id (`toolbox`) / name (`Toolbox`) / minAppVersion (1
   (same event in multiple shared calendars is dropped once).
 - `parseICS` / `eventsOnDay` are exported for testing. Handles line unfolding,
   timed + all-day events, UTC and floating/TZID times (TZID treated as
-  wall-clock), EXDATE, and common recurrence (DAILY / WEEKLY+BYDAY / MONTHLY /
-  YEARLY with INTERVAL, UNTIL, COUNT). Not full RFC 5545.
+  wall-clock), EXDATE, and common recurrence (DAILY / WEEKLY+BYDAY /
+  MONTHLY+BYDAY nth-weekday e.g. `1TU`=first Tuesday / MONTHLY by day-of-month /
+  YEARLY with INTERVAL, UNTIL, COUNT). Not full RFC 5545 — notably it does not
+  yet honour `RECURRENCE-ID` overrides (a moved occurrence shows at both slots).
 - Fetched and cached by `main.ts` (`fetchCalendar`), rendered by the view.
 
 ### `taskParser.ts`

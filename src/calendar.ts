@@ -23,7 +23,9 @@ type Freq = "DAILY" | "WEEKLY" | "MONTHLY" | "YEARLY";
 interface RRule {
 	freq: Freq;
 	interval: number;
-	byDay?: number[]; // 0=Sun … 6=Sat
+	/** BYDAY entries: weekday 0=Sun…6=Sat, with an optional monthly ordinal
+	 *  (1 = first, -1 = last). Ordinal is null for plain weekdays (e.g. WEEKLY). */
+	byDay?: { day: number; ordinal: number | null }[];
 	until?: Date;
 	count?: number;
 }
@@ -135,8 +137,12 @@ function parseRRule(value: string): RRule | undefined {
 	const rule: RRule = { freq, interval: parts.INTERVAL ? +parts.INTERVAL : 1 };
 	if (parts.BYDAY) {
 		rule.byDay = parts.BYDAY.split(",")
-			.map((d) => WEEKDAY[d.slice(-2)])
-			.filter((n) => n !== undefined);
+			.map((tok) => {
+				const m = tok.match(/^([+-]?\d+)?(SU|MO|TU|WE|TH|FR|SA)$/);
+				if (!m) return null;
+				return { day: WEEKDAY[m[2]], ordinal: m[1] ? parseInt(m[1], 10) : null };
+			})
+			.filter((x): x is { day: number; ordinal: number | null } => x !== null);
 	}
 	if (parts.COUNT) rule.count = +parts.COUNT;
 	if (parts.UNTIL) rule.until = parseDate(parts.UNTIL, {}).date;
@@ -229,17 +235,21 @@ function occursOn(ev: RawEvent, day: Date): boolean {
 			return true;
 		}
 		case "WEEKLY": {
-			const days = r.byDay && r.byDay.length ? r.byDay : [ev.start.getDay()];
+			const days = r.byDay && r.byDay.length ? r.byDay.map((b) => b.day) : [ev.start.getDay()];
 			if (!days.includes(day.getDay())) return false;
 			const weeks = Math.floor(dayDiff(startOfWeek(ev.start), startOfWeek(day)) / 7);
 			return weeks % r.interval === 0;
 		}
 		case "MONTHLY": {
-			if (day.getDate() !== ev.start.getDate()) return false;
-			const months = (day.getFullYear() - ev.start.getFullYear()) * 12 + (day.getMonth() - ev.start.getMonth());
+			const months =
+				(day.getFullYear() - ev.start.getFullYear()) * 12 + (day.getMonth() - ev.start.getMonth());
 			if (months % r.interval !== 0) return false;
 			if (r.count !== undefined && months / r.interval >= r.count) return false;
-			return true;
+			// BYDAY (e.g. 1TU = first Tuesday) takes precedence over day-of-month.
+			if (r.byDay && r.byDay.length) {
+				return r.byDay.some((b) => matchesMonthlyByDay(day, b.day, b.ordinal));
+			}
+			return day.getDate() === ev.start.getDate();
 		}
 		case "YEARLY": {
 			if (day.getMonth() !== ev.start.getMonth() || day.getDate() !== ev.start.getDate()) return false;
@@ -255,6 +265,26 @@ function startOfWeek(d: Date): Date {
 	const s = startOfDay(d);
 	s.setDate(s.getDate() - s.getDay()); // week starts Sunday
 	return s;
+}
+
+/**
+ * Does `day` fall on the given weekday at the given monthly ordinal?
+ * ordinal 1 = first such weekday, 2 = second, -1 = last, etc. A null ordinal
+ * matches every occurrence of that weekday in the month.
+ */
+function matchesMonthlyByDay(day: Date, weekday: number, ordinal: number | null): boolean {
+	if (day.getDay() !== weekday) return false;
+	if (ordinal === null) return true;
+	const year = day.getFullYear();
+	const month = day.getMonth();
+	const dates: number[] = [];
+	const cursor = new Date(year, month, 1);
+	while (cursor.getMonth() === month) {
+		if (cursor.getDay() === weekday) dates.push(cursor.getDate());
+		cursor.setDate(cursor.getDate() + 1);
+	}
+	const idx = ordinal > 0 ? ordinal - 1 : dates.length + ordinal;
+	return dates[idx] === day.getDate();
 }
 
 export function eventsOnDay(events: RawEvent[], day: Date): CalendarOccurrence[] {
