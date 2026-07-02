@@ -45,6 +45,12 @@ applied via the `--section-accent` CSS custom property as the card's left spine.
 │      .tasks-stat-sep  "·"             │
 │      .tasks-stat.is-today  "N due today"
 │      (or .tasks-pressure-clear "Nothing due today")
+│  .tasks-pomodoro  (focus timer, if enabled)
+│    .tasks-pomodoro-top (phase + cycle dots)
+│    .tasks-pomodoro-clock  "MM:SS"     │
+│    .tasks-pomodoro-task (task selector)
+│    .tasks-pomodoro-total  "N on this task"
+│    .tasks-pomodoro-controls (start/skip/reset)
 │  .tasks-calendar  (card, only if ics URL set)
 │    .tasks-calendar-header "Today's events"
 │    .tasks-event (time + title) …      │

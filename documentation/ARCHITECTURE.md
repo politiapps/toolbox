@@ -15,8 +15,10 @@ feature's views, commands, and settings.
   user-configured markdown file (default `tasks.md`) whose lines use Obsidian
   Tasks plugin-compatible syntax, so other Tasks queries keep working. Supports
   **recurring tasks** via the Tasks `🔁` signifier (e.g. `every month on the 2nd
-  Monday`): completing one spawns its next occurrence. Its modules and behaviour
-  are mapped in the rest of this document.
+  Monday`): completing one spawns its next occurrence. It also hosts a
+  **Pomodoro focus timer** at the top of the panel: pick a task to work on, and
+  focus time accrues to that task (persisted per task; shown on the task row).
+  Its modules and behaviour are mapped in the rest of this document.
 - **Editable Columns** (current) — a Live Preview multi-row / multi-column
   layout. `%% columns %%` comment-marker blocks are replaced by a CSS-grid
   widget whose cells are rendered through Obsidian's real markdown pipeline

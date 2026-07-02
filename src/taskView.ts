@@ -47,6 +47,7 @@ import {
 	SectionConfig,
 	SortOrder,
 	COMPLETED_KEY,
+	PomodoroState,
 	touchRecentTag,
 } from "./settings";
 
@@ -135,6 +136,39 @@ function dueClass(iso: string): string {
 	return "is-upcoming";
 }
 
+/** Format remaining milliseconds as MM:SS (rounding up so it starts at NN:00). */
+function formatClock(ms: number): string {
+	const total = Math.ceil(Math.max(0, ms) / 1000);
+	const m = Math.floor(total / 60);
+	const s = total % 60;
+	return `${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
+}
+
+/** Format focus seconds compactly: "45s", "25m", "1h 20m". */
+function formatFocus(secs: number): string {
+	if (secs < 60) return `${secs}s`;
+	const mins = Math.floor(secs / 60);
+	if (mins < 60) return `${mins}m`;
+	const h = Math.floor(mins / 60);
+	const rm = mins % 60;
+	return rm ? `${h}h ${rm}m` : `${h}h`;
+}
+
+/** Unique descriptions of incomplete tasks, first-seen order (Pomodoro picker). */
+function uniqueIncompleteNames(flat: Task[]): string[] {
+	const seen = new Set<string>();
+	const names: string[] = [];
+	for (const t of flat) {
+		if (t.completed) continue;
+		const d = t.description.trim();
+		if (d && !seen.has(d)) {
+			seen.add(d);
+			names.push(d);
+		}
+	}
+	return names;
+}
+
 /* ------------------------------------------------------------------ */
 /* The sidebar view                                                    */
 /* ------------------------------------------------------------------ */
@@ -144,6 +178,10 @@ export class TasksView extends ItemView {
 	private allTags: string[] = [];
 	/** Raw line text of the task currently being dragged (drag-to-subtask). */
 	private draggedTaskRaw: string | null = null;
+	/** Pomodoro card element + tick handle + current task options. */
+	private pomodoroEl: HTMLElement | null = null;
+	private pomodoroInterval: number | null = null;
+	private pomodoroTaskNames: string[] = [];
 
 	constructor(leaf: WorkspaceLeaf, plugin: TasksPlugin) {
 		super(leaf);
@@ -168,8 +206,9 @@ export class TasksView extends ItemView {
 	}
 
 	async onClose(): Promise<void> {
-		// No per-view listeners to clean up; the vault 'modify' listener lives in
-		// main.ts and is owned by the plugin lifecycle.
+		// The vault 'modify' listener lives in main.ts; only the Pomodoro tick is
+		// owned by this view.
+		this.stopPomodoroTick();
 	}
 
 	/* ----------------------------- file IO ----------------------------- */
@@ -229,12 +268,14 @@ export class TasksView extends ItemView {
 		const content = file ? await this.app.vault.read(file) : "";
 		const { tasks, flat } = parseTasks(content);
 		this.allTags = this.mergedTagList(flat);
+		this.pomodoroTaskNames = uniqueIncompleteNames(flat);
 
 		const root = this.contentEl;
 		root.empty();
 		root.addClass("tasks-panel-content");
 
 		this.renderPanelHeader(root, countPressure(flat));
+		this.renderPomodoro(root);
 		this.renderCalendar(root);
 
 		// No file at the configured path — say so plainly instead of showing an
@@ -309,6 +350,283 @@ export class TasksView extends ItemView {
 	private renderCalendar(root: HTMLElement): void {
 		if (this.plugin.settings.calendars.length === 0) return;
 		renderTodayCalendar(root, this.plugin.calendarEvents, this.plugin.calendarError);
+	}
+
+	/* ----------------------------- Pomodoro ---------------------------- */
+
+	/** Current state, or a fresh idle Focus phase when never started. */
+	private pomoState(): PomodoroState {
+		const s = this.plugin.settings.pomodoro;
+		if (s) return s;
+		return {
+			phase: "work",
+			running: false,
+			endsAt: null,
+			remaining: this.pomoDurationMs("work"),
+			completed: 0,
+			taskKey: null,
+			focusStart: null,
+		};
+	}
+
+	private pomoDurationMs(phase: PomodoroState["phase"]): number {
+		const st = this.plugin.settings;
+		const min =
+			phase === "work" ? st.pomodoroWorkMin : phase === "short" ? st.pomodoroShortMin : st.pomodoroLongMin;
+		return Math.max(1, min) * 60_000;
+	}
+
+	private pomoRemainingMs(s: PomodoroState): number {
+		if (s.running && s.endsAt !== null) return Math.max(0, s.endsAt - Date.now());
+		return Math.max(0, s.remaining);
+	}
+
+	/** Which phase follows the current one, and the running focus-session count. */
+	private nextPhase(s: PomodoroState): { phase: PomodoroState["phase"]; completed: number } {
+		if (s.phase === "work") {
+			const completed = s.completed + 1;
+			const every = Math.max(1, this.plugin.settings.pomodoroLongEvery);
+			return { phase: completed % every === 0 ? "long" : "short", completed };
+		}
+		return { phase: "work", completed: s.completed };
+	}
+
+	/** Set a phase's fields in place (duration, end, and focus anchor). */
+	private applyPhase(
+		s: PomodoroState,
+		next: { phase: PomodoroState["phase"]; completed: number },
+		running: boolean,
+	): void {
+		const dur = this.pomoDurationMs(next.phase);
+		s.phase = next.phase;
+		s.completed = next.completed;
+		s.running = running;
+		s.remaining = dur;
+		s.endsAt = running ? Date.now() + dur : null;
+		s.focusStart = running && next.phase === "work" ? Date.now() : null;
+	}
+
+	/** Bank focus time accrued since `focusStart` to the current task. */
+	private flushFocus(): void {
+		const s = this.plugin.settings.pomodoro;
+		if (!s || !s.running || s.phase !== "work" || s.focusStart === null || !s.taskKey) return;
+		const secs = Math.floor((Date.now() - s.focusStart) / 1000);
+		if (secs > 0) {
+			const map = this.plugin.settings.taskFocusSeconds;
+			map[s.taskKey] = (map[s.taskKey] ?? 0) + secs;
+		}
+		s.focusStart = Date.now();
+	}
+
+	/** Catch up a timer that ran past its end while the panel was closed. */
+	private reconcilePomodoro(): void {
+		const s = this.plugin.settings.pomodoro;
+		if (!s || !s.running || s.endsAt === null) return;
+		let changed = false;
+		let guard = 0;
+		while (s.running && s.endsAt !== null && s.endsAt <= Date.now() && guard < 300) {
+			if (s.phase === "work" && s.focusStart !== null && s.taskKey) {
+				const secs = Math.max(0, Math.floor((s.endsAt - s.focusStart) / 1000));
+				if (secs > 0) {
+					const map = this.plugin.settings.taskFocusSeconds;
+					map[s.taskKey] = (map[s.taskKey] ?? 0) + secs;
+				}
+			}
+			const phaseStart: number = s.endsAt;
+			const next = this.nextPhase(s);
+			const dur = this.pomoDurationMs(next.phase);
+			s.phase = next.phase;
+			s.completed = next.completed;
+			s.endsAt = phaseStart + dur;
+			s.remaining = dur;
+			s.focusStart = next.phase === "work" ? phaseStart : null;
+			changed = true;
+			guard++;
+		}
+		if (changed) void this.plugin.saveSettings();
+	}
+
+	/** Total focus seconds for a task, including the interval in progress. */
+	private taskFocusTotal(desc: string): number {
+		const stored = this.plugin.settings.taskFocusSeconds[desc] ?? 0;
+		const s = this.plugin.settings.pomodoro;
+		if (s && s.running && s.phase === "work" && s.focusStart !== null && s.taskKey === desc) {
+			return stored + Math.max(0, Math.floor((Date.now() - s.focusStart) / 1000));
+		}
+		return stored;
+	}
+
+	private renderPomodoro(root: HTMLElement): void {
+		if (!this.plugin.settings.pomodoroEnabled) return;
+		const card = root.createDiv({ cls: "tasks-pomodoro" });
+		this.pomodoroEl = card;
+		this.buildPomodoro(card);
+	}
+
+	private rebuildPomodoro(): void {
+		if (this.pomodoroEl) this.buildPomodoro(this.pomodoroEl);
+	}
+
+	private buildPomodoro(parent: HTMLElement): void {
+		this.reconcilePomodoro();
+		parent.empty();
+		parent.removeClass("is-work");
+		parent.removeClass("is-break");
+
+		const s = this.pomoState();
+		parent.addClass(s.phase === "work" ? "is-work" : "is-break");
+
+		const top = parent.createDiv({ cls: "tasks-pomodoro-top" });
+		const phaseText = s.phase === "work" ? "Focus" : s.phase === "short" ? "Break" : "Long break";
+		top.createSpan({ cls: "tasks-pomodoro-phase", text: phaseText });
+
+		const every = Math.max(1, this.plugin.settings.pomodoroLongEvery);
+		const dots = top.createDiv({ cls: "tasks-pomodoro-dots" });
+		const done = s.completed % every;
+		for (let i = 0; i < every; i++) {
+			const dot = dots.createSpan({ cls: "tasks-pomodoro-dot" });
+			if (i < done) dot.addClass("is-done");
+		}
+
+		const clock = parent.createDiv({ cls: "tasks-pomodoro-clock" });
+		clock.textContent = formatClock(this.pomoRemainingMs(s));
+
+		// Task focus selector.
+		const taskRow = parent.createDiv({ cls: "tasks-pomodoro-task" });
+		taskRow.createSpan({ cls: "tasks-pomodoro-task-label", text: "On" });
+		const select = taskRow.createEl("select", { cls: "tasks-pomodoro-select" });
+		const NONE = "__none__";
+		select.createEl("option", { text: "Nothing in particular", value: NONE });
+		const names = [...this.pomodoroTaskNames];
+		if (s.taskKey && !names.includes(s.taskKey)) names.unshift(s.taskKey);
+		for (const n of names) {
+			const opt = select.createEl("option", { text: n, value: n });
+			if (s.taskKey === n) opt.selected = true;
+		}
+		if (!s.taskKey) select.value = NONE;
+		select.addEventListener("change", () =>
+			this.pomoSetTask(select.value === NONE ? null : select.value),
+		);
+
+		if (s.taskKey) {
+			parent.createDiv({
+				cls: "tasks-pomodoro-total",
+				text: `${formatFocus(this.taskFocusTotal(s.taskKey))} on this task`,
+			});
+		}
+
+		const controls = parent.createDiv({ cls: "tasks-pomodoro-controls" });
+		const primary = controls.createEl("button", { cls: "tasks-pomodoro-btn is-primary" });
+		setIcon(primary.createSpan({ cls: "tasks-pomodoro-btn-icon" }), s.running ? "pause" : "play");
+		primary.createSpan({ text: s.running ? "Pause" : "Start" });
+		primary.addEventListener("click", () => this.pomoToggle());
+
+		const skip = controls.createEl("button", { cls: "tasks-pomodoro-btn" });
+		setIcon(skip, "skip-forward");
+		skip.setAttr("aria-label", "Skip to next phase");
+		skip.addEventListener("click", () => this.pomoSkip());
+
+		const reset = controls.createEl("button", { cls: "tasks-pomodoro-btn" });
+		setIcon(reset, "rotate-ccw");
+		reset.setAttr("aria-label", "Reset timer");
+		reset.addEventListener("click", () => this.pomoReset());
+
+		if (s.running) this.startPomodoroTick();
+		else this.stopPomodoroTick();
+	}
+
+	private async pomoToggle(): Promise<void> {
+		const s = this.pomoState();
+		this.plugin.settings.pomodoro = s;
+		if (s.running) {
+			this.flushFocus();
+			s.remaining = this.pomoRemainingMs(s);
+			s.running = false;
+			s.endsAt = null;
+			s.focusStart = null;
+		} else {
+			const rem = s.remaining > 0 ? s.remaining : this.pomoDurationMs(s.phase);
+			s.running = true;
+			s.remaining = rem;
+			s.endsAt = Date.now() + rem;
+			s.focusStart = s.phase === "work" ? Date.now() : null;
+		}
+		await this.plugin.saveSettings();
+		this.rebuildPomodoro();
+	}
+
+	private async pomoSkip(): Promise<void> {
+		const s = this.pomoState();
+		this.plugin.settings.pomodoro = s;
+		const wasRunning = s.running;
+		this.flushFocus();
+		this.applyPhase(s, this.nextPhase(s), wasRunning);
+		await this.plugin.saveSettings();
+		this.rebuildPomodoro();
+	}
+
+	private async pomoReset(): Promise<void> {
+		const s = this.pomoState();
+		this.plugin.settings.pomodoro = s;
+		this.flushFocus();
+		s.phase = "work";
+		s.completed = 0;
+		s.running = false;
+		s.remaining = this.pomoDurationMs("work");
+		s.endsAt = null;
+		s.focusStart = null;
+		await this.plugin.saveSettings();
+		this.rebuildPomodoro();
+	}
+
+	/** Change the focused task, banking any in-progress focus to the old one. */
+	private async pomoSetTask(taskKey: string | null): Promise<void> {
+		const s = this.pomoState();
+		this.plugin.settings.pomodoro = s;
+		this.flushFocus();
+		s.taskKey = taskKey;
+		await this.plugin.saveSettings();
+		this.rebuildPomodoro();
+	}
+
+	private async pomoComplete(): Promise<void> {
+		const s = this.pomoState();
+		this.plugin.settings.pomodoro = s;
+		this.flushFocus();
+		const next = this.nextPhase(s);
+		this.applyPhase(s, next, true);
+		await this.plugin.saveSettings();
+		new Notice(next.phase === "work" ? "Focus time" : next.phase === "long" ? "Long break" : "Break time");
+		this.rebuildPomodoro();
+	}
+
+	private startPomodoroTick(): void {
+		this.stopPomodoroTick();
+		this.pomodoroInterval = window.setInterval(() => this.pomodoroTick(), 250);
+	}
+
+	private stopPomodoroTick(): void {
+		if (this.pomodoroInterval !== null) {
+			window.clearInterval(this.pomodoroInterval);
+			this.pomodoroInterval = null;
+		}
+	}
+
+	private pomodoroTick(): void {
+		const s = this.plugin.settings.pomodoro;
+		if (!s || !s.running) {
+			this.stopPomodoroTick();
+			return;
+		}
+		const rem = this.pomoRemainingMs(s);
+		const clock = this.pomodoroEl?.querySelector<HTMLElement>(".tasks-pomodoro-clock");
+		if (clock) clock.textContent = formatClock(rem);
+		const total = this.pomodoroEl?.querySelector<HTMLElement>(".tasks-pomodoro-total");
+		if (total && s.taskKey) total.textContent = `${formatFocus(this.taskFocusTotal(s.taskKey))} on this task`;
+		if (rem <= 0) {
+			this.stopPomodoroTick();
+			void this.pomoComplete();
+		}
 	}
 
 	private renderMissingFileNotice(root: HTMLElement): void {
@@ -493,6 +811,14 @@ export class TasksView extends ItemView {
 			});
 			chip.createSpan({ cls: "tasks-priority-dot" });
 			chip.createSpan({ cls: "tasks-priority-label", text: PRIORITY_LABEL[task.priority] });
+		}
+
+		// Focus time logged against this task via the Pomodoro timer.
+		const focusSecs = this.taskFocusTotal(task.description);
+		if (focusSecs > 0) {
+			const focus = meta.createSpan({ cls: "tasks-focus-time" });
+			setIcon(focus.createSpan({ cls: "tasks-focus-icon" }), "timer");
+			focus.createSpan({ text: formatFocus(focusSecs) });
 		}
 
 		const actions = row.createDiv({ cls: "tasks-actions" });

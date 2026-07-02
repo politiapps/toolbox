@@ -188,6 +188,172 @@
 	color: var(--text-error);
 }
 
+/* ── Pomodoro (focus timer above the calendar/tasks) ──────────────────── */
+/* Grounded in its namesake: focus wears a tomato accent, breaks go calm green.
+   Tabular-mono countdown matches the plugin's other timers; the cycle dots
+   count toward the long break. */
+.tasks-pomodoro {
+	--pomo-accent: var(--interactive-accent);
+	background-color: var(--background-primary);
+	border: 1px solid var(--background-modifier-border);
+	border-radius: 10px;
+	padding: 10px 12px 12px;
+	margin-bottom: 12px;
+}
+
+.tasks-pomodoro.is-work {
+	--pomo-accent: #e2543b;
+}
+
+.tasks-pomodoro.is-break {
+	--pomo-accent: var(--color-green, #22c55e);
+}
+
+.tasks-pomodoro-top {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	margin-bottom: 4px;
+}
+
+.tasks-pomodoro-phase {
+	font-family: var(--font-monospace);
+	font-size: 0.62rem;
+	font-weight: 600;
+	letter-spacing: 0.16em;
+	text-transform: uppercase;
+	color: var(--pomo-accent);
+}
+
+.tasks-pomodoro-dots {
+	display: flex;
+	gap: 4px;
+}
+
+.tasks-pomodoro-dot {
+	width: 6px;
+	height: 6px;
+	border-radius: 50%;
+	background-color: var(--background-modifier-border);
+}
+
+.tasks-pomodoro-dot.is-done {
+	background-color: var(--pomo-accent);
+}
+
+.tasks-pomodoro-clock {
+	font-family: var(--font-monospace);
+	font-size: 2.1rem;
+	line-height: 1;
+	font-weight: 700;
+	font-variant-numeric: tabular-nums;
+	letter-spacing: -0.01em;
+	color: var(--text-normal);
+	margin: 4px 0 8px;
+}
+
+.tasks-pomodoro-task {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	margin-bottom: 4px;
+}
+
+.tasks-pomodoro-task-label {
+	flex-shrink: 0;
+	font-family: var(--font-monospace);
+	font-size: 0.62rem;
+	font-weight: 600;
+	letter-spacing: 0.14em;
+	text-transform: uppercase;
+	color: var(--text-faint);
+}
+
+.tasks-pomodoro-select {
+	flex: 1;
+	min-width: 0;
+}
+
+.tasks-pomodoro-total {
+	margin-bottom: 8px;
+	font-family: var(--font-monospace);
+	font-size: 0.7rem;
+	color: var(--text-muted);
+}
+
+.tasks-pomodoro-controls {
+	display: flex;
+	gap: 6px;
+}
+
+.tasks-pomodoro-btn {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	gap: 6px;
+	height: 32px;
+	padding: 0 12px;
+	border-radius: 7px;
+	cursor: pointer;
+	border: 1px solid var(--background-modifier-border);
+	background-color: var(--background-primary);
+	color: var(--text-normal);
+	font-size: 0.8rem;
+	font-weight: 600;
+	transition: background-color 0.12s ease, color 0.12s ease, border-color 0.12s ease;
+}
+
+.tasks-pomodoro-btn.is-primary {
+	flex: 1;
+	background-color: var(--pomo-accent);
+	border-color: var(--pomo-accent);
+	color: #fff;
+}
+
+.tasks-pomodoro-btn.is-primary:hover {
+	filter: brightness(1.07);
+}
+
+.tasks-pomodoro-btn:not(.is-primary) {
+	width: 34px;
+	padding: 0;
+	color: var(--text-muted);
+}
+
+.tasks-pomodoro-btn:not(.is-primary):hover {
+	color: var(--text-normal);
+	background-color: var(--background-modifier-hover);
+}
+
+.tasks-pomodoro-btn-icon {
+	display: inline-flex;
+}
+
+.tasks-pomodoro-btn svg {
+	width: 15px;
+	height: 15px;
+}
+
+/* Focus time logged against a task, shown in its row meta. */
+.tasks-focus-time {
+	display: inline-flex;
+	align-items: center;
+	gap: 3px;
+	font-family: var(--font-monospace);
+	font-size: 0.66rem;
+	font-variant-numeric: tabular-nums;
+	color: var(--text-muted);
+}
+
+.tasks-focus-icon {
+	display: inline-flex;
+}
+
+.tasks-focus-icon svg {
+	width: 11px;
+	height: 11px;
+}
+
 /* ── Missing-file empty state ─────────────────────────────────────────── */
 .tasks-missing {
 	margin: 8px 0;

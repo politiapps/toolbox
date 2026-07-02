@@ -92,6 +92,25 @@ export interface ActiveTimer {
 	breaks: { start: number; end: number }[];
 }
 
+/**
+ * Persisted Pomodoro state so the focus timer survives re-renders and restarts.
+ * `null` means the timer has never been started (treated as an idle focus phase).
+ */
+export interface PomodoroState {
+	phase: "work" | "short" | "long";
+	running: boolean;
+	/** Epoch ms when the current phase ends (only meaningful while running). */
+	endsAt: number | null;
+	/** Ms left when paused (only meaningful while not running). */
+	remaining: number;
+	/** Completed focus sessions in the current cycle (drives long-break cadence). */
+	completed: number;
+	/** Description of the task being focused on, or null. */
+	taskKey: string | null;
+	/** Epoch ms when the current focus accrual began (work + running), else null. */
+	focusStart: number | null;
+}
+
 /** Default colours assigned to new orgs, cycling through the list. */
 export const TIMESHEET_ORG_COLORS = [
 	"#6366f1", // indigo
@@ -131,6 +150,18 @@ export interface TasksPluginSettings {
 
 	/** Invoice generation settings. */
 	invoice: InvoiceSettings;
+
+	/** Pomodoro focus timer (shown at the top of the tasks panel). */
+	pomodoroEnabled: boolean;
+	pomodoroWorkMin: number;
+	pomodoroShortMin: number;
+	pomodoroLongMin: number;
+	/** Take a long break after this many focus sessions. */
+	pomodoroLongEvery: number;
+	/** Persisted Pomodoro state (null = never started). */
+	pomodoro: PomodoroState | null;
+	/** Accumulated focus seconds per task, keyed by task description. */
+	taskFocusSeconds: Record<string, number>;
 }
 
 /** Persistence key for the always-present Completed section. */
@@ -156,6 +187,13 @@ export const DEFAULT_SETTINGS: TasksPluginSettings = {
 		accountNumber: "",
 		invoiceFolder: "toolbox/Invoices",
 	},
+	pomodoroEnabled: true,
+	pomodoroWorkMin: 25,
+	pomodoroShortMin: 5,
+	pomodoroLongMin: 15,
+	pomodoroLongEvery: 4,
+	pomodoro: null,
+	taskFocusSeconds: {},
 };
 
 /** Generate a reasonably unique id for a new section. */
@@ -284,6 +322,64 @@ export class TasksSettingTab extends PluginSettingTab {
 					this.plugin.applyEditableColumns();
 				})
 			);
+
+		containerEl.createEl("h2", { text: "Pomodoro" });
+
+		new Setting(containerEl)
+			.setName("Enable Pomodoro timer")
+			.setDesc("Show a focus timer at the top of the tasks panel.")
+			.addToggle((toggle) =>
+				toggle.setValue(this.plugin.settings.pomodoroEnabled).onChange(async (value) => {
+					this.plugin.settings.pomodoroEnabled = value;
+					await this.plugin.saveSettings();
+					this.plugin.refreshViews();
+				})
+			);
+
+		const pomoNumber = (
+			name: string,
+			desc: string,
+			get: () => number,
+			set: (n: number) => void,
+		): void => {
+			new Setting(containerEl)
+				.setName(name)
+				.setDesc(desc)
+				.addText((text) => {
+					text.inputEl.type = "number";
+					text.inputEl.min = "1";
+					text.setValue(String(get())).onChange(async (value) => {
+						set(Math.max(1, parseInt(value, 10) || get()));
+						await this.plugin.saveSettings();
+						this.plugin.refreshViews();
+					});
+				});
+		};
+
+		pomoNumber(
+			"Focus length (min)",
+			"How long each focus session runs.",
+			() => this.plugin.settings.pomodoroWorkMin,
+			(n) => (this.plugin.settings.pomodoroWorkMin = n),
+		);
+		pomoNumber(
+			"Short break (min)",
+			"Break after a focus session.",
+			() => this.plugin.settings.pomodoroShortMin,
+			(n) => (this.plugin.settings.pomodoroShortMin = n),
+		);
+		pomoNumber(
+			"Long break (min)",
+			"Break after a full set of focus sessions.",
+			() => this.plugin.settings.pomodoroLongMin,
+			(n) => (this.plugin.settings.pomodoroLongMin = n),
+		);
+		pomoNumber(
+			"Long break after",
+			"Number of focus sessions before a long break.",
+			() => this.plugin.settings.pomodoroLongEvery,
+			(n) => (this.plugin.settings.pomodoroLongEvery = n),
+		);
 
 		containerEl.createEl("h2", { text: "Timesheet" });
 
