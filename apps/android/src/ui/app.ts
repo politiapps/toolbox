@@ -2,7 +2,7 @@ import { Task, sortTasks, taskHasTag, collectTags } from "@toolbox/task-core";
 import { el } from "./dom";
 import { setIcon, iconButton } from "./icons";
 import { todayISO, formatDueDisplay, daysUntil, dueLabel, dueClass } from "../dates";
-import { writeWidgetCache, type WidgetGroup } from "../widgetCache";
+import { writeWidgetCache, consumePendingWidgetAction, type WidgetGroup } from "../widgetCache";
 import { renderTask } from "./taskRow";
 import { renderPomodoro } from "./pomodoro";
 import { renderSettings } from "./settingsScreen";
@@ -68,6 +68,26 @@ export class App {
 		// categories keep mirroring the plugin without any manual step.
 		await this.syncObsidianConfig();
 		await this.render();
+		await this.handlePendingAction();
+
+		// The widget's + button brings this (singleTask) activity to the front
+		// rather than cold-starting it, so also check on every foreground.
+		document.addEventListener("visibilitychange", () => {
+			if (document.visibilityState === "visible") void this.onForeground();
+		});
+	}
+
+	/** Re-read the file and honour any queued widget action when returning to front. */
+	private async onForeground(): Promise<void> {
+		await this.render();
+		await this.handlePendingAction();
+	}
+
+	/** Open the Add form if the widget's + button queued an "add" action. */
+	private async handlePendingAction(): Promise<void> {
+		if ((await consumePendingWidgetAction()) === "add") {
+			openAddTask(this.ctx);
+		}
 	}
 
 	/** Silently re-apply sections from the linked Obsidian data.json, if reachable. */
@@ -314,6 +334,7 @@ function toWidgetGroup(id: string, name: string, tasks: Task[]): WidgetGroup {
 		name,
 		tasks: tasks.map((t) => ({
 			text: t.description,
+			raw: t.raw,
 			dueLabel: t.due ? dueLabel(t.due) : null,
 			dueClass: t.due ? dueClass(t.due) : null,
 			priority: t.priority,

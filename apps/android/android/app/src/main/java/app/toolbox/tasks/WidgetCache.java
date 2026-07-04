@@ -23,24 +23,26 @@ final class WidgetCache {
     static final class Item {
         final boolean header;
         final String text;
+        final String raw;
         final String due;
         final String dueClass;
         final String priority;
 
-        private Item(boolean header, String text, String due, String dueClass, String priority) {
+        private Item(boolean header, String text, String raw, String due, String dueClass, String priority) {
             this.header = header;
             this.text = text;
+            this.raw = raw;
             this.due = due;
             this.dueClass = dueClass;
             this.priority = priority;
         }
 
         static Item header(String name) {
-            return new Item(true, name, null, null, null);
+            return new Item(true, name, null, null, null, null);
         }
 
-        static Item task(String text, String due, String dueClass, String priority) {
-            return new Item(false, text, due, dueClass, priority);
+        static Item task(String text, String raw, String due, String dueClass, String priority) {
+            return new Item(false, text, raw, due, dueClass, priority);
         }
     }
 
@@ -80,6 +82,7 @@ final class WidgetCache {
                     JSONObject t = tasks.getJSONObject(j);
                     out.add(Item.task(
                         t.optString("text"),
+                        t.optString("raw"),
                         t.isNull("dueLabel") ? null : t.optString("dueLabel", null),
                         t.isNull("dueClass") ? null : t.optString("dueClass", null),
                         t.optString("priority", "normal")

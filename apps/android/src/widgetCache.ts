@@ -11,12 +11,26 @@ import { registerPlugin, Capacitor } from "@capacitor/core";
 interface WidgetBridgePlugin {
 	/** Tell the launcher to re-read the cache and redraw all widgets. */
 	refresh(): Promise<void>;
+	/** Read and clear any action the widget queued (e.g. the + button → "add"). */
+	consumePendingAction(): Promise<{ action: string }>;
 }
 
 const WidgetBridge = registerPlugin<WidgetBridgePlugin>("WidgetBridge");
 
+/** Returns a queued widget action ("add" from the + button) and clears it. */
+export async function consumePendingWidgetAction(): Promise<string> {
+	if (!Capacitor.isNativePlatform()) return "";
+	try {
+		return (await WidgetBridge.consumePendingAction()).action;
+	} catch {
+		return "";
+	}
+}
+
 export interface WidgetTask {
 	text: string;
+	/** The exact markdown line, so the native widget can locate it to tick off. */
+	raw: string;
 	dueLabel: string | null;
 	/** Proximity class: is-overdue / is-today / … (drives the widget's due colour). */
 	dueClass: string | null;

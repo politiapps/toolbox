@@ -28,7 +28,18 @@
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:textColor="#8A8A94"
-            android:textSize="11sp" />
+            android:textSize="11sp"
+            android:paddingEnd="8dp"
+            android:paddingRight="8dp" />
+
+        <ImageView
+            android:id="@+id/widget_add"
+            android:layout_width="28dp"
+            android:layout_height="28dp"
+            android:padding="3dp"
+            android:src="@drawable/widget_add"
+            android:background="@drawable/widget_add_bg"
+            android:contentDescription="Add task" />
     </LinearLayout>
 
     <ListView

@@ -3,7 +3,9 @@ package app.toolbox.tasks;
 import android.appwidget.AppWidgetManager;
 import android.content.ComponentName;
 import android.content.Context;
+import android.content.SharedPreferences;
 
+import com.getcapacitor.JSObject;
 import com.getcapacitor.Plugin;
 import com.getcapacitor.PluginCall;
 import com.getcapacitor.PluginMethod;
@@ -25,5 +27,17 @@ public class WidgetBridgePlugin extends Plugin {
             TaskWidgetProvider.updateWidget(ctx, mgr, id);
         }
         call.resolve();
+    }
+
+    /** Return and clear any action a widget queued (e.g. the + button → "add"). */
+    @PluginMethod
+    public void consumePendingAction(PluginCall call) {
+        SharedPreferences sp = getContext()
+            .getSharedPreferences("TaskWidgetPrefs", Context.MODE_PRIVATE);
+        String action = sp.getString("pending_action", "");
+        sp.edit().remove("pending_action").apply();
+        JSObject ret = new JSObject();
+        ret.put("action", action == null ? "" : action);
+        call.resolve(ret);
     }
 }

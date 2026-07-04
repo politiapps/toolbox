@@ -51,6 +51,10 @@
             android:permission="android.permission.BIND_REMOTEVIEWS"
             android:exported="false" />
 
+        <receiver
+            android:name=".TaskWidgetActionReceiver"
+            android:exported="false" />
+
         <activity
             android:name=".TaskWidgetConfigActivity"
             android:exported="false"

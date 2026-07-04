@@ -89,8 +89,16 @@ public class TaskWidgetService extends RemoteViewsService {
                 row.setViewVisibility(R.id.row_priority, View.GONE);
             }
 
-            // Make the row tappable (opens the app via the template intent).
-            row.setOnClickFillInIntent(R.id.row_task, new Intent());
+            // Tapping the checkbox completes the task; tapping the text opens the app.
+            // Both flow through the list's broadcast template with distinct extras.
+            Intent complete = new Intent();
+            complete.putExtra(TaskWidgetActionReceiver.EXTRA_ACTION, TaskWidgetActionReceiver.ACTION_COMPLETE);
+            complete.putExtra(TaskWidgetActionReceiver.EXTRA_RAW, item.raw);
+            row.setOnClickFillInIntent(R.id.row_check, complete);
+
+            Intent open = new Intent();
+            open.putExtra(TaskWidgetActionReceiver.EXTRA_ACTION, TaskWidgetActionReceiver.ACTION_OPEN);
+            row.setOnClickFillInIntent(R.id.row_open, open);
             return row;
         }
 

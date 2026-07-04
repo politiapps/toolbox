@@ -25,19 +25,21 @@
         android:orientation="horizontal"
         android:gravity="top">
 
-        <TextView
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="•"
-            android:textColor="#6C8CFF"
-            android:textSize="14sp"
-            android:paddingEnd="7dp"
-            android:paddingRight="7dp" />
+        <ImageView
+            android:id="@+id/row_check"
+            android:layout_width="26dp"
+            android:layout_height="26dp"
+            android:padding="3dp"
+            android:src="@drawable/widget_check"
+            android:contentDescription="Complete task" />
 
         <LinearLayout
+            android:id="@+id/row_open"
             android:layout_width="0dp"
             android:layout_height="wrap_content"
             android:layout_weight="1"
+            android:paddingStart="8dp"
+            android:paddingLeft="8dp"
             android:orientation="vertical">
 
             <TextView
