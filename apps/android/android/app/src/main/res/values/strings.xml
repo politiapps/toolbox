@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">Toolbox Tasks</string>
+    <string name="title_activity_main">Toolbox Tasks</string>
+    <string name="package_name">app.toolbox.tasks</string>
+    <string name="custom_url_scheme">app.toolbox.tasks</string>
+</resources>

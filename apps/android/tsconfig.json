@@ -1,0 +1,20 @@
+{
+	"compilerOptions": {
+		"target": "ES2020",
+		"module": "ESNext",
+		"moduleResolution": "bundler",
+		"strict": true,
+		"noImplicitAny": true,
+		"strictNullChecks": true,
+		"esModuleInterop": true,
+		"skipLibCheck": true,
+		"isolatedModules": true,
+		"lib": ["DOM", "DOM.Iterable", "ES2020"],
+		"types": [],
+		"baseUrl": ".",
+		"paths": {
+			"@toolbox/task-core": ["../../packages/task-core/src/index.ts"]
+		}
+	},
+	"include": ["src/**/*.ts"]
+}
