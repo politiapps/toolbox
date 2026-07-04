@@ -25,6 +25,8 @@ type Screen = "list" | "settings";
 export class App {
 	private ctx: AppContext;
 	private screen: Screen = "list";
+	/** True once a vault data.json was read this session (it wins over auto/manual). */
+	private vaultConfigFound = false;
 
 	constructor(
 		private root: HTMLElement,
@@ -50,6 +52,7 @@ export class App {
 		// Re-mirror categories + tasks path from the vault's data.json each launch,
 		// so the app stays matched to the Obsidian plugin with no manual step.
 		await this.syncObsidianConfig();
+		await this.ensureTasksPath();
 		await this.render();
 		await this.handlePendingAction();
 
@@ -81,11 +84,36 @@ export class App {
 			if (!(await this.storage.hasVaultAccess(vault))) return;
 			const text = await this.storage.readFile(vault, DATA_JSON_PATH);
 			if (text !== null && this.applyObsidianConfig(text) !== null) {
+				this.vaultConfigFound = true;
 				await saveSettings(this.settings);
 			}
 		} catch {
 			/* data.json missing/unreadable — keep whatever sections we have */
 		}
+	}
+
+	/**
+	 * Build one category per distinct tag in the file, in first-seen order. Used
+	 * when the plugin's data.json isn't on the phone, so categories still reflect
+	 * the user's real tags with no configuration.
+	 */
+	private deriveCategoriesFromTags(flat: Task[]): void {
+		const seen = new Set<string>();
+		const cats: SectionConfig[] = [];
+		for (const t of flat) {
+			for (const tag of t.tags) {
+				if (seen.has(tag)) continue;
+				seen.add(tag);
+				cats.push({
+					id: "auto-" + tag,
+					name: tag.replace(/^#/, ""),
+					tag,
+					sort: "due",
+					collapsedByDefault: false,
+				});
+			}
+		}
+		this.settings.sections = cats;
 	}
 
 	/**
@@ -126,8 +154,39 @@ export class App {
 		this.settings.vault = vault;
 		await saveSettings(this.settings);
 		await this.syncObsidianConfig();
+		await this.ensureTasksPath();
 		this.screen = "list";
 		await this.render();
+	}
+
+	/**
+	 * If the configured tasks path doesn't resolve (common when the plugin's
+	 * data.json isn't synced to mobile), probe a few usual locations so the app
+	 * still finds the tasks file with no manual setup.
+	 */
+	private async ensureTasksPath(): Promise<void> {
+		const vault = this.settings.vault;
+		if (!vault) return;
+		try {
+			if ((await this.storage.readFile(vault, this.settings.tasksPath)) !== null) return;
+			const candidates = [
+				"tasks.md",
+				"Tasks/tasks.md",
+				"Tasks/Tasks.md",
+				"tasks/tasks.md",
+				"Tasks/All Tasks.md",
+			];
+			for (const path of candidates) {
+				if (path === this.settings.tasksPath) continue;
+				if ((await this.storage.readFile(vault, path)) !== null) {
+					this.settings.tasksPath = path;
+					await saveSettings(this.settings);
+					return;
+				}
+			}
+		} catch {
+			/* leave the path as-is; the user can set it in Settings */
+		}
 	}
 
 	async render(): Promise<void> {
@@ -144,6 +203,12 @@ export class App {
 	private async renderList(): Promise<void> {
 		const { tasks, flat } = await this.service.load();
 		this.ctx.knownTags = this.mergedTags(tasks);
+
+		// No data.json on the phone and not manually configured → categories follow
+		// the file's tags automatically.
+		if (!this.vaultConfigFound && this.settings.categoriesMode === "auto") {
+			this.deriveCategoriesFromTags(flat);
+		}
 
 		this.root.replaceChildren();
 		const screen = el("div", { cls: "screen list-screen" });

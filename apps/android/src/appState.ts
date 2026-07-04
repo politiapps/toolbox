@@ -43,7 +43,13 @@ export interface AppSettings {
 	vault: VaultRef | null;
 	/** Vault-relative path to the tasks file (read from the plugin's data.json). */
 	tasksPath: string;
-	/** Sections mirrored from the plugin's data.json (re-synced each launch). */
+	/**
+	 * "auto" = categories generated from the tags in the tasks file (used when the
+	 * plugin's data.json isn't on the phone); "manual" = user-edited categories.
+	 * When data.json IS present it always wins, regardless of this.
+	 */
+	categoriesMode: "auto" | "manual";
+	/** Sections: from data.json if present, else auto from tags, else manual. */
 	sections: SectionConfig[];
 	recentTags: string[];
 	/** Collapse state keyed by section id (and "__completed__"). */
@@ -59,10 +65,8 @@ export const COMPLETED_KEY = "__completed__";
 export const DEFAULT_SETTINGS: AppSettings = {
 	vault: null,
 	tasksPath: "tasks.md",
-	sections: [
-		{ id: "s-home", name: "Home", tag: "#home", sort: "due", collapsedByDefault: false },
-		{ id: "s-work", name: "Work", tag: "#work", sort: "priority-due", collapsedByDefault: false },
-	],
+	categoriesMode: "auto",
+	sections: [],
 	recentTags: [],
 	collapseState: {},
 	pomodoroConfig: { enabled: true, workMin: 25, shortMin: 5, longMin: 15, longEvery: 4 },

@@ -33,28 +33,37 @@ export function renderSettings(ctx: AppContext, root: HTMLElement, onBack: () =>
 	vaultRow.append(linkBtn);
 	vaultSection.append(vaultRow);
 	if (ctx.settings.vault) {
+		const pathInput = el("input", {
+			cls: "form-input",
+			attrs: { type: "text", value: ctx.settings.tasksPath, placeholder: "Tasks/tasks.md" },
+		}) as HTMLInputElement;
+		pathInput.addEventListener("change", () => {
+			ctx.settings.tasksPath = pathInput.value.trim() || "tasks.md";
+			persist();
+		});
+		field(vaultSection, "Tasks file (path in vault)", pathInput);
 		vaultSection.append(
 			el("p", {
 				cls: "settings-hint",
-				text: `Reading ${ctx.settings.tasksPath}. Categories mirror your Obsidian plugin and re-sync on every launch.`,
+				text: "If your vault syncs .obsidian/plugins/toolbox/data.json to this phone, categories + this path mirror the plugin automatically. Otherwise set them here.",
 			})
 		);
 	}
 	screen.append(vaultSection);
 
-	/* -------------------------- sections -------------------------- */
+	/* -------------------------- categories ------------------------ */
 	const secSection = el("div", { cls: "settings-group" });
 	secSection.append(el("h3", { cls: "settings-heading", text: "Categories" }));
 
-	// When a vault is linked, categories are mirrored from Obsidian and read-only.
-	if (ctx.settings.vault) {
+	if (ctx.settings.categoriesMode === "auto") {
 		secSection.append(
-			el("p", { cls: "settings-hint", text: "Synced from Obsidian — edit these in the Obsidian plugin." })
+			el("p", {
+				cls: "settings-hint",
+				text: "Generated automatically from your task tags. (Your desktop plugin's data.json isn't synced to this phone, so exact desktop category names can't be read — sync .obsidian/plugins/toolbox/ to change that.)",
+			})
 		);
 		if (ctx.settings.sections.length === 0) {
-			secSection.append(
-				el("p", { cls: "settings-hint", text: "No categories found in the vault's data.json yet." })
-			);
+			secSection.append(el("p", { cls: "settings-hint", text: "No tags found in your tasks yet." }));
 		}
 		for (const section of ctx.settings.sections) {
 			const chip = el("div", { cls: "section-chip" });
@@ -64,13 +73,30 @@ export function renderSettings(ctx: AppContext, root: HTMLElement, onBack: () =>
 			);
 			secSection.append(chip);
 		}
+		const customise = el("button", { cls: "btn btn-ghost", text: "Customise categories" });
+		customise.addEventListener("click", () => {
+			ctx.settings.categoriesMode = "manual";
+			persist();
+			rerender();
+		});
+		secSection.append(customise);
 		screen.append(secSection);
 		renderPomodoro(screen);
 		root.append(screen);
 		return;
 	}
 
-	// Manual fallback (no vault linked).
+	secSection.append(
+		el("p", { cls: "settings-hint", text: "Custom categories — each shows tasks carrying its tag." })
+	);
+	const resetAuto = el("button", { cls: "btn btn-ghost", text: "Reset to automatic (from tags)" });
+	resetAuto.addEventListener("click", () => {
+		ctx.settings.categoriesMode = "auto";
+		persist();
+		rerender();
+	});
+	secSection.append(resetAuto);
+
 	ctx.settings.sections.forEach((section, index) => {
 		const card = el("div", { cls: "section-editor" });
 
