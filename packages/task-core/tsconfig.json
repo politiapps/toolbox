@@ -1,0 +1,15 @@
+{
+	"compilerOptions": {
+		"module": "ESNext",
+		"target": "ES2018",
+		"moduleResolution": "node",
+		"strict": true,
+		"strictNullChecks": true,
+		"noImplicitAny": true,
+		"isolatedModules": true,
+		"esModuleInterop": true,
+		"skipLibCheck": true,
+		"lib": ["DOM", "ES2018"]
+	},
+	"include": ["src/**/*.ts", "__tests__/**/*.ts"]
+}

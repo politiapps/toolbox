@@ -12,6 +12,9 @@
 		"isolatedModules": true,
 		"strictNullChecks": true,
 		"strict": true,
+		"paths": {
+			"@toolbox/task-core": ["packages/task-core/src/index.ts"]
+		},
 		"lib": [
 			"DOM",
 			"ES5",
@@ -21,6 +24,7 @@
 		]
 	},
 	"include": [
-		"src/**/*.ts"
+		"src/**/*.ts",
+		"packages/task-core/src/**/*.ts"
 	]
 }

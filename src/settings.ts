@@ -8,15 +8,14 @@
 
 import { App, PluginSettingTab, Setting } from "obsidian";
 import type TasksPlugin from "./main";
+import { SORT_ORDER_LABELS } from "@toolbox/task-core";
+import type { SortOrder } from "@toolbox/task-core";
 
-export type SortOrder = "due" | "priority-due" | "priority" | "file";
-
-export const SORT_ORDER_LABELS: Record<SortOrder, string> = {
-	due: "Due date",
-	"priority-due": "Priority, then due date",
-	priority: "Priority only",
-	file: "File order",
-};
+// The sort-order vocabulary is owned by task-core (shared with the app). Re-export
+// so existing plugin imports of `SortOrder` / `SORT_ORDER_LABELS` from settings
+// keep working without every call site learning about the new package.
+export type { SortOrder } from "@toolbox/task-core";
+export { SORT_ORDER_LABELS };
 
 /** One subscribed calendar feed. */
 export interface CalendarSource {

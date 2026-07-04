@@ -23,6 +23,7 @@ import {
 	Task,
 	TaskInput,
 	Priority,
+	SortOrder,
 	parseTasks,
 	serializeTask,
 	collectTags,
@@ -33,43 +34,28 @@ import {
 	removeTaskBlock,
 	moveTaskAsChild,
 	insertTaskLineBefore,
-} from "./taskParser";
-import {
 	RecurrenceRule,
 	WEEKDAY_LABELS,
 	parseRecurrence,
 	recurrenceToText,
 	describeRecurrenceText,
 	nextDueDate,
-} from "./recurrence";
+	PRIORITY_RANK,
+	PRIORITY_LABEL,
+	sortTasks,
+	taskHasTag,
+	countDescendants,
+	orderSubtasks,
+} from "@toolbox/task-core";
 import { renderTodayCalendar } from "./calendarView";
 import {
 	SectionConfig,
-	SortOrder,
 	COMPLETED_KEY,
 	PomodoroState,
 	touchRecentTag,
 } from "./settings";
 
 export const VIEW_TYPE_TASKS = "tasks-panel-view";
-
-const PRIORITY_RANK: Record<Priority, number> = {
-	highest: 0,
-	high: 1,
-	medium: 2,
-	normal: 3,
-	low: 4,
-	lowest: 5,
-};
-
-const PRIORITY_LABEL: Record<Priority, string> = {
-	highest: "Highest",
-	high: "High",
-	medium: "Medium",
-	normal: "Normal",
-	low: "Low",
-	lowest: "Lowest",
-};
 
 /* ------------------------------------------------------------------ */
 /* Date helpers (UI presentation only — no task syntax is parsed here) */
@@ -1207,51 +1193,6 @@ function countPressure(flat: Task[]): Pressure {
 		else if (d === 0) dueToday++;
 	}
 	return { overdue, dueToday };
-}
-
-/**
- * Order subtasks so completed ones sink to the bottom of the list, keeping
- * incomplete and completed each in their original document order (stable).
- */
-function orderSubtasks(children: Task[]): Task[] {
-	return [...children].sort((a, b) => Number(a.completed) - Number(b.completed));
-}
-
-/** Total number of descendant tasks (subtasks at any depth). */
-function countDescendants(task: Task): number {
-	let n = task.children.length;
-	for (const c of task.children) n += countDescendants(c);
-	return n;
-}
-
-function taskHasTag(task: Task, tag: string): boolean {
-	if (!tag) return false;
-	const normalised = tag.startsWith("#") ? tag : "#" + tag;
-	return task.tags.includes(normalised);
-}
-
-function sortTasks(tasks: Task[], order: SortOrder): Task[] {
-	const copy = [...tasks];
-	const byDue = (a: Task, b: Task): number => {
-		if (a.due && b.due) return a.due.localeCompare(b.due);
-		if (a.due) return -1; // dated tasks before undated
-		if (b.due) return 1;
-		return 0;
-	};
-	const byPriority = (a: Task, b: Task): number =>
-		PRIORITY_RANK[a.priority] - PRIORITY_RANK[b.priority];
-
-	switch (order) {
-		case "due":
-			return copy.sort(byDue);
-		case "priority":
-			return copy.sort(byPriority);
-		case "priority-due":
-			return copy.sort((a, b) => byPriority(a, b) || byDue(a, b));
-		case "file":
-		default:
-			return copy.sort((a, b) => a.lineIndex - b.lineIndex);
-	}
 }
 
 /**

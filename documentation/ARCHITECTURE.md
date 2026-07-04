@@ -3,6 +3,30 @@
 Live map of how **Toolbox** is structured. Update this whenever the structure
 changes.
 
+## Repository layout (monorepo)
+
+The repo is an npm-workspaces monorepo. The Obsidian plugin remains at the repo
+root (so Obsidian and the release workflow still find `manifest.json` / `main.js`
+there); shared and future code lives under `packages/` and `apps/`.
+
+```
+/                      the Obsidian plugin (root workspace) — builds to main.js
+  src/                 plugin source (views, settings, feature modules)
+packages/
+  task-core/           @toolbox/task-core — Obsidian-free task logic, shared
+    src/               taskParser.ts, recurrence.ts, sort.ts, index.ts (barrel)
+    __tests__/         vitest golden round-trip tests (the "don't drift" guard)
+apps/
+  android/             (planned) Capacitor tasks app — see documentation/android-app-plan.md
+```
+
+**`@toolbox/task-core`** holds everything the plugin and the Android app must
+agree on: markdown task parsing/serialisation, recurrence, and list ordering —
+all pure (no vault, DOM, or network). The plugin resolves it via a `tsconfig`
+`paths` alias (`@toolbox/task-core` → `packages/task-core/src/index.ts`), which
+esbuild honours too, so it is bundled into `main.js` with zero runtime change.
+Run the shared tests with `npm test` (vitest) from the root.
+
 ## Overview
 
 Toolbox is a single Obsidian plugin (id `toolbox`) that bundles several
@@ -40,13 +64,18 @@ doc under `documentation/`, and is added to the list above.
 ## Modules
 
 ```
+packages/task-core/src/
+  taskParser.ts      THE ONLY place task LINES are parsed / serialised
+  recurrence.ts      THE ONLY place 🔁 recurrence RULES are interpreted; pure
+                     rule grammar + next-occurrence date math (no vault access)
+  sort.ts            Sort orders + priority ranking + pure list ordering
+                     (sortTasks, orderSubtasks, taskHasTag, countDescendants)
+  index.ts           Barrel re-exporting the three modules above
+
 src/
   main.ts            Plugin entry point + lifecycle + vault watcher + calendar
                      fetch + Editable Columns registration / embed-click listener
                      + Timesheet registration / vault watcher
-  taskParser.ts      THE ONLY place task LINES are parsed / serialised
-  recurrence.ts      THE ONLY place 🔁 recurrence RULES are interpreted; pure
-                     rule grammar + next-occurrence date math (no vault access)
   calendar.ts        THE ONLY place .ics feeds are parsed (pure; no vault access)
   calendarView.ts    Shared DOM render of the "Today's events" list (pure view)
   settings.ts        Settings model, defaults, native settings tab + Org mgmt
@@ -110,7 +139,7 @@ manifest.json        Plugin id (`toolbox`) / name (`Toolbox`) / minAppVersion (1
   yet honour `RECURRENCE-ID` overrides (a moved occurrence shows at both slots).
 - Fetched and cached by `main.ts` (`fetchCalendar`), rendered by the view.
 
-### `taskParser.ts`
+### `packages/task-core/src/taskParser.ts`
 - Exports `Task` (now with `children`, `notes`, and block-range fields),
   `TaskInput`, `Priority`, `PRIORITY_EMOJI`.
 - `parseTask(line, index)` → `Task | null` for one line.
@@ -127,7 +156,7 @@ manifest.json        Plugin id (`toolbox`) / name (`Toolbox`) / minAppVersion (1
   raw rule text; its *meaning* is `recurrence.ts`'s job, not this file's.
 - **No other file may parse or build task line strings.**
 
-### `recurrence.ts`
+### `packages/task-core/src/recurrence.ts`
 - Pure recurrence engine (no vault/DOM/network), modelled on `calendar.ts`.
 - `RecurrenceRule` (unit/interval + optional weekday, dayOfMonth, ordinal).
 - `parseRecurrence(text)` → structured rule; `recurrenceToText(rule)` → canonical
@@ -137,6 +166,15 @@ manifest.json        Plugin id (`toolbox`) / name (`Toolbox`) / minAppVersion (1
   and Feb-29 overflow to the month's last valid day).
 - `WEEKDAY_LABELS` (Sun=0…Sat=6) is exported for the modal's weekday dropdowns.
 - **No other file may interpret or build recurrence rule text.**
+
+### `packages/task-core/src/sort.ts`
+- Owns the sort vocabulary and all list ordering the user sees: `SortOrder`,
+  `SORT_ORDER_LABELS`, `PRIORITY_RANK`, `PRIORITY_LABEL`.
+- `sortTasks(tasks, order)` (due / priority / priority-due / file, stable within
+  ties), `orderSubtasks(children)` (completed sink to the bottom, stable),
+  `taskHasTag(task, tag)`, `countDescendants(task)`.
+- `settings.ts` re-exports `SortOrder` / `SORT_ORDER_LABELS` from here so existing
+  plugin imports are unchanged.
 
 ### `settings.ts`
 - `TasksPluginSettings`: `tasksFilePath`, `sections[]`, `recentTags[]`,
