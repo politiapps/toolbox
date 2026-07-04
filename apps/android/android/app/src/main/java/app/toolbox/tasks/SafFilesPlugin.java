@@ -8,6 +8,7 @@ import android.net.Uri;
 import android.provider.OpenableColumns;
 
 import androidx.activity.result.ActivityResult;
+import androidx.documentfile.provider.DocumentFile;
 
 import com.getcapacitor.JSObject;
 import com.getcapacitor.Plugin;
@@ -133,6 +134,104 @@ public class SafFilesPlugin extends Plugin {
             }
             os.write(data.getBytes(StandardCharsets.UTF_8));
             os.flush();
+            call.resolve();
+        } catch (Exception e) {
+            call.reject("Write failed: " + e.getMessage());
+        }
+    }
+
+    /* -------------------- vault folder (tree) access -------------------- */
+
+    @PluginMethod
+    public void pickFolder(PluginCall call) {
+        Intent intent = new Intent(Intent.ACTION_OPEN_DOCUMENT_TREE);
+        intent.addFlags(
+            Intent.FLAG_GRANT_READ_URI_PERMISSION
+                | Intent.FLAG_GRANT_WRITE_URI_PERMISSION
+                | Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION
+        );
+        startActivityForResult(call, intent, "pickFolderResult");
+    }
+
+    @ActivityCallback
+    private void pickFolderResult(PluginCall call, ActivityResult result) {
+        if (call == null) return;
+        JSObject ret = new JSObject();
+        if (result.getResultCode() == Activity.RESULT_OK && result.getData() != null) {
+            Uri tree = result.getData().getData();
+            if (tree != null) {
+                final int flags =
+                    Intent.FLAG_GRANT_READ_URI_PERMISSION | Intent.FLAG_GRANT_WRITE_URI_PERMISSION;
+                try {
+                    getContext().getContentResolver().takePersistableUriPermission(tree, flags);
+                } catch (Exception ignored) {
+                }
+                ret.put("uri", tree.toString());
+                ret.put("name", queryDisplayName(tree));
+            }
+        }
+        call.resolve(ret);
+    }
+
+    @PluginMethod
+    public void hasTreePermission(PluginCall call) {
+        String uriStr = call.getString("uri");
+        boolean granted = false;
+        if (uriStr != null) {
+            for (UriPermission p : getContext().getContentResolver().getPersistedUriPermissions()) {
+                if (p.getUri().toString().equals(uriStr) && p.isReadPermission()) {
+                    granted = true;
+                    break;
+                }
+            }
+        }
+        JSObject ret = new JSObject();
+        ret.put("granted", granted);
+        call.resolve(ret);
+    }
+
+    /** Read a vault-relative file. Resolves { found:false } when it doesn't exist. */
+    @PluginMethod
+    public void readTreeFile(PluginCall call) {
+        String treeUri = call.getString("treeUri");
+        String path = call.getString("path");
+        if (treeUri == null || path == null) {
+            call.reject("Missing treeUri/path");
+            return;
+        }
+        DocumentFile doc = TreeFiles.resolve(getContext(), treeUri, path, false);
+        JSObject ret = new JSObject();
+        if (doc == null || !doc.exists()) {
+            ret.put("found", false);
+            ret.put("data", (String) null);
+            call.resolve(ret);
+            return;
+        }
+        try {
+            ret.put("found", true);
+            ret.put("data", TreeFiles.read(getContext(), doc.getUri()));
+            call.resolve(ret);
+        } catch (Exception e) {
+            call.reject("Read failed: " + e.getMessage());
+        }
+    }
+
+    @PluginMethod
+    public void writeTreeFile(PluginCall call) {
+        String treeUri = call.getString("treeUri");
+        String path = call.getString("path");
+        String data = call.getString("data", "");
+        if (treeUri == null || path == null) {
+            call.reject("Missing treeUri/path");
+            return;
+        }
+        DocumentFile doc = TreeFiles.resolve(getContext(), treeUri, path, true);
+        if (doc == null) {
+            call.reject("Could not resolve/create file");
+            return;
+        }
+        try {
+            TreeFiles.write(getContext(), doc.getUri(), data);
             call.resolve();
         } catch (Exception e) {
             call.reject("Write failed: " + e.getMessage());

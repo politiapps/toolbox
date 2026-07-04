@@ -1,6 +1,6 @@
 import { Preferences } from "@capacitor/preferences";
 import type { SortOrder } from "@toolbox/task-core";
-import type { TasksFileRef } from "./storage";
+import type { VaultRef } from "./storage";
 
 /** One user-defined section, matched by a tag (mirrors the plugin). */
 export interface SectionConfig {
@@ -39,10 +39,11 @@ export interface PomodoroState {
 }
 
 export interface AppSettings {
-	file: TasksFileRef | null;
-	/** The Obsidian plugin's data.json, if the user linked it — re-read on launch
-	 * so the app's categories keep mirroring the plugin automatically. */
-	obsidianConfig: TasksFileRef | null;
+	/** One-time SAF folder grant on the Obsidian vault. */
+	vault: VaultRef | null;
+	/** Vault-relative path to the tasks file (read from the plugin's data.json). */
+	tasksPath: string;
+	/** Sections mirrored from the plugin's data.json (re-synced each launch). */
 	sections: SectionConfig[];
 	recentTags: string[];
 	/** Collapse state keyed by section id (and "__completed__"). */
@@ -56,8 +57,8 @@ export interface AppSettings {
 export const COMPLETED_KEY = "__completed__";
 
 export const DEFAULT_SETTINGS: AppSettings = {
-	file: null,
-	obsidianConfig: null,
+	vault: null,
+	tasksPath: "tasks.md",
 	sections: [
 		{ id: "s-home", name: "Home", tag: "#home", sort: "due", collapsedByDefault: false },
 		{ id: "s-work", name: "Work", tag: "#work", sort: "priority-due", collapsedByDefault: false },

@@ -1,17 +1,16 @@
 import { registerPlugin } from "@capacitor/core";
-import type { StorageAdapter, TasksFileRef } from "./types";
+import type { StorageAdapter, VaultRef } from "./types";
 
 /**
- * Native side of the SAF adapter. Implemented by the Kotlin `SafFiles` plugin
- * in android/app/src/main/java/.../SafFilesPlugin.kt.
+ * Native side of the SAF adapter. Implemented by the Kotlin/Java `SafFiles`
+ * plugin. Uses a folder (tree) grant so files are addressed by relative path.
  */
 interface SafFilesPlugin {
-	/** Opens ACTION_OPEN_DOCUMENT; resolves with the picked file or uri=null. */
-	pickFile(): Promise<{ uri: string | null; name: string | null }>;
-	/** True if we still hold a persisted read/write grant for `uri`. */
-	hasPermission(options: { uri: string }): Promise<{ granted: boolean }>;
-	readFile(options: { uri: string }): Promise<{ data: string }>;
-	writeFile(options: { uri: string; data: string }): Promise<void>;
+	/** Opens ACTION_OPEN_DOCUMENT_TREE; resolves with the picked folder or uri=null. */
+	pickFolder(): Promise<{ uri: string | null; name: string | null }>;
+	hasTreePermission(options: { uri: string }): Promise<{ granted: boolean }>;
+	readTreeFile(options: { treeUri: string; path: string }): Promise<{ found: boolean; data: string | null }>;
+	writeTreeFile(options: { treeUri: string; path: string; data: string }): Promise<void>;
 }
 
 const SafFiles = registerPlugin<SafFilesPlugin>("SafFiles");
@@ -21,27 +20,26 @@ export class CapacitorSafAdapter implements StorageAdapter {
 		return true;
 	}
 
-	async pickFile(): Promise<TasksFileRef | null> {
-		const res = await SafFiles.pickFile();
+	async pickVault(): Promise<VaultRef | null> {
+		const res = await SafFiles.pickFolder();
 		if (!res.uri) return null;
-		return { uri: res.uri, name: res.name ?? "tasks.md" };
+		return { uri: res.uri, name: res.name ?? "Vault" };
 	}
 
-	async hasAccess(ref: TasksFileRef): Promise<boolean> {
+	async hasVaultAccess(vault: VaultRef): Promise<boolean> {
 		try {
-			const { granted } = await SafFiles.hasPermission({ uri: ref.uri });
-			return granted;
+			return (await SafFiles.hasTreePermission({ uri: vault.uri })).granted;
 		} catch {
 			return false;
 		}
 	}
 
-	async read(ref: TasksFileRef): Promise<string> {
-		const { data } = await SafFiles.readFile({ uri: ref.uri });
-		return data;
+	async readFile(vault: VaultRef, relPath: string): Promise<string | null> {
+		const res = await SafFiles.readTreeFile({ treeUri: vault.uri, path: relPath });
+		return res.found ? (res.data ?? "") : null;
 	}
 
-	async write(ref: TasksFileRef, content: string): Promise<void> {
-		await SafFiles.writeFile({ uri: ref.uri, data: content });
+	async writeFile(vault: VaultRef, relPath: string, content: string): Promise<void> {
+		await SafFiles.writeTreeFile({ treeUri: vault.uri, path: relPath, data: content });
 	}
 }

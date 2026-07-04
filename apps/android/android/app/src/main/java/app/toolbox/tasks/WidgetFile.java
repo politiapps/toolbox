@@ -2,15 +2,12 @@ package app.toolbox.tasks;
 
 import android.content.Context;
 import android.content.SharedPreferences;
-import android.net.Uri;
+
+import androidx.documentfile.provider.DocumentFile;
 
 import org.json.JSONArray;
 import org.json.JSONObject;
 
-import java.io.ByteArrayOutputStream;
-import java.io.InputStream;
-import java.io.OutputStream;
-import java.nio.charset.StandardCharsets;
 import java.text.SimpleDateFormat;
 import java.util.Date;
 import java.util.Locale;
@@ -19,8 +16,8 @@ import java.util.Locale;
  * The one place the widget touches the tasks file directly. Completing a task
  * here is a deliberately minimal string edit — flip "[ ]" to "[x]" and append a
  * done date to the exact raw line the app cached — so no markdown parser is
- * needed natively. The app reconciles everything (including recurrence) on its
- * next open, which is why recurring tasks are best completed in the app.
+ * needed natively. The file is located inside the vault folder grant via the
+ * tasks path the app read from the plugin's data.json.
  */
 final class WidgetFile {
 
@@ -29,11 +26,12 @@ final class WidgetFile {
     private WidgetFile() {}
 
     static void completeTask(Context ctx, String raw) {
-        String uriStr = tasksFileUri(ctx);
-        if (uriStr == null) return;
+        String[] loc = vaultLocation(ctx);
+        if (loc == null) return;
         try {
-            Uri uri = Uri.parse(uriStr);
-            String content = readAll(ctx, uri);
+            DocumentFile doc = TreeFiles.resolve(ctx, loc[0], loc[1], false);
+            if (doc == null || !doc.exists()) return;
+            String content = TreeFiles.read(ctx, doc.getUri());
             int idx = content.indexOf(raw);
             if (idx < 0) return; // line changed externally — the app will resync
 
@@ -43,43 +41,28 @@ final class WidgetFile {
                 completed = completed + " ✅ " + today;
             }
             String next = content.substring(0, idx) + completed + content.substring(idx + raw.length());
-            writeAll(ctx, uri, next);
+            TreeFiles.write(ctx, doc.getUri(), next);
             removeFromCache(ctx, raw);
         } catch (Exception ignored) {
             // Leave the widget as-is; opening the app will reconcile.
         }
     }
 
-    private static String tasksFileUri(Context ctx) {
+    /** [treeUri, tasksPath] from the app's settings, or null if no vault linked. */
+    private static String[] vaultLocation(Context ctx) {
         SharedPreferences sp = ctx.getSharedPreferences(CAP_STORE, Context.MODE_PRIVATE);
         String settings = sp.getString("settings", null);
         if (settings == null) return null;
         try {
-            JSONObject file = new JSONObject(settings).optJSONObject("file");
-            if (file == null) return null;
-            String uri = file.optString("uri", "");
-            return uri.isEmpty() ? null : uri;
+            JSONObject o = new JSONObject(settings);
+            JSONObject vault = o.optJSONObject("vault");
+            if (vault == null) return null;
+            String treeUri = vault.optString("uri", "");
+            if (treeUri.isEmpty()) return null;
+            String path = o.optString("tasksPath", "tasks.md");
+            return new String[] { treeUri, path };
         } catch (Exception e) {
             return null;
-        }
-    }
-
-    private static String readAll(Context ctx, Uri uri) throws Exception {
-        try (InputStream is = ctx.getContentResolver().openInputStream(uri)) {
-            if (is == null) throw new Exception("no stream");
-            ByteArrayOutputStream bos = new ByteArrayOutputStream();
-            byte[] buf = new byte[8192];
-            int n;
-            while ((n = is.read(buf)) != -1) bos.write(buf, 0, n);
-            return new String(bos.toByteArray(), StandardCharsets.UTF_8);
-        }
-    }
-
-    private static void writeAll(Context ctx, Uri uri, String data) throws Exception {
-        try (OutputStream os = ctx.getContentResolver().openOutputStream(uri, "wt")) {
-            if (os == null) throw new Exception("no stream");
-            os.write(data.getBytes(StandardCharsets.UTF_8));
-            os.flush();
         }
     }
 

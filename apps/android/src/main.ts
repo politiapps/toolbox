@@ -11,10 +11,10 @@ async function boot(): Promise<void> {
 	const settings = await loadSettings();
 	const storage = getStorage();
 
-	// If we had a file but lost the SAF grant (revoked / moved), forget it so the
-	// UI prompts for a fresh pick rather than erroring on every read.
-	if (settings.file && !(await storage.hasAccess(settings.file))) {
-		settings.file = null;
+	// If we linked a vault but lost the SAF grant (revoked / moved), forget it so
+	// the UI prompts to re-link rather than erroring on every read.
+	if (settings.vault && !(await storage.hasVaultAccess(settings.vault))) {
+		settings.vault = null;
 		await saveSettings(settings);
 	}
 

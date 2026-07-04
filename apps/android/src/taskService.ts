@@ -41,14 +41,13 @@ export class TaskService {
 		private persist: () => Promise<void>
 	) {}
 
-	private get file() {
-		return this.settings.file;
+	private get vault() {
+		return this.settings.vault;
 	}
 
-	/** Read + parse the whole file. Empty tree when no file is chosen. */
+	/** Read + parse the whole file. Empty tree when no vault is linked. */
 	async load(): Promise<LoadResult> {
-		if (!this.file) return { tasks: [], flat: [] };
-		const content = await this.storage.read(this.file);
+		const content = await this.readContent();
 		const { tasks, flat } = parseTasks(content);
 		return { tasks, flat };
 	}
@@ -66,13 +65,13 @@ export class TaskService {
 	/* ------------------------------ raw IO ------------------------------ */
 
 	private async readContent(): Promise<string> {
-		if (!this.file) return "";
-		return this.storage.read(this.file);
+		if (!this.vault) return "";
+		return (await this.storage.readFile(this.vault, this.settings.tasksPath)) ?? "";
 	}
 
 	private async writeContent(content: string): Promise<void> {
-		if (!this.file) throw new Error("No tasks file selected");
-		await this.storage.write(this.file, content);
+		if (!this.vault) throw new Error("No vault linked");
+		await this.storage.writeFile(this.vault, this.settings.tasksPath, content);
 	}
 
 	private async appendLine(line: string): Promise<void> {

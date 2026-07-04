@@ -13,12 +13,6 @@ export interface AppContext {
 	knownTags: string[];
 	/** Navigate to the settings screen. */
 	openSettings: () => void;
-	/** Open the file picker and adopt the chosen tasks file. */
-	pickFile: () => Promise<void>;
-	/**
-	 * Pick the Obsidian plugin's data.json and copy its sections + Pomodoro config
-	 * into the app. Resolves with the number of sections imported, or null if the
-	 * user cancelled or the file wasn't a valid Toolbox config.
-	 */
-	importObsidianSettings: () => Promise<number | null>;
+	/** Link the Obsidian vault folder, then mirror its config. */
+	pickVault: () => Promise<void>;
 }

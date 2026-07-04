@@ -12,6 +12,7 @@ import type { AppSettings, SectionConfig } from "../appState";
 import type { SortOrder } from "@toolbox/task-core";
 import type { TaskService } from "../taskService";
 import type { StorageAdapter } from "../storage";
+import { DATA_JSON_PATH } from "../storage";
 import type { AppContext } from "./context";
 
 type Screen = "list" | "settings";
@@ -36,36 +37,13 @@ export class App {
 				this.screen = "settings";
 				void this.render();
 			},
-			pickFile: () => this.pickFile(),
-			importObsidianSettings: () => this.importObsidianSettings(),
+			pickVault: () => this.pickVault(),
 		};
 	}
 
-	/**
-	 * Read the Obsidian plugin's data.json (chosen via the file picker) and adopt
-	 * its sections + Pomodoro config, so the app's categories mirror the plugin.
-	 * The plugin's SectionConfig shape is identical to the app's.
-	 */
-	private async importObsidianSettings(): Promise<number | null> {
-		const ref = await this.storage.pickFile();
-		if (!ref) return null;
-		let text: string;
-		try {
-			text = await this.storage.read(ref);
-		} catch {
-			return null;
-		}
-		const applied = this.applyObsidianConfig(text);
-		if (applied === null) return null;
-		// Remember the file so launches re-sync categories automatically.
-		this.settings.obsidianConfig = ref;
-		await saveSettings(this.settings);
-		return applied;
-	}
-
 	async start(): Promise<void> {
-		// If the user has linked their Obsidian data.json, re-read it on launch so
-		// categories keep mirroring the plugin without any manual step.
+		// Re-mirror categories + tasks path from the vault's data.json each launch,
+		// so the app stays matched to the Obsidian plugin with no manual step.
 		await this.syncObsidianConfig();
 		await this.render();
 		await this.handlePendingAction();
@@ -90,22 +68,24 @@ export class App {
 		}
 	}
 
-	/** Silently re-apply sections from the linked Obsidian data.json, if reachable. */
+	/** Re-read the vault's data.json and mirror its sections + tasks path. */
 	private async syncObsidianConfig(): Promise<void> {
-		const ref = this.settings.obsidianConfig;
-		if (!ref) return;
+		const vault = this.settings.vault;
+		if (!vault) return;
 		try {
-			if (!(await this.storage.hasAccess(ref))) return;
-			const applied = this.applyObsidianConfig(await this.storage.read(ref));
-			if (applied !== null) await saveSettings(this.settings);
+			if (!(await this.storage.hasVaultAccess(vault))) return;
+			const text = await this.storage.readFile(vault, DATA_JSON_PATH);
+			if (text !== null && this.applyObsidianConfig(text) !== null) {
+				await saveSettings(this.settings);
+			}
 		} catch {
-			/* config moved or unreadable — keep whatever sections we have */
+			/* data.json missing/unreadable — keep whatever sections we have */
 		}
 	}
 
 	/**
-	 * Parse an Obsidian plugin data.json string and adopt its sections + Pomodoro
-	 * config. Returns the number of sections applied, or null if it wasn't valid.
+	 * Parse the Obsidian plugin's data.json and adopt its sections + tasks path so
+	 * the app mirrors the plugin. Returns the number of sections applied, or null.
 	 */
 	private applyObsidianConfig(text: string): number | null {
 		let data: Record<string, unknown>;
@@ -117,6 +97,10 @@ export class App {
 		const rawSections = data.sections;
 		if (!Array.isArray(rawSections)) return null;
 
+		if (typeof data.tasksFilePath === "string" && data.tasksFilePath.trim()) {
+			this.settings.tasksPath = data.tasksFilePath.trim();
+		}
+
 		const validSorts: SortOrder[] = ["due", "priority", "priority-due", "file"];
 		this.settings.sections = rawSections
 			.filter((s): s is Record<string, unknown> => !!s && typeof (s as Record<string, unknown>).tag === "string")
@@ -127,22 +111,16 @@ export class App {
 				sort: validSorts.includes(s.sort as SortOrder) ? (s.sort as SortOrder) : "due",
 				collapsedByDefault: s.collapsedByDefault === true,
 			}));
-
-		const pc = this.settings.pomodoroConfig;
-		if (typeof data.pomodoroEnabled === "boolean") pc.enabled = data.pomodoroEnabled;
-		const num = (v: unknown, fallback: number) => (typeof v === "number" && v > 0 ? v : fallback);
-		pc.workMin = num(data.pomodoroWorkMin, pc.workMin);
-		pc.shortMin = num(data.pomodoroShortMin, pc.shortMin);
-		pc.longMin = num(data.pomodoroLongMin, pc.longMin);
-		pc.longEvery = num(data.pomodoroLongEvery, pc.longEvery);
 		return this.settings.sections.length;
 	}
 
-	private async pickFile(): Promise<void> {
-		const ref = await this.storage.pickFile();
-		if (!ref) return;
-		this.settings.file = ref;
+	/** Link the Obsidian vault folder (one-time), then mirror its config. */
+	private async pickVault(): Promise<void> {
+		const vault = await this.storage.pickVault();
+		if (!vault) return;
+		this.settings.vault = vault;
 		await saveSettings(this.settings);
+		await this.syncObsidianConfig();
 		this.screen = "list";
 		await this.render();
 	}
@@ -171,13 +149,17 @@ export class App {
 			renderPomodoro(this.ctx, screen, uniqueIncompleteNames(flat));
 		}
 
-		if (!this.settings.file) {
+		if (!this.settings.vault) {
 			const empty = el("div", { cls: "empty-state" });
 			empty.append(
-				el("p", { text: "No tasks file selected." }),
+				el("p", { text: "Link your Obsidian vault to see your tasks." }),
+				el("p", {
+					cls: "empty-sub",
+					text: "One folder pick — the app finds your tasks and mirrors your categories automatically.",
+				}),
 				(() => {
-					const b = el("button", { cls: "btn btn-cta", text: "Choose your tasks.md" });
-					b.addEventListener("click", () => this.pickFile());
+					const b = el("button", { cls: "btn btn-cta", text: "Link Obsidian vault" });
+					b.addEventListener("click", () => this.pickVault());
 					return b;
 				})()
 			);

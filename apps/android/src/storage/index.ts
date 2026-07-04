@@ -3,7 +3,8 @@ import type { StorageAdapter } from "./types";
 import { CapacitorSafAdapter } from "./capacitorSaf";
 import { WebFileAdapter } from "./webFile";
 
-export type { StorageAdapter, TasksFileRef } from "./types";
+export type { StorageAdapter, VaultRef } from "./types";
+export { DATA_JSON_PATH } from "./types";
 
 let cached: StorageAdapter | null = null;
 
