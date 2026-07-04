@@ -840,7 +840,7 @@ export class TasksView extends ItemView {
 
 		if (hasChildren && !collapsed) {
 			const childWrap = item.createDiv({ cls: "tasks-children" });
-			for (const child of task.children) this.renderTask(childWrap, child, task.tags);
+			for (const child of orderSubtasks(task.children)) this.renderTask(childWrap, child, task.tags);
 		}
 	}
 
@@ -933,22 +933,46 @@ export class TasksView extends ItemView {
 	}
 
 	private openAddForm(prefillTag?: string): void {
-		new TaskFormModal(this, "Add task", this.allTags, null, async (input) => {
-			const line = serializeTask({
-				indent: "",
-				description: input.description,
-				tags: input.tags,
-				due: input.due,
-				priority: input.priority,
-				recurrence: input.recurrence,
-				completed: false,
-				doneDate: null,
-			});
-			await this.appendLine(line);
-			for (const tag of input.tags) touchRecentTag(this.plugin.settings, tag);
-			await this.plugin.saveSettings();
-			await this.refresh();
-		}, prefillTag).open();
+		new TaskFormModal(
+			this,
+			"Add task",
+			this.allTags,
+			null,
+			async (input) => {
+				await this.createTask(input);
+			},
+			prefillTag,
+			{
+				label: "Add & open",
+				tooltip: "Create the task and open it to add notes and subtasks",
+				handler: async (input) => {
+					const task = await this.createTask(input);
+					if (task) this.openDetail(task);
+				},
+			}
+		).open();
+	}
+
+	/**
+	 * Append a new top-level task, refresh, and return the freshly parsed Task
+	 * (located by its serialised line) so callers can open it for further editing.
+	 */
+	private async createTask(input: TaskInput): Promise<Task | null> {
+		const line = serializeTask({
+			indent: "",
+			description: input.description,
+			tags: input.tags,
+			due: input.due,
+			priority: input.priority,
+			recurrence: input.recurrence,
+			completed: false,
+			doneDate: null,
+		});
+		await this.appendLine(line);
+		for (const tag of input.tags) touchRecentTag(this.plugin.settings, tag);
+		await this.plugin.saveSettings();
+		await this.refresh();
+		return this.reloadTask(line);
 	}
 
 	/** Open the full add form for a subtask, pre-tagged with the parent's project. */
@@ -1185,6 +1209,14 @@ function countPressure(flat: Task[]): Pressure {
 	return { overdue, dueToday };
 }
 
+/**
+ * Order subtasks so completed ones sink to the bottom of the list, keeping
+ * incomplete and completed each in their original document order (stable).
+ */
+function orderSubtasks(children: Task[]): Task[] {
+	return [...children].sort((a, b) => Number(a.completed) - Number(b.completed));
+}
+
 /** Total number of descendant tasks (subtasks at any depth). */
 function countDescendants(task: Task): number {
 	let n = task.children.length;
@@ -1384,12 +1416,20 @@ function buildRecurrenceSetting(
 /* Add / edit modal                                                    */
 /* ------------------------------------------------------------------ */
 
+/** An extra button on the add form (e.g. "Add & open") alongside the primary. */
+interface FormSecondaryAction {
+	label: string;
+	tooltip?: string;
+	handler: (input: TaskInput) => Promise<void>;
+}
+
 class TaskFormModal extends Modal {
 	private view: TasksView;
 	private titleText: string;
 	private knownTags: string[];
 	private initial: TaskInput | null;
 	private onSubmit: (input: TaskInput) => Promise<void>;
+	private secondary: FormSecondaryAction | null;
 
 	private description = "";
 	private tag = "";
@@ -1403,7 +1443,8 @@ class TaskFormModal extends Modal {
 		knownTags: string[],
 		initial: TaskInput | null,
 		onSubmit: (input: TaskInput) => Promise<void>,
-		prefillTag?: string
+		prefillTag?: string,
+		secondary?: FormSecondaryAction
 	) {
 		super(view.app);
 		this.view = view;
@@ -1411,6 +1452,7 @@ class TaskFormModal extends Modal {
 		this.knownTags = knownTags;
 		this.initial = initial;
 		this.onSubmit = onSubmit;
+		this.secondary = secondary ?? null;
 
 		if (initial) {
 			this.description = initial.description;
@@ -1511,32 +1553,53 @@ class TaskFormModal extends Modal {
 			(rule) => (this.recurrence = rule)
 		);
 
-		new Setting(contentEl).addButton((btn) =>
+		const buttons = new Setting(contentEl).addButton((btn) =>
 			btn
 				.setButtonText(this.initial ? "Save" : "Add task")
 				.setCta()
 				.onClick(() => this.submit())
 		);
+		if (this.secondary && !this.initial) {
+			const secondary = this.secondary;
+			buttons.addButton((btn) => {
+				btn.setButtonText(secondary.label).onClick(() => this.submitSecondary());
+				if (secondary.tooltip) btn.setTooltip(secondary.tooltip);
+			});
+		}
 	}
 
-	private async submit(): Promise<void> {
+	/** Validate and gather the form into a TaskInput, or null (with a notice) if invalid. */
+	private collectInput(): TaskInput | null {
 		const description = this.description.trim();
 		if (!description) {
 			new Notice("Description is required.");
-			return;
+			return null;
 		}
 		let tag = this.tag.trim();
 		if (tag && !tag.startsWith("#")) tag = "#" + tag;
 
-		const input: TaskInput = {
+		return {
 			description,
 			tags: tag ? [tag] : [],
 			due: this.due,
 			priority: this.priority,
 			recurrence: this.recurrence,
 		};
+	}
+
+	private async submit(): Promise<void> {
+		const input = this.collectInput();
+		if (!input) return;
 		this.close();
 		await this.onSubmit(input);
+	}
+
+	private async submitSecondary(): Promise<void> {
+		if (!this.secondary) return;
+		const input = this.collectInput();
+		if (!input) return;
+		this.close();
+		await this.secondary.handler(input);
 	}
 
 	onClose(): void {
@@ -1683,7 +1746,7 @@ class TaskDetailModal extends Modal {
 			wrap.createDiv({ cls: "tasks-empty", text: "No subtasks yet" });
 			return;
 		}
-		for (const child of this.task.children) {
+		for (const child of orderSubtasks(this.task.children)) {
 			const row = wrap.createDiv({ cls: "tasks-detail-subrow" });
 			const cb = row.createEl("input", { type: "checkbox", cls: "tasks-checkbox" });
 			cb.checked = child.completed;
