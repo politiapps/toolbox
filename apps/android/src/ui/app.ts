@@ -2,7 +2,12 @@ import { Task, sortTasks, taskHasTag, collectTags } from "@toolbox/task-core";
 import { el } from "./dom";
 import { setIcon, iconButton } from "./icons";
 import { todayISO, formatDueDisplay, daysUntil, dueLabel, dueClass } from "../dates";
-import { writeWidgetCache, consumePendingWidgetAction, type WidgetGroup } from "../widgetCache";
+import {
+	writeWidgetCache,
+	consumePendingWidgetAction,
+	type WidgetCategory,
+	type WidgetTask,
+} from "../widgetCache";
 import { renderTask } from "./taskRow";
 import { renderPomodoro } from "./pomodoro";
 import { renderSettings } from "./settingsScreen";
@@ -170,13 +175,21 @@ export class App {
 
 		const incomplete = tasks.filter((t) => !t.completed);
 		const shown = new Set<Task>();
-		const widgetGroups: WidgetGroup[] = [];
+		const widgetCategories: WidgetCategory[] = [];
+		const widgetTasks: WidgetTask[] = [];
+		let catOrder = 0;
+		const collect = (id: string, name: string, list: Task[]) => {
+			widgetCategories.push({ id, name });
+			for (const t of list) widgetTasks.push(toWidgetTask(t, id, name, catOrder));
+			catOrder++;
+		};
+
 		for (const section of this.settings.sections) {
 			const matching = incomplete.filter((t) => !shown.has(t) && taskHasTag(t, section.tag));
 			matching.forEach((t) => shown.add(t));
 			const sorted = sortTasks(matching, section.sort);
 			this.renderSection(screen, section.id, section.name, sorted, section.collapsedByDefault);
-			widgetGroups.push(toWidgetGroup(section.id, section.name, sorted));
+			collect(section.id, section.name, sorted);
 		}
 
 		// Anything not captured by a configured section still needs a home.
@@ -184,7 +197,7 @@ export class App {
 		if (orphans.length) {
 			const sorted = sortTasks(orphans, "due");
 			this.renderSection(screen, "__other__", "Other", sorted, false);
-			widgetGroups.push(toWidgetGroup("__other__", "Other", sorted));
+			collect("__other__", "Other", sorted);
 		}
 
 		const completed = tasks.filter((t) => t.completed);
@@ -193,7 +206,7 @@ export class App {
 		this.root.append(screen);
 
 		// Refresh the home-screen widget snapshot (fire-and-forget).
-		void writeWidgetCache(widgetGroups);
+		void writeWidgetCache(widgetCategories, widgetTasks);
 	}
 
 	private renderHeader(parent: HTMLElement, flat: Task[]): void {
@@ -309,18 +322,18 @@ export class App {
 	}
 }
 
-/** Flatten a section's top-level tasks into the widget's cache shape. */
-function toWidgetGroup(id: string, name: string, tasks: Task[]): WidgetGroup {
+/** Flatten one top-level task into the widget's cache shape. */
+function toWidgetTask(t: Task, cat: string, catName: string, catOrder: number): WidgetTask {
 	return {
-		id,
-		name,
-		tasks: tasks.map((t) => ({
-			text: t.description,
-			raw: t.raw,
-			dueLabel: t.due ? dueLabel(t.due) : null,
-			dueClass: t.due ? dueClass(t.due) : null,
-			priority: t.priority,
-		})),
+		text: t.description,
+		raw: t.raw,
+		dueDays: t.due ? daysUntil(t.due) : null,
+		dueLabel: t.due ? dueLabel(t.due) : null,
+		dueClass: t.due ? dueClass(t.due) : null,
+		priority: t.priority,
+		cat,
+		catName,
+		catOrder,
 	};
 }
 

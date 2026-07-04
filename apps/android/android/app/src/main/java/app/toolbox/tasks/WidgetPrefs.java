@@ -3,21 +3,18 @@ package app.toolbox.tasks;
 import android.content.Context;
 import android.content.SharedPreferences;
 
-import java.util.Arrays;
-import java.util.HashSet;
-import java.util.Set;
+import org.json.JSONArray;
+import org.json.JSONObject;
 
 /**
- * Shared access to the two bits of widget state:
- *   - the task snapshot the JS app writes via Capacitor Preferences
- *     (SharedPreferences file "CapacitorStorage", key "widget_cache"), and
- *   - each placed widget's chosen categories (our own "TaskWidgetPrefs" file).
+ * Shared access to widget state: the task snapshot the JS app writes via
+ * Capacitor Preferences ("CapacitorStorage" / "widget_cache"), and each placed
+ * widget's own configuration ("TaskWidgetPrefs" / "cfg_<id>").
  */
 final class WidgetPrefs {
     private static final String CAP_STORE = "CapacitorStorage";
     private static final String CACHE_KEY = "widget_cache";
     private static final String WIDGET_STORE = "TaskWidgetPrefs";
-    private static final String SEP = "\n";
 
     private WidgetPrefs() {}
 
@@ -27,25 +24,44 @@ final class WidgetPrefs {
         return sp.getString(CACHE_KEY, null);
     }
 
-    /** Persist the category ids a widget should show (empty = show all). */
-    static void saveSelection(Context ctx, int widgetId, Set<String> ids) {
-        SharedPreferences sp = ctx.getSharedPreferences(WIDGET_STORE, Context.MODE_PRIVATE);
-        sp.edit().putString("sel_" + widgetId, String.join(SEP, ids)).apply();
+    static void writeCache(Context ctx, String json) {
+        ctx.getSharedPreferences(CAP_STORE, Context.MODE_PRIVATE)
+            .edit().putString(CACHE_KEY, json).apply();
     }
 
-    /** The category ids a widget shows, or an empty set meaning "all". */
-    static Set<String> loadSelection(Context ctx, int widgetId) {
-        SharedPreferences sp = ctx.getSharedPreferences(WIDGET_STORE, Context.MODE_PRIVATE);
-        String raw = sp.getString("sel_" + widgetId, "");
-        Set<String> out = new HashSet<>();
-        if (raw != null && !raw.isEmpty()) {
-            out.addAll(Arrays.asList(raw.split(SEP)));
+    static void saveConfig(Context ctx, int widgetId, WidgetConfig cfg) {
+        try {
+            JSONObject o = new JSONObject();
+            o.put("groupBy", cfg.groupBy);
+            o.put("sort", cfg.sort);
+            o.put("cats", new JSONArray(cfg.cats));
+            o.put("buckets", new JSONArray(cfg.buckets));
+            ctx.getSharedPreferences(WIDGET_STORE, Context.MODE_PRIVATE)
+                .edit().putString("cfg_" + widgetId, o.toString()).apply();
+        } catch (Exception ignored) {
         }
-        return out;
     }
 
-    static void clearSelection(Context ctx, int widgetId) {
+    static WidgetConfig loadConfig(Context ctx, int widgetId) {
+        WidgetConfig cfg = new WidgetConfig();
         SharedPreferences sp = ctx.getSharedPreferences(WIDGET_STORE, Context.MODE_PRIVATE);
-        sp.edit().remove("sel_" + widgetId).apply();
+        String raw = sp.getString("cfg_" + widgetId, null);
+        if (raw == null) return cfg;
+        try {
+            JSONObject o = new JSONObject(raw);
+            cfg.groupBy = o.optString("groupBy", "category");
+            cfg.sort = o.optString("sort", "due");
+            JSONArray cats = o.optJSONArray("cats");
+            if (cats != null) for (int i = 0; i < cats.length(); i++) cfg.cats.add(cats.getString(i));
+            JSONArray buckets = o.optJSONArray("buckets");
+            if (buckets != null) for (int i = 0; i < buckets.length(); i++) cfg.buckets.add(buckets.getString(i));
+        } catch (Exception ignored) {
+        }
+        return cfg;
+    }
+
+    static void clearConfig(Context ctx, int widgetId) {
+        ctx.getSharedPreferences(WIDGET_STORE, Context.MODE_PRIVATE)
+            .edit().remove("cfg_" + widgetId).apply();
     }
 }

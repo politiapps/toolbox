@@ -75,7 +75,7 @@ public class TaskWidgetProvider extends AppWidgetProvider {
     @Override
     public void onDeleted(Context ctx, int[] widgetIds) {
         for (int id : widgetIds) {
-            WidgetPrefs.clearSelection(ctx, id);
+            WidgetPrefs.clearConfig(ctx, id);
         }
     }
 }

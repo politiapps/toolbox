@@ -32,8 +32,8 @@ public class TaskWidgetService extends RemoteViewsService {
         }
 
         private void reload() {
-            Set<String> selected = WidgetPrefs.loadSelection(ctx, widgetId);
-            items = WidgetCache.items(ctx, selected);
+            WidgetConfig cfg = WidgetPrefs.loadConfig(ctx, widgetId);
+            items = WidgetCache.items(ctx, cfg);
         }
 
         @Override

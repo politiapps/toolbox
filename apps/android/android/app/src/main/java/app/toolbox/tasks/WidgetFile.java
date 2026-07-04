@@ -68,25 +68,19 @@ final class WidgetFile {
 
     /** Drop the just-completed task from the cache so the widget updates instantly. */
     private static void removeFromCache(Context ctx, String raw) {
-        SharedPreferences sp = ctx.getSharedPreferences(CAP_STORE, Context.MODE_PRIVATE);
-        String cache = sp.getString("widget_cache", null);
+        String cache = WidgetPrefs.readCache(ctx);
         if (cache == null) return;
         try {
             JSONObject root = new JSONObject(cache);
-            JSONArray groups = root.optJSONArray("groups");
-            if (groups == null) return;
-            for (int i = 0; i < groups.length(); i++) {
-                JSONObject g = groups.getJSONObject(i);
-                JSONArray tasks = g.optJSONArray("tasks");
-                if (tasks == null) continue;
-                JSONArray kept = new JSONArray();
-                for (int j = 0; j < tasks.length(); j++) {
-                    JSONObject t = tasks.getJSONObject(j);
-                    if (!raw.equals(t.optString("raw"))) kept.put(t);
-                }
-                g.put("tasks", kept);
+            JSONArray tasks = root.optJSONArray("tasks");
+            if (tasks == null) return;
+            JSONArray kept = new JSONArray();
+            for (int j = 0; j < tasks.length(); j++) {
+                JSONObject t = tasks.getJSONObject(j);
+                if (!raw.equals(t.optString("raw"))) kept.put(t);
             }
-            sp.edit().putString("widget_cache", root.toString()).apply();
+            root.put("tasks", kept);
+            WidgetPrefs.writeCache(ctx, root.toString());
         } catch (Exception ignored) {
         }
     }

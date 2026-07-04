@@ -31,21 +31,29 @@ export interface WidgetTask {
 	text: string;
 	/** The exact markdown line, so the native widget can locate it to tick off. */
 	raw: string;
+	/** Whole days until due (negative = overdue), or null when undated. */
+	dueDays: number | null;
 	dueLabel: string | null;
 	/** Proximity class: is-overdue / is-today / … (drives the widget's due colour). */
 	dueClass: string | null;
 	priority: string;
+	/** Owning category id + name + order, so the widget can group/filter by category. */
+	cat: string;
+	catName: string;
+	catOrder: number;
 }
 
-export interface WidgetGroup {
+export interface WidgetCategory {
 	id: string;
 	name: string;
-	tasks: WidgetTask[];
 }
 
-/** Persist the snapshot and nudge the widgets to redraw. */
-export async function writeWidgetCache(groups: WidgetGroup[]): Promise<void> {
-	const payload = { updatedAt: Date.now(), groups };
+/**
+ * Persist a flat snapshot (categories + tasks) and nudge the widgets to redraw.
+ * The widget itself decides how to group/filter/sort per its own config.
+ */
+export async function writeWidgetCache(categories: WidgetCategory[], tasks: WidgetTask[]): Promise<void> {
+	const payload = { updatedAt: Date.now(), categories, tasks };
 	await Preferences.set({ key: "widget_cache", value: JSON.stringify(payload) });
 	if (Capacitor.isNativePlatform()) {
 		try {
