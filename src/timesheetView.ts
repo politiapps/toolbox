@@ -942,16 +942,11 @@ class TimesheetEntryModal extends Modal {
 			this.org = initial.org;
 			this.breaks = initial.breaks.map((b) => ({ ...b }));
 		} else {
-			const now = new Date();
-			const h = String(now.getHours()).padStart(2, "0");
-			const m = String(now.getMinutes()).padStart(2, "0");
 			this.date = defaultDate ?? todayISO();
-			this.start = `${h}:${m}`;
-			// Default end = now + 1h
-			const endH = String((now.getHours() + 1) % 24).padStart(2, "0");
-			this.end = `${endH}:${m}`;
+			this.start = "09:00";
+			this.end = "17:00";
 			this.org = this.view.plugin.settings.timesheetOrgs[0]?.name ?? "";
-			this.breaks = [];
+			this.breaks = [{ start: "12:30", end: "13:30" }];
 		}
 	}
 

@@ -1,0 +1,42 @@
+{
+  "permissions": {
+    "allow": [
+      "PowerShell(npm install *)",
+      "PowerShell(npm run *)",
+      "Bash(git --version)",
+      "Bash(gh --version)",
+      "Bash(gh auth *)",
+      "PowerShell($g = Get-Command gh -ErrorAction SilentlyContinue; if \\($g\\) { \"gh: $\\($g.Source\\)\"; gh auth status } else { \"gh NOT INSTALLED\" })",
+      "PowerShell(git ls-remote *)",
+      "PowerShell(\"name: $\\(git config user.name\\)\"; \"email: $\\(git config user.email\\)\")",
+      "Bash(git init *)",
+      "Bash(git add *)",
+      "Bash(git commit -q -m ' *)",
+      "Bash(git remote *)",
+      "Bash(git push *)",
+      "Bash(git branch *)",
+      "PowerShell(winget install *)",
+      "PowerShell($gh = \"C:\\\\Program Files\\\\GitHub CLI\\\\gh.exe\"; if \\(Test-Path $gh\\) { & $gh --version; \"---\"; & $gh auth status } else { \"not at default path\"; Get-ChildItem \"C:\\\\Program Files\\\\GitHub CLI\" -ErrorAction SilentlyContinue })",
+      "PowerShell($gh = \"C:\\\\Program Files\\\\GitHub CLI\\\\gh.exe\"; & $gh auth status; \"---REPO ACCESS---\"; & $gh repo view politiapps/tasker --json nameWithOwner,viewerPermission)",
+      "PowerShell($gh = \"C:\\\\Program Files\\\\GitHub CLI\\\\gh.exe\"; & $gh release create 1.0.0-beta.1 --repo politiapps/tasker --target beta --prerelease --title \"1.0.0-beta.1\" --notes \"First beta release for BRAT testing in the dev vault.\")",
+      "PowerShell($gh = \"C:\\\\Program Files\\\\GitHub CLI\\\\gh.exe\"; Start-Sleep -Seconds 5; & $gh run list --repo politiapps/tasker --workflow release.yml --limit 1)",
+      "PowerShell($gh = \"C:\\\\Program Files\\\\GitHub CLI\\\\gh.exe\"; & $gh run watch 28078157439 --repo politiapps/tasker --exit-status; \"EXIT=$LASTEXITCODE\")",
+      "PowerShell($gh = \"C:\\\\Program Files\\\\GitHub CLI\\\\gh.exe\"; & $gh release view 1.0.0-beta.1 --repo politiapps/tasker --json tagName,isPrerelease,assets | & $gh.Replace\\($gh,'C:\\\\Windows\\\\System32\\\\WindowsPowerShell\\\\v1.0\\\\powershell.exe'\\) -Command '$input | ConvertFrom-Json | ForEach-Object { \"tag: $\\($_.tagName\\)\"; \"prerelease: $\\($_.isPrerelease\\)\"; \"assets:\"; $_.assets | ForEach-Object { \" - $\\($_.name\\) \\($\\($_.size\\) bytes\\)\" } }')",
+      "PowerShell($gh = \"C:\\\\Program Files\\\\GitHub CLI\\\\gh.exe\"; $r = & $gh release view 1.0.0-beta.1 --repo politiapps/tasker --json tagName,isPrerelease,assets | ConvertFrom-Json; \"tag: $\\($r.tagName\\)\"; \"prerelease: $\\($r.isPrerelease\\)\"; \"assets:\"; $r.assets | ForEach-Object { \" - $\\($_.name\\) \\($\\($_.size\\) bytes\\)\" })",
+      "Bash(node -e ' *)",
+      "Bash(git checkout *)",
+      "PowerShell($gh = \"C:\\\\Program Files\\\\GitHub CLI\\\\gh.exe\"; & $gh release create 1.0.0-beta.2 --repo politiapps/tasker --target beta --prerelease --title \"1.0.0-beta.2\" --notes \"UI redesign \\(triage cards, circular add, priority chips, round checkboxes\\), official Tasks-plugin priority alignment \\(6 levels\\), tag dropdown + create-new, and click-to-open date picker.\")",
+      "PowerShell($gh = \"C:\\\\Program Files\\\\GitHub CLI\\\\gh.exe\"; Start-Sleep -Seconds 6; $run = \\(& $gh run list --repo politiapps/tasker --workflow release.yml --limit 1 --json databaseId,status | ConvertFrom-Json\\)[0]; \"run $\\($run.databaseId\\) status=$\\($run.status\\)\"; & $gh run watch $run.databaseId --repo politiapps/tasker --exit-status; \"EXIT=$LASTEXITCODE\")",
+      "PowerShell($gh = \"C:\\\\Program Files\\\\GitHub CLI\\\\gh.exe\"; $r = & $gh release view 1.0.0-beta.2 --repo politiapps/tasker --json assets | ConvertFrom-Json; \"assets:\"; $r.assets | ForEach-Object { \" - $\\($_.name\\) \\($\\($_.size\\) bytes\\)\" })",
+      "PowerShell($gh = \"C:\\\\Program Files\\\\GitHub CLI\\\\gh.exe\"; & $gh release create 1.0.1-beta.3 --repo politiapps/tasker --target beta --prerelease --title \"1.0.1-beta.3\" --notes \"Auto-refresh on file create/rename/delete; clear 'No tasks file found' empty state with Create-file action; fixed BRAT update versioning \\(manifest version now strictly increases\\).\")",
+      "PowerShell($gh = \"C:\\\\Program Files\\\\GitHub CLI\\\\gh.exe\"; Start-Sleep -Seconds 6; $run = \\(& $gh run list --repo politiapps/tasker --workflow release.yml --limit 1 --json databaseId,status | ConvertFrom-Json\\)[0]; & $gh run watch $run.databaseId --repo politiapps/tasker --exit-status; \"EXIT=$LASTEXITCODE\"; $r = & $gh release view 1.0.1-beta.3 --repo politiapps/tasker --json assets | ConvertFrom-Json; \"assets:\"; $r.assets | ForEach-Object { \" - $\\($_.name\\) \\($\\($_.size\\) bytes\\)\" })",
+      "PowerShell($scratch = \"C:\\\\Users\\\\mille\\\\AppData\\\\Local\\\\Temp\\\\claude\\\\C--Projects-Coding-Projects-Tasks-plugin\\\\c49d02ff-5769-4419-9915-54b4086e9781\\\\scratchpad\"; node \"$scratch\\\\run2.js\")",
+      "PowerShell($gh = \"C:\\\\Program Files\\\\GitHub CLI\\\\gh.exe\"; & $gh release create 1.0.1-beta.4 --repo politiapps/tasker --target beta --prerelease --title \"1.0.1-beta.4\" --notes \"Today's calendar from an .ics URL \\(above tasks\\); due-date proximity colours + Today/Tomorrow wording; per-section + button that adds a task to that category; larger section headings.\"; Start-Sleep -Seconds 6; $run = \\(& $gh run list --repo politiapps/tasker --workflow release.yml --limit 1 --json databaseId | ConvertFrom-Json\\)[0]; & $gh run watch $run.databaseId --repo politiapps/tasker --exit-status; \"EXIT=$LASTEXITCODE\")",
+      "PowerShell($scratch = \"C:\\\\Users\\\\mille\\\\AppData\\\\Local\\\\Temp\\\\claude\\\\C--Projects-Coding-Projects-Tasks-plugin\\\\c49d02ff-5769-4419-9915-54b4086e9781\\\\scratchpad\"; npx esbuild src/taskParser.ts --bundle --format=cjs --platform=node --outfile=\"$scratch\\\\parser.cjs\" --log-level=error; \"bundled\")",
+      "PowerShell($scratch = \"C:\\\\Users\\\\mille\\\\AppData\\\\Local\\\\Temp\\\\claude\\\\C--Projects-Coding-Projects-Tasks-plugin\\\\c49d02ff-5769-4419-9915-54b4086e9781\\\\scratchpad\"; node \"$scratch\\\\ptest.js\")",
+      "PowerShell($scratch = \"C:\\\\Users\\\\mille\\\\AppData\\\\Local\\\\Temp\\\\claude\\\\C--Projects-Coding-Projects-Tasks-plugin\\\\c49d02ff-5769-4419-9915-54b4086e9781\\\\scratchpad\"; npx esbuild src/taskParser.ts --bundle --format=cjs --platform=node --outfile=\"$scratch\\\\parser.cjs\" --log-level=error; node \"$scratch\\\\ptest2.js\")",
+      "PowerShell($gh = \"C:\\\\Program Files\\\\GitHub CLI\\\\gh.exe\"; & $gh release create 1.0.1-beta.5 --repo politiapps/tasker --target beta --prerelease --title \"1.0.1-beta.5\" --notes \"Subtasks \\(nested, expand/collapse, done/total progress\\) and notes: click a task to open a detail view with editable fields, a notes box, and its subtasks. Per-row + adds a subtask.\"; Start-Sleep -Seconds 6; $run = \\(& $gh run list --repo politiapps/tasker --workflow release.yml --limit 1 --json databaseId | ConvertFrom-Json\\)[0]; & $gh run watch $run.databaseId --repo politiapps/tasker --exit-status; \"EXIT=$LASTEXITCODE\"; $r = & $gh release view 1.0.1-beta.5 --repo politiapps/tasker --json assets | ConvertFrom-Json; $r.assets | ForEach-Object { \" - $\\($_.name\\) \\($\\($_.size\\) bytes\\)\" })",
+      "PowerShell($gh = \"C:\\\\Program Files\\\\GitHub CLI\\\\gh.exe\"; & $gh release create 1.0.1-beta.6 --repo politiapps/tasker --target beta --prerelease --title \"1.0.1-beta.6\" --notes \"Subtasks inherit the parent's project tag and open the full add form \\(due + priority\\). Inherited tag pills are hidden on subtasks, and a task renders in only one section, so nothing appears twice.\"; Start-Sleep -Seconds 6; $run = \\(& $gh run list --repo politiapps/tasker --workflow release.yml --limit 1 --json databaseId | ConvertFrom-Json\\)[0]; & $gh run watch $run.databaseId --repo politiapps/tasker --exit-status; \"EXIT=$LASTEXITCODE\"; \\($r = & $gh release view 1.0.1-beta.6 --repo politiapps/tasker --json assets | ConvertFrom-Json\\).assets | ForEach-Object { \" - $\\($_.name\\)\" })"
+    ]
+  }
+}

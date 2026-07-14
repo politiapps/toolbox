@@ -16,6 +16,9 @@ export interface CalendarOccurrence {
 	/** Local start time, or null for all-day events. */
 	start: Date | null;
 	allDay: boolean;
+	description: string;
+	location: string;
+	url: string;
 }
 
 type Freq = "DAILY" | "WEEKLY" | "MONTHLY" | "YEARLY";
@@ -32,6 +35,9 @@ interface RRule {
 
 interface RawEvent {
 	summary: string;
+	description: string;
+	location: string;
+	url: string;
 	start: Date;
 	end: Date | null;
 	allDay: boolean;
@@ -155,13 +161,16 @@ export function parseICS(ics: string): RawEvent[] {
 
 	for (const line of unfold(ics)) {
 		if (line === "BEGIN:VEVENT") {
-			cur = { exDates: new Set() };
+			cur = { exDates: new Set(), description: "", location: "", url: "" };
 			continue;
 		}
 		if (line === "END:VEVENT") {
 			if (cur && cur.start) {
 				events.push({
 					summary: cur.summary || "(no title)",
+					description: cur.description || "",
+					location: cur.location || "",
+					url: cur.url || "",
 					start: cur.start,
 					end: cur.end ?? null,
 					allDay: cur.allDay ?? false,
@@ -188,6 +197,15 @@ export function parseICS(ics: string): RawEvent[] {
 				break;
 			case "SUMMARY":
 				cur.summary = unescapeText(p.value);
+				break;
+			case "DESCRIPTION":
+				cur.description = unescapeText(p.value);
+				break;
+			case "LOCATION":
+				cur.location = unescapeText(p.value);
+				break;
+			case "URL":
+				cur.url = p.value;
 				break;
 			case "RRULE":
 				cur.rrule = parseRRule(p.value);
@@ -293,6 +311,9 @@ export function eventsOnDay(events: RawEvent[], day: Date): CalendarOccurrence[]
 		if (!occursOn(ev, day)) continue;
 		out.push({
 			summary: ev.summary,
+			description: ev.description,
+			location: ev.location,
+			url: ev.url,
 			allDay: ev.allDay,
 			start: ev.allDay
 				? null
