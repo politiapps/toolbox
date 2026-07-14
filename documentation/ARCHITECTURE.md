@@ -294,20 +294,34 @@ manifest.json        Plugin id (`toolbox`) / name (`Toolbox`) / minAppVersion (1
 
 ### `invoiceGenerator.ts`
 
-- Exports `generateInvoice()` (orchestrator), `buildInvoiceMarkdown()` (content),
-  `aggregateEntries()` (timesheet → line items), and `nextInvoiceLabel()`.
+- Exports `generateInvoice()` (orchestrator), `buildInvoicePdf()` (content),
+  `aggregateEntries()` (timesheet → line items), `nextInvoiceLabel()`, and
+  `normalizeISO()`.
 - Reads the timesheet file, parses via `timesheetParser.parseTimesheet()`, filters
   for org + date range, multiplies hours × org rate for line-item amounts.
-- Saves the markdown file to the configured `invoiceFolder`, updating the org's
-  `lastInvoiceDate` and `lastInvoiceNumber`.
+- `aggregateEntries()` runs both range bounds through `normalizeISO()` (zero-pads
+  `YYYY-M-D` → `YYYY-MM-DD`) so a malformed bound can't silently drop days — the
+  filter compares dates as strings. See DEV_RULES §9.
+- `InvoiceOptions.issueDate` (YYYY-MM-DD) sets the date printed on the invoice;
+  the PDF's ISSUED field uses it rather than "now".
+- Saves the PDF to the configured `invoiceFolder`, updating the org's
+  `lastInvoiceDate` and `lastInvoiceNumber` (the latter to `invoiceNumber + 1`).
 
 ### `invoiceModal.ts`
 
-- `InvoiceModal extends Modal` — dropdown for org, date-from / date-to text inputs,
-  auto-computed invoice number label, optional notes textarea, preview summary,
-  and a CTA "Generate Invoice" button.
-- Default date-from: day after `org.lastInvoiceDate`, or 30 days ago.
-- Launches `generateInvoice()` on submit, shows notice with the file path.
+- `InvoiceModal extends Modal` — dropdown for org, From / To / Invoice-date
+  **date-picker chips** (`buildDateField()`, reusing the `.timesheet-date-field`
+  styling), an **editable invoice number** (so a prior invoice can be reissued
+  instead of the number only advancing), editable line-item description, custom
+  items, optional notes, a live preview summary, and a CTA "Generate Invoice".
+- Default date-from: day after `org.lastInvoiceDate`, or 30 days ago. Default
+  invoice date and to-date: today.
+- Date fields use native `type="date"` inputs — never free text — so values are
+  always valid padded ISO (the date-range filter compares strings). See
+  DEV_RULES §9.
+- `doGenerate()` syncs the label from the (possibly edited) number via
+  `labelFor()` and does **not** re-run the auto-increment, so reissuing keeps the
+  chosen number. Launches `generateInvoice()`, then opens the saved PDF.
 
 ### `embedEditor.ts` — click-to-edit for embeds in cells
 - Adapted from Embed Editor (MIT). `resolveEmbed()` turns a clicked

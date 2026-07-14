@@ -22622,7 +22622,7 @@ async function buildInvoicePdf(plugin, options, rows, totalHours, grandTotal) {
   cur += 26;
   const metaTop = cur;
   draw("ISSUED", cols.date, metaTop, { font: courier, size: 7.5, color: muted });
-  draw(formatDateLong(new Date().toISOString().slice(0, 10)), cols.date, metaTop + 14, {
+  draw(formatDateLong(options.issueDate), cols.date, metaTop + 14, {
     font: helvBold,
     size: 10
   });
@@ -22710,12 +22710,20 @@ async function buildInvoicePdf(plugin, options, rows, totalHours, grandTotal) {
   }
   return pdf.save();
 }
+function normalizeISO(iso) {
+  const m = /^(\d{4})-(\d{1,2})-(\d{1,2})$/.exec((iso || "").trim());
+  if (!m)
+    return (iso || "").trim();
+  return `${m[1]}-${m[2].padStart(2, "0")}-${m[3].padStart(2, "0")}`;
+}
 function aggregateEntries(parsed, orgName, dateFrom, dateTo, rate) {
+  const from = normalizeISO(dateFrom);
+  const to = normalizeISO(dateTo);
   const entries = [];
   let totalHours = 0;
   let totalAmount = 0;
   for (const day of parsed.days) {
-    if (day.date < dateFrom || day.date > dateTo)
+    if (day.date < from || day.date > to)
       continue;
     for (const entry of day.entries) {
       if (entry.org !== orgName)
@@ -22816,6 +22824,17 @@ async function generateInvoice(plugin, options) {
 function fmtDate(d) {
   return d.toISOString().slice(0, 10);
 }
+function formatNiceDate(iso) {
+  const [y, m, d] = iso.split("-").map(Number);
+  if (!y || !m || !d)
+    return iso;
+  return new Date(y, m - 1, d).toLocaleDateString(void 0, {
+    weekday: "long",
+    day: "numeric",
+    month: "long",
+    year: "numeric"
+  });
+}
 function defaultDateFrom(org) {
   if (org.lastInvoiceDate) {
     const d2 = new Date(org.lastInvoiceDate);
@@ -22839,6 +22858,7 @@ var InvoiceModal = class extends import_obsidian5.Modal {
     this.plugin = plugin;
     const today = fmtDate(new Date());
     this.dateTo = today;
+    this.issueDate = today;
     const orgs = plugin.settings.timesheetOrgs;
     if (orgs.length > 0) {
       this.selectedOrg = orgs[0];
@@ -22884,20 +22904,32 @@ var InvoiceModal = class extends import_obsidian5.Modal {
     });
     if (!this.selectedOrg)
       return;
-    new import_obsidian5.Setting(contentEl).setName("From date").setDesc("Include entries on or after this date.").addText(
-      (text) => text.setValue(this.dateFrom).setPlaceholder("YYYY-MM-DD").onChange((val) => {
-        this.dateFrom = val;
-        this.updatePreview();
-      })
+    this.buildDateField(
+      contentEl,
+      "From date",
+      () => this.dateFrom,
+      (v) => this.dateFrom = v
     );
-    new import_obsidian5.Setting(contentEl).setName("To date").setDesc("Include entries on or before this date.").addText(
-      (text) => text.setValue(this.dateTo).setPlaceholder("YYYY-MM-DD").onChange((val) => {
-        this.dateTo = val;
-        this.updatePreview();
-      })
+    this.buildDateField(
+      contentEl,
+      "To date",
+      () => this.dateTo,
+      (v) => this.dateTo = v
     );
-    new import_obsidian5.Setting(contentEl).setName("Invoice number").setDesc("Auto-generated from org settings.").addText(
-      (text) => text.setValue(this.invoiceLabel).setDisabled(true)
+    this.buildDateField(
+      contentEl,
+      "Invoice date",
+      () => this.issueDate,
+      (v) => this.issueDate = v
+    );
+    new import_obsidian5.Setting(contentEl).setName("Invoice number").setDesc("Editable \u2014 change it to reissue a previous invoice.").addText(
+      (text) => text.setValue(String(this.invoiceNumber)).onChange((val) => {
+        const n = parseInt(val, 10);
+        if (!isNaN(n) && n > 0) {
+          this.invoiceNumber = n;
+          this.invoiceLabel = this.labelFor(n);
+        }
+      })
     );
     new import_obsidian5.Setting(contentEl).setName("Line item description").setDesc("Shown against each tracked-hours line on the invoice.").addText(
       (text) => text.setValue(this.serviceDescription).setPlaceholder("Professional services").onChange((val) => {
@@ -22983,6 +23015,45 @@ var InvoiceModal = class extends import_obsidian5.Modal {
     this.invoiceNumber = number;
     this.invoiceLabel = label;
   }
+  /** Build an invoice label for a given number using the selected org's prefix. */
+  labelFor(n) {
+    var _a;
+    const prefix = ((_a = this.selectedOrg) == null ? void 0 : _a.invoicePrefix) || "INV";
+    return `${prefix}-${String(n).padStart(3, "0")}`;
+  }
+  /**
+   * Render a clickable date-picker chip (reusing the timesheet form's styling).
+   * The native `type="date"` input guarantees a valid zero-padded YYYY-MM-DD,
+   * which the string-based date filter relies on.
+   */
+  buildDateField(parent, labelText, get, set) {
+    parent.createEl("div", { cls: "timesheet-form-label", text: labelText });
+    const field = parent.createDiv({ cls: "timesheet-date-field" });
+    (0, import_obsidian5.setIcon)(field.createSpan({ cls: "timesheet-date-icon" }), "calendar");
+    const display = field.createSpan({ cls: "timesheet-date-display" });
+    (0, import_obsidian5.setIcon)(field.createSpan({ cls: "timesheet-date-caret" }), "chevron-down");
+    const input = field.createEl("input", { cls: "timesheet-date-input", type: "date" });
+    input.value = get();
+    const sync = () => {
+      display.textContent = formatNiceDate(get());
+    };
+    sync();
+    field.addEventListener("click", () => {
+      var _a;
+      const picker = input;
+      try {
+        (_a = picker.showPicker) == null ? void 0 : _a.call(picker);
+      } catch (_) {
+      }
+    });
+    input.addEventListener("change", () => {
+      if (input.value) {
+        set(input.value);
+        sync();
+        this.updatePreview();
+      }
+    });
+  }
   async updatePreview() {
     if (!this.previewEl || !this.selectedOrg)
       return;
@@ -23044,7 +23115,7 @@ var InvoiceModal = class extends import_obsidian5.Modal {
       new import_obsidian5.Notice("From date must be before or equal to To date.");
       return;
     }
-    this.updateInvoiceLabel();
+    this.invoiceLabel = this.labelFor(this.invoiceNumber);
     try {
       const file = await generateInvoice(this.plugin, {
         org: this.selectedOrg,
@@ -23052,6 +23123,7 @@ var InvoiceModal = class extends import_obsidian5.Modal {
         clientAddress: this.selectedOrg.clientAddress,
         dateFrom: this.dateFrom,
         dateTo: this.dateTo,
+        issueDate: this.issueDate,
         invoiceNumber: this.invoiceNumber,
         invoiceLabel: this.invoiceLabel,
         notes: this.notes,
@@ -23102,7 +23174,7 @@ function weekBoundsOf(iso) {
   sunday.setHours(23, 59, 59, 999);
   return { start: monday, end: sunday };
 }
-function formatNiceDate(iso) {
+function formatNiceDate2(iso) {
   const [y, m, d] = iso.split("-").map(Number);
   return new Date(y, m - 1, d).toLocaleDateString(void 0, {
     weekday: "long",
@@ -23836,7 +23908,7 @@ var TimesheetEntryModal = class extends import_obsidian6.Modal {
     const dateInput = dateField.createEl("input", { cls: "timesheet-date-input", type: "date" });
     dateInput.value = this.date;
     const syncDate = () => {
-      dateDisplay.textContent = formatNiceDate(this.date);
+      dateDisplay.textContent = formatNiceDate2(this.date);
     };
     syncDate();
     const openPicker = () => {

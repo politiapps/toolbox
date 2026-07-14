@@ -27,6 +27,8 @@ export interface InvoiceOptions {
 	clientAddress: string;
 	dateFrom: string; // YYYY-MM-DD
 	dateTo: string; // YYYY-MM-DD
+	/** Date the invoice is issued/dated (YYYY-MM-DD). */
+	issueDate: string;
 	invoiceNumber: number;
 	invoiceLabel: string;
 	notes: string;
@@ -189,7 +191,7 @@ export async function buildInvoicePdf(
 	// ── Meta strip: issued / period / bill-to ──────────────────────────────
 	const metaTop = cur;
 	draw("ISSUED", cols.date, metaTop, { font: courier, size: 7.5, color: muted });
-	draw(formatDateLong(new Date().toISOString().slice(0, 10)), cols.date, metaTop + 14, {
+	draw(formatDateLong(options.issueDate), cols.date, metaTop + 14, {
 		font: helvBold,
 		size: 10,
 	});
@@ -286,6 +288,18 @@ export async function buildInvoicePdf(
 	return pdf.save();
 }
 
+/**
+ * Zero-pad a possibly non-padded ISO date (e.g. "2026-07-1" → "2026-07-01") so
+ * string comparison sorts correctly. Guards the date-range filter against
+ * malformed input — an unpadded month/day would otherwise sort wrongly and
+ * silently drop entries.
+ */
+export function normalizeISO(iso: string): string {
+	const m = /^(\d{4})-(\d{1,2})-(\d{1,2})$/.exec((iso || "").trim());
+	if (!m) return (iso || "").trim();
+	return `${m[1]}-${m[2].padStart(2, "0")}-${m[3].padStart(2, "0")}`;
+}
+
 /** Aggregate timesheet entries into daily line items for an invoice. */
 export function aggregateEntries(
 	parsed: ReturnType<typeof parseTimesheet>,
@@ -294,12 +308,14 @@ export function aggregateEntries(
 	dateTo: string,
 	rate: number,
 ): { entries: { date: string; hours: number; amount: number }[]; totalHours: number; totalAmount: number } {
+	const from = normalizeISO(dateFrom);
+	const to = normalizeISO(dateTo);
 	const entries: { date: string; hours: number; amount: number }[] = [];
 	let totalHours = 0;
 	let totalAmount = 0;
 
 	for (const day of parsed.days) {
-		if (day.date < dateFrom || day.date > dateTo) continue;
+		if (day.date < from || day.date > to) continue;
 		for (const entry of day.entries) {
 			if (entry.org !== orgName) continue;
 			const mins = entryWorkMinutes(entry);

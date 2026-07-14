@@ -37,6 +37,17 @@ so the constraints live next to the code. Violating any of these is a bug.
    day's data. Occurrences carry no date, so a cached list silently misrepresents
    the current day.
 
+## Dates
+9. **Only ever hold/compare ISO dates as zero-padded `YYYY-MM-DD`.** The plugin
+   compares dates by string (`day.date < dateFrom`), which is only correct when
+   both sides are zero-padded. A user-typed value like `2026-07-1` silently sorts
+   *after* `2026-07-09`, so the invoice date-range filter dropped whole days.
+   - **Never take a date via a free text input.** Use a `type="date"` picker (the
+     `.timesheet-date-field` chip in `timesheetView.ts` / `invoiceModal.ts`),
+     which always emits a valid padded value.
+   - Defensive callers can pass through `normalizeISO()` (`invoiceGenerator.ts`)
+     before comparing.
+
 ## Testing
 7. **Always test in a separate development vault**, never the main vault.
 

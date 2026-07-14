@@ -19,6 +19,18 @@ function fmtDate(d: Date): string {
 	return d.toISOString().slice(0, 10);
 }
 
+/** Friendly long date for the picker chip, e.g. "Wednesday, 1 July 2026". */
+function formatNiceDate(iso: string): string {
+	const [y, m, d] = iso.split("-").map(Number);
+	if (!y || !m || !d) return iso;
+	return new Date(y, m - 1, d).toLocaleDateString(undefined, {
+		weekday: "long",
+		day: "numeric",
+		month: "long",
+		year: "numeric",
+	});
+}
+
 /** Default "from" date: day after last invoice, or 30 days ago. */
 function defaultDateFrom(org: TimesheetOrg): string {
 	if (org.lastInvoiceDate) {
@@ -36,6 +48,7 @@ export class InvoiceModal extends Modal {
 	private selectedOrg: TimesheetOrg | null = null;
 	private dateFrom: string;
 	private dateTo: string;
+	private issueDate: string;
 	private notes = "";
 	private invoiceLabel = "";
 	private invoiceNumber = 0;
@@ -49,6 +62,7 @@ export class InvoiceModal extends Modal {
 
 		const today = fmtDate(new Date());
 		this.dateTo = today;
+		this.issueDate = today;
 
 		// Pick first org with entries, or first org in list
 		const orgs = plugin.settings.timesheetOrgs;
@@ -103,40 +117,45 @@ export class InvoiceModal extends Modal {
 
 		if (!this.selectedOrg) return;
 
-		// Date from
-		new Setting(contentEl)
-			.setName("From date")
-			.setDesc("Include entries on or after this date.")
-			.addText((text) =>
-				text
-					.setValue(this.dateFrom)
-					.setPlaceholder("YYYY-MM-DD")
-					.onChange((val) => {
-						this.dateFrom = val;
-						this.updatePreview();
-					}),
-			);
+		// Date range — real date pickers (same chip used in the timesheet form) so
+		// the value is always a valid zero-padded YYYY-MM-DD. Typing an unpadded
+		// date like "2026-07-1" here previously broke the string-based filter.
+		this.buildDateField(
+			contentEl,
+			"From date",
+			() => this.dateFrom,
+			(v) => (this.dateFrom = v),
+		);
+		this.buildDateField(
+			contentEl,
+			"To date",
+			() => this.dateTo,
+			(v) => (this.dateTo = v),
+		);
 
-		// Date to
-		new Setting(contentEl)
-			.setName("To date")
-			.setDesc("Include entries on or before this date.")
-			.addText((text) =>
-				text
-					.setValue(this.dateTo)
-					.setPlaceholder("YYYY-MM-DD")
-					.onChange((val) => {
-						this.dateTo = val;
-						this.updatePreview();
-					}),
-			);
+		// Issue date — the date printed on the invoice (defaults to today, editable).
+		this.buildDateField(
+			contentEl,
+			"Invoice date",
+			() => this.issueDate,
+			(v) => (this.issueDate = v),
+		);
 
-		// Invoice number (read-only display)
+		// Invoice number — editable so you can reissue/redo an invoice (e.g. set it
+		// back to 001) instead of the number only ever advancing.
 		new Setting(contentEl)
 			.setName("Invoice number")
-			.setDesc("Auto-generated from org settings.")
+			.setDesc("Editable — change it to reissue a previous invoice.")
 			.addText((text) =>
-				text.setValue(this.invoiceLabel).setDisabled(true),
+				text
+					.setValue(String(this.invoiceNumber))
+					.onChange((val) => {
+						const n = parseInt(val, 10);
+						if (!isNaN(n) && n > 0) {
+							this.invoiceNumber = n;
+							this.invoiceLabel = this.labelFor(n);
+						}
+					}),
 			);
 
 		// Description used for each tracked-hours line
@@ -252,6 +271,51 @@ export class InvoiceModal extends Modal {
 		this.invoiceLabel = label;
 	}
 
+	/** Build an invoice label for a given number using the selected org's prefix. */
+	private labelFor(n: number): string {
+		const prefix = this.selectedOrg?.invoicePrefix || "INV";
+		return `${prefix}-${String(n).padStart(3, "0")}`;
+	}
+
+	/**
+	 * Render a clickable date-picker chip (reusing the timesheet form's styling).
+	 * The native `type="date"` input guarantees a valid zero-padded YYYY-MM-DD,
+	 * which the string-based date filter relies on.
+	 */
+	private buildDateField(
+		parent: HTMLElement,
+		labelText: string,
+		get: () => string,
+		set: (v: string) => void,
+	): void {
+		parent.createEl("div", { cls: "timesheet-form-label", text: labelText });
+		const field = parent.createDiv({ cls: "timesheet-date-field" });
+		setIcon(field.createSpan({ cls: "timesheet-date-icon" }), "calendar");
+		const display = field.createSpan({ cls: "timesheet-date-display" });
+		setIcon(field.createSpan({ cls: "timesheet-date-caret" }), "chevron-down");
+		const input = field.createEl("input", { cls: "timesheet-date-input", type: "date" });
+		input.value = get();
+		const sync = (): void => {
+			display.textContent = formatNiceDate(get());
+		};
+		sync();
+		field.addEventListener("click", () => {
+			const picker = input as unknown as { showPicker?: () => void };
+			try {
+				picker.showPicker?.();
+			} catch (_) {
+				/* not user-activated or unsupported — the field is still typable */
+			}
+		});
+		input.addEventListener("change", () => {
+			if (input.value) {
+				set(input.value);
+				sync();
+				this.updatePreview();
+			}
+		});
+	}
+
 	private async updatePreview(): Promise<void> {
 		if (!this.previewEl || !this.selectedOrg) return;
 		this.previewEl.empty();
@@ -322,7 +386,10 @@ export class InvoiceModal extends Modal {
 			return;
 		}
 
-		this.updateInvoiceLabel();
+		// Keep the label in sync with the (possibly user-edited) number. We do NOT
+		// call updateInvoiceLabel() here — that would reset the number to the next
+		// auto-increment and defeat reissuing an earlier invoice.
+		this.invoiceLabel = this.labelFor(this.invoiceNumber);
 
 		try {
 			const file = await generateInvoice(this.plugin, {
@@ -331,6 +398,7 @@ export class InvoiceModal extends Modal {
 				clientAddress: this.selectedOrg.clientAddress,
 				dateFrom: this.dateFrom,
 				dateTo: this.dateTo,
+				issueDate: this.issueDate,
 				invoiceNumber: this.invoiceNumber,
 				invoiceLabel: this.invoiceLabel,
 				notes: this.notes,
