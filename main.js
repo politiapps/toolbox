@@ -5206,25 +5206,43 @@ function formatEventTime(d) {
   return d.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
 }
 var URL_RE = /https?:\/\/[^\s<>"{}|\\^`[\]]+/gi;
+var MEETING_HOSTS = [
+  "zoom.us",
+  "meet.google.com",
+  "teams.microsoft.com",
+  "teams.live.com",
+  "webex.com",
+  "gotomeeting.com",
+  "whereby.com",
+  "meet.jit.si",
+  "chime.aws",
+  "bluejeans.com",
+  "discord.gg",
+  "slack.com/archives"
+];
+function pickMeetingUrl(urls) {
+  var _a;
+  for (const host of MEETING_HOSTS) {
+    const m = urls.find((u) => u.includes(host));
+    if (m)
+      return m;
+  }
+  return (_a = urls[0]) != null ? _a : null;
+}
 function extractUrls(text) {
-  const urls = /* @__PURE__ */ new Set();
+  const seen = /* @__PURE__ */ new Set();
   let m;
   while ((m = URL_RE.exec(text)) !== null) {
-    urls.add(m[0].replace(/[.,;!?)]+$/, ""));
+    seen.add(m[0].replace(/[.,;!?)]+$/, ""));
   }
-  return [...urls];
+  return [...seen];
 }
 function stripHtml(html) {
-  return html.replace(/<br\s*\/?>/gi, "\n").replace(/<\/p>/gi, "\n").replace(/<\/div>/gi, "\n").replace(/<[^>]*>/g, "").replace(/&amp;/g, "&").replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&quot;/g, '"').replace(/&#39;/g, "'").trim();
+  return html.replace(/<br\s*\/?>/gi, "\n").replace(/<\/p>/gi, "\n").replace(/<\/div>/gi, "\n").replace(/<[^>]*>/g, "").replace(/&amp;/g, "&").replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&quot;/g, '"').replace(/&#39;/g, "'").replace(/\n{3,}/g, "\n\n").trim();
 }
 function renderTextWithLinks(text) {
   const frag = document.createDocumentFragment();
-  const urls = /* @__PURE__ */ new Set();
-  let m;
-  URL_RE.lastIndex = 0;
-  while ((m = URL_RE.exec(text)) !== null) {
-    urls.add(m[0].replace(/[.,;!?)]+$/, ""));
-  }
+  const urls = extractUrls(text);
   let remaining = text;
   for (const url of urls) {
     const idx = remaining.indexOf(url);
@@ -5267,42 +5285,51 @@ function renderTodayCalendar(container, events, error2) {
       text: ev.allDay || !ev.start ? "All day" : formatEventTime(ev.start)
     });
     top.createSpan({ cls: "tasks-event-title", text: ev.summary });
-    if (ev.location) {
-      const locRow = main.createDiv({ cls: "tasks-event-detail tasks-event-location" });
-      (0, import_obsidian2.setIcon)(locRow.createSpan({ cls: "tasks-event-detail-icon" }), "map-pin");
-      locRow.createSpan({ cls: "tasks-event-detail-text", text: ev.location });
-    }
-    if (ev.url && !ev.location.includes(ev.url) && !ev.description.includes(ev.url)) {
-      const urlRow = main.createDiv({ cls: "tasks-event-detail tasks-event-url" });
-      (0, import_obsidian2.setIcon)(urlRow.createSpan({ cls: "tasks-event-detail-icon" }), "link");
-      const a = urlRow.createEl("a", {
-        cls: "tasks-event-link",
-        href: ev.url,
-        text: ev.url
-      });
-      a.setAttr("target", "_blank");
-      a.setAttr("rel", "noopener");
-    }
-    if (ev.description) {
-      const clean = stripHtml(ev.description);
-      if (clean) {
-        const descRow = main.createDiv({ cls: "tasks-event-detail tasks-event-description" });
-        descRow.appendChild(renderTextWithLinks(clean));
-      }
-    }
-    const meetingUrls = /* @__PURE__ */ new Set();
+    const allUrls = [];
     for (const u of extractUrls(ev.description))
-      meetingUrls.add(u);
+      allUrls.push(u);
     for (const u of extractUrls(ev.location))
-      meetingUrls.add(u);
+      allUrls.push(u);
     if (ev.url)
-      meetingUrls.add(ev.url);
-    if (meetingUrls.size > 0) {
-      const joinRow = main.createDiv({ cls: "tasks-event-join" });
-      for (const mu of meetingUrls) {
-        const btn = joinRow.createEl("a", { cls: "tasks-event-join-btn", href: mu, text: "Join" });
-        btn.setAttr("target", "_blank");
-        btn.setAttr("rel", "noopener");
+      allUrls.push(ev.url);
+    const meetingUrl = pickMeetingUrl(allUrls);
+    if (meetingUrl) {
+      const join = top.createEl("a", {
+        cls: "tasks-event-join-btn",
+        href: meetingUrl,
+        text: "Join"
+      });
+      join.setAttr("target", "_blank");
+      join.setAttr("rel", "noopener");
+    }
+    const cleanDesc = ev.description ? stripHtml(ev.description) : "";
+    const hasDetails = ev.location || cleanDesc;
+    if (hasDetails) {
+      const sub = main.createDiv({ cls: "tasks-event-sub" });
+      if (ev.location) {
+        const loc = sub.createSpan({ cls: "tasks-event-loc" });
+        (0, import_obsidian2.setIcon)(loc.createSpan({ cls: "tasks-event-loc-icon" }), "map-pin");
+        loc.createSpan({ cls: "tasks-event-loc-text", text: ev.location });
+      }
+      if (cleanDesc) {
+        const short = cleanDesc.length > 120 ? cleanDesc.slice(0, 120).trim() + "\u2026" : cleanDesc;
+        const toggle = sub.createSpan({ cls: "tasks-event-expand" });
+        toggle.setText(short);
+        toggle.setAttr("tabindex", "0");
+        const detail = sub.createDiv({ cls: "tasks-event-detail" });
+        detail.appendChild(renderTextWithLinks(cleanDesc));
+        detail.hidden = true;
+        const toggleFn = () => {
+          const was = detail.hidden;
+          detail.hidden = !was;
+        };
+        toggle.addEventListener("click", toggleFn);
+        toggle.addEventListener("keydown", (e) => {
+          if (e.key === "Enter" || e.key === " ") {
+            e.preventDefault();
+            toggleFn();
+          }
+        });
       }
     }
   }

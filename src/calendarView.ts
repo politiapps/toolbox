@@ -14,20 +14,36 @@ export function formatEventTime(d: Date): string {
 	return d.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
 }
 
-/** Regex for URLs in plain text. Matches http/https links. */
 const URL_RE = /https?:\/\/[^\s<>"{}|\\^`[\]]+/gi;
 
-/** Extract all unique URLs from a string. */
-function extractUrls(text: string): string[] {
-	const urls = new Set<string>();
-	let m;
-	while ((m = URL_RE.exec(text)) !== null) {
-		urls.add(m[0].replace(/[.,;!?)]+$/, ""));
+/** Known meeting platforms. */
+const MEETING_HOSTS = [
+	"zoom.us", "meet.google.com", "teams.microsoft.com", "teams.live.com",
+	"webex.com", "gotomeeting.com", "whereby.com", "meet.jit.si",
+	"chime.aws", "bluejeans.com", "discord.gg", "slack.com/archives",
+];
+
+/**
+ * Pick the single best meeting URL from a bag of candidates. Prefers known
+ * conference platforms over generic links.
+ */
+function pickMeetingUrl(urls: string[]): string | null {
+	for (const host of MEETING_HOSTS) {
+		const m = urls.find((u) => u.includes(host));
+		if (m) return m;
 	}
-	return [...urls];
+	return urls[0] ?? null;
 }
 
-/** Strip HTML tags from a string, preserving line breaks. */
+function extractUrls(text: string): string[] {
+	const seen = new Set<string>();
+	let m;
+	while ((m = URL_RE.exec(text)) !== null) {
+		seen.add(m[0].replace(/[.,;!?)]+$/, ""));
+	}
+	return [...seen];
+}
+
 function stripHtml(html: string): string {
 	return html
 		.replace(/<br\s*\/?>/gi, "\n")
@@ -39,22 +55,13 @@ function stripHtml(html: string): string {
 		.replace(/&gt;/g, ">")
 		.replace(/&quot;/g, '"')
 		.replace(/&#39;/g, "'")
+		.replace(/\n{3,}/g, "\n\n")
 		.trim();
 }
 
-/**
- * Render text content with embedded URLs converted to clickable links.
- * Returns a DocumentFragment suitable for appending to any element.
- */
 function renderTextWithLinks(text: string): DocumentFragment {
 	const frag = document.createDocumentFragment();
-	const urls = new Set<string>();
-	let m;
-	URL_RE.lastIndex = 0;
-	while ((m = URL_RE.exec(text)) !== null) {
-		urls.add(m[0].replace(/[.,;!?)]+$/, ""));
-	}
-
+	const urls = extractUrls(text);
 	let remaining: string | null = text;
 	for (const url of urls) {
 		const idx = remaining.indexOf(url);
@@ -73,10 +80,6 @@ function renderTextWithLinks(text: string): DocumentFragment {
 	return frag;
 }
 
-/**
- * Render today's calendar card into `container`: a header, then either an error,
- * an empty state, or the merged event rows.
- */
 export function renderTodayCalendar(
 	container: HTMLElement,
 	events: CalendarOccurrence[],
@@ -101,6 +104,7 @@ export function renderTodayCalendar(
 		const row = cal.createDiv({ cls: "tasks-event" });
 		const main = row.createDiv({ cls: "tasks-event-main" });
 
+		// --- Top row: time · title · [Join] ---
 		const top = main.createDiv({ cls: "tasks-event-top" });
 		top.createSpan({
 			cls: "tasks-event-time",
@@ -108,47 +112,54 @@ export function renderTodayCalendar(
 		});
 		top.createSpan({ cls: "tasks-event-title", text: ev.summary });
 
-		// Location
-		if (ev.location) {
-			const locRow = main.createDiv({ cls: "tasks-event-detail tasks-event-location" });
-			setIcon(locRow.createSpan({ cls: "tasks-event-detail-icon" }), "map-pin");
-			locRow.createSpan({ cls: "tasks-event-detail-text", text: ev.location });
-		}
+		// Single meeting link (prefer known platforms, then the ICS URL, then any).
+		const allUrls: string[] = [];
+		for (const u of extractUrls(ev.description)) allUrls.push(u);
+		for (const u of extractUrls(ev.location)) allUrls.push(u);
+		if (ev.url) allUrls.push(ev.url);
 
-		// URL from the ICS URL property
-		if (ev.url && !ev.location.includes(ev.url) && !ev.description.includes(ev.url)) {
-			const urlRow = main.createDiv({ cls: "tasks-event-detail tasks-event-url" });
-			setIcon(urlRow.createSpan({ cls: "tasks-event-detail-icon" }), "link");
-			const a = urlRow.createEl("a", {
-				cls: "tasks-event-link",
-				href: ev.url,
-				text: ev.url,
+		const meetingUrl = pickMeetingUrl(allUrls);
+		if (meetingUrl) {
+			const join = top.createEl("a", {
+				cls: "tasks-event-join-btn",
+				href: meetingUrl,
+				text: "Join",
 			});
-			a.setAttr("target", "_blank");
-			a.setAttr("rel", "noopener");
+			join.setAttr("target", "_blank");
+			join.setAttr("rel", "noopener");
 		}
 
-		// Description — strip HTML, find links, render as text with clickable URLs
-		if (ev.description) {
-			const clean = stripHtml(ev.description);
-			if (clean) {
-				const descRow = main.createDiv({ cls: "tasks-event-detail tasks-event-description" });
-				descRow.appendChild(renderTextWithLinks(clean));
+		// --- Sub row: location + expander toggle ---
+		const cleanDesc = ev.description ? stripHtml(ev.description) : "";
+		const hasDetails = ev.location || cleanDesc;
+		if (hasDetails) {
+			const sub = main.createDiv({ cls: "tasks-event-sub" });
+
+			if (ev.location) {
+				const loc = sub.createSpan({ cls: "tasks-event-loc" });
+				setIcon(loc.createSpan({ cls: "tasks-event-loc-icon" }), "map-pin");
+				loc.createSpan({ cls: "tasks-event-loc-text", text: ev.location });
 			}
-		}
 
-		// Scan description and location for meeting links to surface as a "Join" button
-		const meetingUrls = new Set<string>();
-		for (const u of extractUrls(ev.description)) meetingUrls.add(u);
-		for (const u of extractUrls(ev.location)) meetingUrls.add(u);
-		if (ev.url) meetingUrls.add(ev.url);
+			if (cleanDesc) {
+				const short = cleanDesc.length > 120 ? cleanDesc.slice(0, 120).trim() + "…" : cleanDesc;
 
-		if (meetingUrls.size > 0) {
-			const joinRow = main.createDiv({ cls: "tasks-event-join" });
-			for (const mu of meetingUrls) {
-				const btn = joinRow.createEl("a", { cls: "tasks-event-join-btn", href: mu, text: "Join" });
-				btn.setAttr("target", "_blank");
-				btn.setAttr("rel", "noopener");
+				const toggle = sub.createSpan({ cls: "tasks-event-expand" });
+				toggle.setText(short);
+				toggle.setAttr("tabindex", "0");
+
+				const detail = sub.createDiv({ cls: "tasks-event-detail" });
+				detail.appendChild(renderTextWithLinks(cleanDesc));
+				detail.hidden = true;
+
+				const toggleFn = () => {
+					const was = detail.hidden;
+					detail.hidden = !was;
+				};
+				toggle.addEventListener("click", toggleFn);
+				toggle.addEventListener("keydown", (e) => {
+					if (e.key === "Enter" || e.key === " ") { e.preventDefault(); toggleFn(); }
+				});
 			}
 		}
 	}

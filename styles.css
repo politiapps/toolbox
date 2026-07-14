@@ -161,9 +161,7 @@
 }
 
 .tasks-event {
-	padding: 3px 0;
-	font-size: 0.84rem;
-	line-height: 1.3;
+	padding: 4px 0;
 }
 
 .tasks-event-main {
@@ -173,78 +171,93 @@
 
 .tasks-event-top {
 	display: flex;
-	gap: 9px;
+	align-items: baseline;
+	gap: 6px;
 }
 
 .tasks-event-time {
 	flex-shrink: 0;
-	width: 62px;
+	width: 58px;
 	font-family: var(--font-monospace);
 	font-size: 0.72rem;
 	font-variant-numeric: tabular-nums;
 	color: var(--text-accent);
-	padding-top: 1px;
 }
 
 .tasks-event-title {
 	color: var(--text-normal);
+	font-size: 0.84rem;
+	line-height: 1.3;
 	word-break: break-word;
-}
-
-.tasks-event-detail {
-	display: flex;
-	align-items: flex-start;
-	gap: 4px;
-	margin-top: 2px;
-	font-size: 0.78rem;
-	color: var(--text-muted);
-}
-
-.tasks-event-detail-icon {
-	display: inline-flex;
-	flex-shrink: 0;
-	padding-top: 1px;
-}
-
-.tasks-event-detail-icon svg {
-	width: 12px;
-	height: 12px;
-}
-
-.tasks-event-detail-text {
-	word-break: break-word;
-	white-space: pre-wrap;
-}
-
-.tasks-event-link {
-	color: var(--text-accent);
-	word-break: break-all;
-	text-decoration: underline;
-}
-
-.tasks-event-description {
-	white-space: pre-wrap;
-}
-
-.tasks-event-join {
-	display: flex;
-	gap: 6px;
-	margin-top: 4px;
+	flex: 1;
+	min-width: 0;
 }
 
 .tasks-event-join-btn {
 	display: inline-block;
-	padding: 2px 8px;
-	font-size: 0.72rem;
+	padding: 1px 7px;
+	font-size: 0.7rem;
+	font-weight: 600;
 	border-radius: 4px;
 	background-color: var(--interactive-accent);
 	color: var(--text-on-accent);
 	text-decoration: none;
-	font-weight: 500;
+	flex-shrink: 0;
 }
 
 .tasks-event-join-btn:hover {
 	background-color: var(--interactive-accent-hover);
+}
+
+.tasks-event-sub {
+	font-size: 0.74rem;
+	color: var(--text-muted);
+	margin-top: 1px;
+	line-height: 1.35;
+}
+
+.tasks-event-loc {
+	display: inline-flex;
+	align-items: baseline;
+	gap: 3px;
+}
+
+.tasks-event-loc-icon {
+	display: inline-flex;
+	flex-shrink: 0;
+}
+
+.tasks-event-loc-icon svg {
+	width: 11px;
+	height: 11px;
+}
+
+.tasks-event-loc-text {
+	word-break: break-word;
+}
+
+.tasks-event-expand {
+	cursor: pointer;
+	display: inline;
+	word-break: break-word;
+}
+
+.tasks-event-expand:hover {
+	color: var(--text-normal);
+}
+
+.tasks-event-detail {
+	margin-top: 2px;
+	white-space: pre-wrap;
+	word-break: break-word;
+	border-left: 2px solid var(--background-modifier-border);
+	padding-left: 6px;
+}
+
+.tasks-event-link {
+	color: var(--text-accent);
+	text-decoration: underline;
+	word-break: break-all;
 }
 
 .tasks-calendar-error {
