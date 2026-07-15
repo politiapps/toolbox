@@ -179,6 +179,13 @@ export async function buildInvoicePdf(
 	let ly = cur;
 	const issuerMeta: string[] = [];
 	if (inv.abn) issuerMeta.push(`ABN ${inv.abn}`);
+	// Payment details sit up here in the masthead, directly under the ABN, so the
+	// client sees how to pay before anything else.
+	if (inv.bankName) issuerMeta.push(`Bank ${inv.bankName}`);
+	const acct: string[] = [];
+	if (inv.bsb) acct.push(`BSB ${inv.bsb}`);
+	if (inv.accountNumber) acct.push(`Account ${inv.accountNumber}`);
+	if (acct.length) issuerMeta.push(acct.join("    "));
 	if (inv.businessAddress) issuerMeta.push(inv.businessAddress.replace(/\n/g, ", "));
 	for (const line of issuerMeta) {
 		ly += 14;
@@ -264,24 +271,6 @@ export async function buildInvoicePdf(
 				draw(line, margin, cur, { font: helv, size: 9.5 });
 				cur += 13;
 			}
-		}
-	}
-
-	// ── Payment details ────────────────────────────────────────────────────
-	if (inv.bankName || inv.bsb || inv.accountNumber) {
-		cur += 18;
-		rule(cur, 0.5, hair);
-		cur += 18;
-		draw("PAYMENT DETAILS", margin, cur, { font: courier, size: 7.5, color: muted });
-		cur += 16;
-		const payFields: [string, string, PDFFont][] = [];
-		if (inv.bankName) payFields.push(["Bank", inv.bankName, helv]);
-		if (inv.bsb) payFields.push(["BSB", inv.bsb, courier]);
-		if (inv.accountNumber) payFields.push(["Account", inv.accountNumber, courier]);
-		for (const [label, value, valFont] of payFields) {
-			draw(label, margin, cur, { font: helv, size: 9, color: muted });
-			draw(value, margin + 64, cur, { font: valFont, size: 9.5 });
-			cur += 14;
 		}
 	}
 
