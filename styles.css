@@ -570,6 +570,77 @@
 	padding: 4px 2px;
 }
 
+/* ── Due-date group dividers ──────────────────────────────────────────── */
+/* A due-sorted lane is really three jobs stacked — late, today, later — so the
+   boundaries are drawn rather than implied. The label is a mono caption and the
+   rule runs to the edge; the ramp matches the due badges (red → orange → grey)
+   so a divider and the rows beneath it read as the same signal. */
+.tasks-due-group {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	margin: 10px 0 3px;
+	font-family: var(--font-monospace);
+	font-size: 0.62rem;
+	font-weight: 700;
+	letter-spacing: 0.09em;
+	text-transform: uppercase;
+	color: var(--group-colour, var(--text-faint));
+}
+
+/* The first divider sits right under the header — no extra air needed. */
+.tasks-section-body > .tasks-due-group:first-child {
+	margin-top: 2px;
+}
+
+/* The rule: a hairline in the group's own colour, carrying it across the lane. */
+.tasks-due-group::after {
+	content: "";
+	flex: 1;
+	height: 1px;
+	background: color-mix(in srgb, var(--group-colour, var(--text-faint)) 35%, transparent);
+}
+
+.tasks-due-group-count {
+	font-variant-numeric: tabular-nums;
+	font-weight: 600;
+	opacity: 0.75;
+}
+
+/* Overdue is the loudest divider on the panel — a filled tab, not a caption. */
+.tasks-due-group.is-overdue {
+	--group-colour: var(--color-red, #ef4444);
+}
+.tasks-due-group.is-overdue .tasks-due-group-label,
+.tasks-due-group.is-overdue .tasks-due-group-count {
+	color: var(--text-on-accent, #fff);
+	background-color: var(--group-colour);
+	border-radius: 3px;
+	padding: 1px 5px;
+}
+.tasks-due-group.is-overdue .tasks-due-group-count {
+	background-color: color-mix(in srgb, var(--group-colour) 22%, transparent);
+	color: var(--group-colour);
+}
+
+/* Today: present but not alarming — outlined in the same orange as its badges. */
+.tasks-due-group.is-today {
+	--group-colour: var(--color-orange, #f97316);
+}
+.tasks-due-group.is-today .tasks-due-group-label {
+	background-color: color-mix(in srgb, var(--group-colour) 16%, transparent);
+	box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--group-colour) 45%, transparent);
+	border-radius: 3px;
+	padding: 1px 5px;
+}
+
+/* Everything further out is reference, not signal. */
+.tasks-due-group.is-upcoming,
+.tasks-due-group.is-undated {
+	--group-colour: var(--text-faint);
+	font-weight: 600;
+}
+
 /* ── Task row ─────────────────────────────────────────────────────────── */
 .tasks-item {
 	display: flex;
@@ -613,9 +684,61 @@
 	display: flex;
 	align-items: flex-start;
 	gap: 6px;
-	padding: 6px 4px 6px 2px;
+	padding: 6px 4px 6px 11px;
 	border-radius: 6px;
 	position: relative;
+}
+
+/* Priority spine: the row's own left edge carries its urgency, so a stack of
+   rows is triageable peripherally — before a single label is read. It is the
+   *thickest* mark on the row on purpose: at sidebar width, a 3px hairline reads
+   as a divider, not a signal. Only the top three levels earn ink; low and
+   lowest deliberately leave it blank, so "loud" always means "sooner or more
+   important". Every row reserves the gutter (padding-left above) whether or not
+   it paints, keeping descriptions aligned. */
+.tasks-row::before {
+	content: "";
+	position: absolute;
+	left: 1px;
+	top: 3px;
+	bottom: 3px;
+	width: 4px;
+	border-radius: 2px;
+	background-color: var(--priority-color, transparent);
+}
+
+/* Rank also reads as spine *height*: highest runs the full row, high and medium
+   are progressively shorter stubs. Length survives at any contrast, so the top
+   three levels stay distinguishable in a greyscale or high-contrast theme. */
+.tasks-row.is-priority-high::before {
+	top: 6px;
+	bottom: 6px;
+}
+
+.tasks-row.is-priority-medium::before {
+	top: 10px;
+	bottom: 10px;
+	opacity: 0.8;
+}
+
+.tasks-row.is-priority-low::before,
+.tasks-row.is-priority-lowest::before,
+.tasks-row.is-completed::before {
+	background-color: transparent;
+}
+
+/* Overdue washes the whole row, not just its badge — it is the one state that
+   must be findable in any section, under any sort order, without reading. The
+   tint is deliberately near-threshold (it must never fight the description);
+   its job is to make a block of late work visible as a block while scanning
+   past it. Only overdue gets this: give it to "today" as well and the panel
+   turns into two competing washes and neither reads as an alarm. */
+.tasks-row.is-due-overdue {
+	background-color: color-mix(in srgb, var(--color-red, #ef4444) 7%, transparent);
+}
+
+.tasks-row.is-due-overdue:hover {
+	background-color: var(--background-modifier-hover);
 }
 
 .tasks-desc.is-clickable {
@@ -664,6 +787,12 @@
 	box-shadow: inset 2px 0 0 var(--interactive-accent);
 }
 
+/* The drop indicator owns the same gutter as the priority spine, so it takes it
+   over while dragging rather than being painted underneath it. */
+.tasks-row.is-drop-target::before {
+	background-color: var(--interactive-accent);
+}
+
 /* Round, hand-built checkbox — reads as a task app, not a form. */
 .tasks-checkbox {
 	appearance: none;
@@ -710,11 +839,30 @@
 	min-width: 0;
 }
 
+/* Description line = description (flexible) + due column (fixed, right). The
+   due column is `flex-shrink: 0` so it never collapses under a long title. */
+.tasks-desc-line {
+	display: flex;
+	align-items: baseline;
+	gap: 8px;
+}
+
+.tasks-desc-text {
+	flex: 1;
+	min-width: 0;
+}
+
 .tasks-desc {
 	font-size: 0.88rem;
 	line-height: 1.35;
 	color: var(--text-normal);
 	word-break: break-word;
+}
+
+/* An overdue task's own title carries a little extra weight — the row's loudest
+   fact shouldn't be confined to a badge in the corner. */
+.tasks-row.is-due-overdue .tasks-desc {
+	font-weight: 600;
 }
 
 .tasks-row.is-completed .tasks-desc {
@@ -726,8 +874,14 @@
 	display: flex;
 	flex-wrap: wrap;
 	align-items: center;
-	gap: 6px;
+	gap: 4px 6px;
 	margin-top: 4px;
+}
+
+/* With the due date moved out to its own column, a task with no priority, tags
+   or recurrence has nothing left here — don't reserve the gap for it. */
+.tasks-meta:empty {
+	display: none;
 }
 
 .tasks-tag-pill {
@@ -738,40 +892,77 @@
 	padding: 1px 6px;
 }
 
-/* Dates: monospace, the operational register. */
+/* Dates: monospace, the operational register. A due date is a *rounded* badge —
+   the counterpart silhouette to the squared priority chip, so the two are told
+   apart by shape as well as by which edge of the row they sit on. */
 .tasks-due,
 .tasks-done-date {
 	font-family: var(--font-monospace);
-	font-size: 0.68rem;
+	font-size: 0.72rem;
 	font-variant-numeric: tabular-nums;
 	color: var(--text-muted);
 }
 
-/* Proximity ramp: sooner is warmer. Theme `--color-*` tokens (so the ramp moves
-   with the active theme), with the original hexes as fallbacks for themes that
-   don't define them. */
+/* The fixed due column. Right-aligned with a reserved width so every row's date
+   starts and ends at the same x — that vertical alignment is what makes the
+   dates comparable at a glance, more than any colour on them. */
+.tasks-due-slot {
+	flex-shrink: 0;
+	min-width: 62px;
+	text-align: center;
+	white-space: nowrap;
+}
+
+.tasks-due {
+	border-radius: 999px;
+	padding: 1px 7px;
+	line-height: 1.5;
+}
+
+/* Proximity ramp: sooner is warmer — and, just as importantly, *louder*. Ink
+   decays with distance (solid → tinted → outlined → bare text) so nearness is
+   legible without resolving the hue, and a far-off date never competes for
+   attention. The first two steps are both *filled* because "act now" vs "act
+   later" is the split that matters; the fade is spread over the later steps.
+   Theme `--color-*` tokens, with the original hexes as fallbacks for themes
+   that don't define them. */
 .tasks-due.is-overdue {
-	color: var(--color-red, #ef4444);
+	color: var(--text-on-accent, #fff);
+	background-color: var(--color-red, #ef4444);
 	font-weight: 700;
+	letter-spacing: 0.01em;
 }
 .tasks-due.is-today {
-	color: var(--color-orange, #f97316);
+	color: var(--text-on-accent, #fff);
+	background-color: var(--color-orange, #f97316);
 	font-weight: 700;
 }
 .tasks-due.is-tomorrow {
 	color: var(--color-yellow, #eab308);
+	background-color: color-mix(in srgb, var(--color-yellow, #eab308) 20%, transparent);
+	box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--color-yellow, #eab308) 40%, transparent);
 	font-weight: 600;
 }
 .tasks-due.is-soon {
-	color: var(--color-green, #22c55e);
+	color: var(--text-muted);
+	box-shadow: inset 0 0 0 1px var(--background-modifier-border);
 	font-weight: 600;
 }
+/* Far enough out to be reference, not signal — no badge, and it recedes to the
+   faint tier so a wall of future dates reads as texture, not as a list of
+   claims on your attention. */
 .tasks-due.is-upcoming {
-	color: var(--text-muted);
+	color: var(--text-faint);
+	padding: 1px 0;
+}
+
+.tasks-row.is-completed .tasks-due {
+	opacity: 0.55;
 }
 
 .tasks-done-date {
 	color: var(--text-faint);
+	font-size: 0.68rem;
 }
 
 /* Recurrence: a quiet pill echoing the tag-pill register, with a 🔁 glyph. */
@@ -804,39 +995,117 @@
 	width: 4em;
 }
 
-/* Priority: a labeled chip on a fixed urgency ramp (warm = urgent). The dot
-   carries the colour; the label keeps all six levels unambiguous. This is a
-   separate colour language from the section-identity spine, by design. */
+/* Priority: a squared chip on a fixed urgency ramp (warm = urgent), carrying a
+   five-segment level meter. The meter encodes rank as *shape* — count the lit
+   bars — so the level survives without colour vision, and the label keeps all
+   five levels unambiguous. This is a separate colour language from the
+   section-identity spine, by design. */
 .tasks-priority {
 	display: inline-flex;
 	align-items: center;
-	gap: 4px;
+	gap: 5px;
 	font-family: var(--font-monospace);
-	font-size: 0.64rem;
-	color: var(--text-muted);
+	font-size: 0.66rem;
+	font-weight: 700;
+	letter-spacing: 0.07em;
+	text-transform: uppercase;
+	line-height: 1.5;
+	border-radius: 3px;
+	padding: 1px 6px 1px 5px;
+	color: var(--priority-color, var(--text-muted));
+	background-color: color-mix(in srgb, var(--priority-color, transparent) 14%, transparent);
+	box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--priority-color, transparent) 32%, transparent);
 }
 
-.tasks-priority-dot {
-	width: 7px;
-	height: 7px;
-	border-radius: 50%;
+/* The meter has to be *coarse* to work: at 2px per bar the staircase read as
+   texture rather than a count. Wider bars with a real gap make the rank
+   countable at a glance, which is the whole point of encoding it as shape. */
+.tasks-priority-meter {
+	display: inline-flex;
+	align-items: flex-end;
+	gap: 1.5px;
+	height: 11px;
+}
+
+.tasks-priority-seg {
+	width: 3px;
+	border-radius: 1px;
+	background-color: color-mix(in srgb, var(--priority-color, var(--text-muted)) 20%, transparent);
+}
+
+.tasks-priority-seg.is-on {
 	background-color: var(--priority-color, var(--text-muted));
 }
 
-.tasks-priority-highest {
+.tasks-priority-seg:nth-child(1) {
+	height: 3px;
+}
+.tasks-priority-seg:nth-child(2) {
+	height: 5px;
+}
+.tasks-priority-seg:nth-child(3) {
+	height: 7px;
+}
+.tasks-priority-seg:nth-child(4) {
+	height: 9px;
+}
+.tasks-priority-seg:nth-child(5) {
+	height: 11px;
+}
+
+/* The urgency ramp, shared by the chip and the row spine (see `.tasks-row`). */
+.tasks-priority-highest,
+.tasks-row.is-priority-highest {
 	--priority-color: var(--color-red, #ef4444);
 }
-.tasks-priority-high {
+.tasks-priority-high,
+.tasks-row.is-priority-high {
 	--priority-color: var(--color-orange, #f97316);
 }
-.tasks-priority-medium {
+.tasks-priority-medium,
+.tasks-row.is-priority-medium {
 	--priority-color: var(--color-yellow, #f59e0b);
 }
-.tasks-priority-low {
+.tasks-priority-low,
+.tasks-row.is-priority-low {
 	--priority-color: var(--color-blue, #3b82f6);
 }
-.tasks-priority-lowest {
+.tasks-priority-lowest,
+.tasks-row.is-priority-lowest {
 	--priority-color: var(--text-muted, #94a3b8);
+}
+
+/* Ink decays by rank as well as hue, so the chips separate without resolving
+   colour: highest and high were previously distinguished only by their hue —
+   red vs orange at 10px, the hardest possible discrimination to make quickly.
+   Overdue red keeps the only fully solid fill on the panel; the chips step down
+   underneath it. */
+.tasks-priority-highest {
+	background-color: color-mix(in srgb, var(--priority-color) 28%, transparent);
+	box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--priority-color) 70%, transparent);
+}
+
+.tasks-priority-high {
+	background-color: color-mix(in srgb, var(--priority-color) 18%, transparent);
+	box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--priority-color) 45%, transparent);
+}
+
+.tasks-priority-medium {
+	background-color: color-mix(in srgb, var(--priority-color) 10%, transparent);
+	box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--priority-color) 25%, transparent);
+}
+
+/* Low and lowest should recede: outline only, no fill, muted label. */
+.tasks-priority-low,
+.tasks-priority-lowest {
+	color: var(--text-muted);
+	background-color: transparent;
+	box-shadow: inset 0 0 0 1px var(--background-modifier-border);
+	font-weight: 600;
+}
+
+.tasks-row.is-completed .tasks-priority {
+	opacity: 0.5;
 }
 
 /* ── Row actions (reveal on hover) ────────────────────────────────────── */

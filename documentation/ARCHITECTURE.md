@@ -69,7 +69,8 @@ packages/task-core/src/
   recurrence.ts      THE ONLY place 🔁 recurrence RULES are interpreted; pure
                      rule grammar + next-occurrence date math (no vault access)
   sort.ts            Sort orders + priority ranking + pure list ordering
-                     (sortTasks, orderSubtasks, taskHasTag, countDescendants)
+                     (sortTasks, orderSubtasks, groupTasksByDue, taskHasTag,
+                     countDescendants)
   index.ts           Barrel re-exporting the three modules above
 
 src/
@@ -106,7 +107,7 @@ manifest.json        Plugin id (`toolbox`) / name (`Toolbox`) / minAppVersion (1
 - `refreshViews()` re-renders every open `TasksView`.
 - `fetchCalendar()` pulls every feed in `settings.calendars` via `requestUrl`
   (no CORS), in parallel (`Promise.allSettled`), merges today's events with
-  `mergeOccurrences`, and caches them on the plugin (`calendarEvents` /
+  `mergeOccurrences`, and caches them on the plugin (`calendarFeeds` /
   `calendarError`). An error is surfaced only when *all* feeds fail; partial
   successes show what loaded. Called on load, on a 30-minute `registerInterval`,
   and when calendars change in settings. `fetchOneCalendar(url)` fetches a single
@@ -171,24 +172,32 @@ manifest.json        Plugin id (`toolbox`) / name (`Toolbox`) / minAppVersion (1
 - Owns the sort vocabulary and all list ordering the user sees: `SortOrder`,
   `SORT_ORDER_LABELS`, `PRIORITY_RANK`, `PRIORITY_LABEL`.
 - `sortTasks(tasks, order)` (due / priority / priority-due / file, stable within
-  ties), `orderSubtasks(children)` (completed sink to the bottom, stable),
-  `taskHasTag(task, tag)`, `countDescendants(task)`.
+  ties; **`due` breaks date ties by priority**), `orderSubtasks(children)`
+  (completed sink to the bottom, stable), `taskHasTag(task, tag)`,
+  `countDescendants(task)`.
+- `dueBucket(task, todayISO)` / `groupTasksByDue(tasks, todayISO)` /
+  `DUE_BUCKET_LABELS` — split a due-sorted list into `overdue → today →
+  upcoming → undated` runs (empty buckets dropped, input order preserved) so the
+  view can draw a boundary between them. Compares ISO dates as strings — no Date
+  math, no timezone traps.
 - `settings.ts` re-exports `SortOrder` / `SORT_ORDER_LABELS` from here so existing
   plugin imports are unchanged.
 
 ### `settings.ts`
 - `TasksPluginSettings`: `tasksFilePath`, `sections[]`, `recentTags[]`,
   `collapseState{}`, `calendars[]`, `editableColumnsEnabled`, `timesheetFilePath`,
-  `timesheetOrgs[]`, `activeTimer`, `invoice{businessName,abn,businessAddress,bankName,
-
-  bsb,accountNumber,invoiceFolder}` (plus deprecated `icsUrl`, migrated into
-  `calendars`).
+  `timesheetOrgs[]`, `activeTimer`, `invoice{businessName, abn, businessAddress,
+  bankName, bsb, accountNumber, invoiceFolder}`, `pomodoroEnabled`,
+  `pomodoroWorkMin`, `pomodoroShortMin`, `pomodoroLongMin`, `pomodoroLongEvery`,
+  `pomodoro` (PomodoroState), `taskFocusSeconds{}` (plus deprecated `icsUrl`,
+  migrated into `calendars`).
 - `CalendarSource`: `id`, `title`, `url`. `migrateCalendars()` converts the legacy
   `icsUrl`; `newCalendarId()` mints ids. The settings tab manages calendars
   (add / title / URL / delete) with an inline per-calendar sync check
   (`fetchOneCalendar`).
-- `TimesheetOrg`: `id`, `name`, `colour`, `rate`. `newOrgId()` mints ids.
-  `TIMESHEET_ORG_COLORS` is the default palette.
+- `TimesheetOrg`: `id`, `name`, `colour`, `rate`, `clientName`, `clientAddress`,
+  `invoicePrefix`, `invoiceStartNumber`, `lastInvoiceDate`, `lastInvoiceNumber`.
+  `newOrgId()` mints ids. `TIMESHEET_ORG_COLORS` is the default palette.
 - `ActiveTimer`: persisted timer state (`org`, `startTime`, `breakStart`, `breaks[]`).
 - `SectionConfig`: `id`, `name`, `tag`, `sort`, `collapsedByDefault`.
 - `SortOrder`: `due | priority-due | priority | file`.
@@ -208,6 +217,10 @@ manifest.json        Plugin id (`toolbox`) / name (`Toolbox`) / minAppVersion (1
   shows today's load — `countPressure(flat)` counts incomplete dated tasks that
   are overdue / due today, rendered as a mono console readout (overdue in alarm
   red, colour-bonded to the due-date ramp) or "Nothing due today" when clear.
+- **Due-date group dividers:** a section whose sort is `due` renders through
+  `renderDueGroups()`, which runs the sorted list through `groupTasksByDue()` and
+  emits a labelled divider (`.tasks-due-group.is-<bucket>`) above each run —
+  suppressed when only one bucket is present. See `documentation/ui.md`.
 - Each section header shows display name + incomplete-count badge and toggles
   collapse (persisted via `collapseState`). The section's hashed accent
   (`sectionAccent(id)` → `--section-accent`) is rendered as the card's left spine.

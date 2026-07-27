@@ -1,7 +1,7 @@
 # Task Format
 
 Exact markdown syntax used in the tasks file. All parsing and serialisation of
-this format lives in `src/taskParser.ts` and nowhere else.
+this format lives in `packages/task-core/src/taskParser.ts` and nowhere else.
 
 ## Line shapes
 
@@ -68,7 +68,8 @@ out and internal whitespace collapsed. It may contain any other text.
 Recurrence uses the official Obsidian Tasks `🔁` signifier so the same file
 round-trips through both plugins. The rule text after `🔁` is stored verbatim by
 `taskParser.ts`; its grammar and the next-occurrence date math live in
-`src/recurrence.ts` (the only place recurrence rules are interpreted).
+`packages/task-core/src/recurrence.ts` (the only place recurrence rules are
+interpreted).
 
 Canonical rule strings the UI produces (all parse in the official Tasks plugin):
 

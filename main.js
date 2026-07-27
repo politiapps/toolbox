@@ -4694,7 +4694,7 @@ function nextDueDate(rule, currentDueISO) {
 
 // packages/task-core/src/sort.ts
 var SORT_ORDER_LABELS = {
-  due: "Due date",
+  due: "Due date, then priority",
   "priority-due": "Priority, then due date",
   priority: "Priority only",
   file: "File order"
@@ -4730,6 +4730,34 @@ function countDescendants(task) {
 function orderSubtasks(children) {
   return [...children].sort((a, b) => Number(a.completed) - Number(b.completed));
 }
+var DUE_BUCKET_LABELS = {
+  overdue: "Overdue",
+  today: "Today",
+  upcoming: "Upcoming",
+  undated: "No date"
+};
+function dueBucket(task, todayISO3) {
+  if (!task.due)
+    return "undated";
+  if (task.due < todayISO3)
+    return "overdue";
+  if (task.due === todayISO3)
+    return "today";
+  return "upcoming";
+}
+function groupTasksByDue(tasks, todayISO3) {
+  const order = ["overdue", "today", "upcoming", "undated"];
+  const byBucket = /* @__PURE__ */ new Map();
+  for (const task of tasks) {
+    const bucket = dueBucket(task, todayISO3);
+    const list = byBucket.get(bucket);
+    if (list)
+      list.push(task);
+    else
+      byBucket.set(bucket, [task]);
+  }
+  return order.filter((b) => byBucket.has(b)).map((bucket) => ({ bucket, tasks: byBucket.get(bucket) }));
+}
 function sortTasks(tasks, order) {
   const copy = [...tasks];
   const byDue = (a, b) => {
@@ -4744,7 +4772,7 @@ function sortTasks(tasks, order) {
   const byPriority = (a, b) => PRIORITY_RANK[a.priority] - PRIORITY_RANK[b.priority];
   switch (order) {
     case "due":
-      return copy.sort(byDue);
+      return copy.sort((a, b) => byDue(a, b) || byPriority(a, b));
     case "priority":
       return copy.sort(byPriority);
     case "priority-due":
@@ -5368,6 +5396,11 @@ function formatDueDisplay(iso) {
   const weekday = d.toLocaleDateString(void 0, { weekday: "long" });
   return `${weekday} ${d.getDate()}${ordinalSuffix2(d.getDate())}`;
 }
+function formatDueShort(iso) {
+  const d = parseLocalDate(iso);
+  const weekday = d.toLocaleDateString(void 0, { weekday: "short" });
+  return `${weekday} ${d.getDate()}${ordinalSuffix2(d.getDate())}`;
+}
 function daysUntil(iso) {
   const today = parseLocalDate(todayISO()).getTime();
   const due = parseLocalDate(iso).getTime();
@@ -5379,19 +5412,31 @@ function dueLabel(iso) {
     return "Today";
   if (d === 1)
     return "Tomorrow";
-  return formatDueDisplay(iso);
+  if (d === -1)
+    return "Yesterday";
+  if (d < -1 && d >= -7)
+    return `${-d}d late`;
+  return formatDueShort(iso);
 }
-function dueClass(iso) {
+function dueState(iso) {
   const d = daysUntil(iso);
   if (d < 0)
-    return "is-overdue";
+    return "overdue";
   if (d === 0)
-    return "is-today";
+    return "today";
   if (d === 1)
-    return "is-tomorrow";
+    return "tomorrow";
   if (d === 2)
-    return "is-soon";
-  return "is-upcoming";
+    return "soon";
+  return "upcoming";
+}
+function dueClass(iso) {
+  return `is-${dueState(iso)}`;
+}
+var PRIORITY_SEGMENTS = 5;
+function priorityFilled(p) {
+  const rank = PRIORITY_RANK[p];
+  return PRIORITY_SEGMENTS - (rank > PRIORITY_RANK.normal ? rank - 1 : rank);
 }
 function formatClock(ms) {
   const total = Math.ceil(Math.max(0, ms) / 1e3);
@@ -5879,10 +5924,38 @@ var TasksView = class extends import_obsidian3.ItemView {
       const body = sectionEl.createDiv({ cls: "tasks-section-body" });
       if (sorted.length === 0) {
         body.createDiv({ cls: "tasks-empty", text: "Nothing due here" });
+      } else if (section.sort === "due") {
+        this.renderDueGroups(body, sorted);
       } else {
         for (const task of sorted)
           this.renderTask(body, task);
       }
+    }
+  }
+  /**
+   * Render a due-sorted list broken at its proximity boundaries. What's late
+   * and what's due today are different jobs, so they get a visible edge
+   * between them rather than running together as one column of rows. A single
+   * bucket needs no label — the whole list is that bucket.
+   */
+  renderDueGroups(body, sorted) {
+    const groups = groupTasksByDue(sorted, todayISO());
+    for (const group of groups) {
+      if (groups.length > 1) {
+        const divider = body.createDiv({
+          cls: `tasks-due-group is-${group.bucket}`
+        });
+        divider.createSpan({
+          cls: "tasks-due-group-label",
+          text: DUE_BUCKET_LABELS[group.bucket]
+        });
+        divider.createSpan({
+          cls: "tasks-due-group-count",
+          text: String(group.tasks.length)
+        });
+      }
+      for (const task of group.tasks)
+        this.renderTask(body, task);
     }
   }
   renderCompletedSection(root, tasks) {
@@ -5922,6 +5995,10 @@ var TasksView = class extends import_obsidian3.ItemView {
     const row = item.createDiv({ cls: "tasks-row" });
     if (task.completed)
       row.addClass("is-completed");
+    if (task.priority !== "normal")
+      row.addClass(`is-priority-${task.priority}`);
+    if (!task.completed && task.due)
+      row.addClass(`is-due-${dueState(task.due)}`);
     this.attachDragHandlers(row, task);
     const hasChildren = task.children.length > 0;
     const collapseKey = "task:" + hashKey(task.raw);
@@ -5946,25 +6023,48 @@ var TasksView = class extends import_obsidian3.ItemView {
     });
     const main = row.createDiv({ cls: "tasks-row-main" });
     const descLine = main.createDiv({ cls: "tasks-desc-line" });
-    const desc = descLine.createSpan({ cls: "tasks-desc is-clickable", text: task.description });
+    const descWrap = descLine.createSpan({ cls: "tasks-desc-text" });
+    const desc = descWrap.createSpan({ cls: "tasks-desc is-clickable", text: task.description });
     desc.setAttr("aria-label", "Open task");
     desc.addEventListener("click", () => this.openDetail(task));
     if (task.notes) {
-      const note = descLine.createSpan({ cls: "tasks-note-indicator" });
+      const note = descWrap.createSpan({ cls: "tasks-note-indicator" });
       (0, import_obsidian3.setIcon)(note, "align-left");
       note.setAttr("aria-label", "Has notes");
     }
+    if (task.completed && task.doneDate) {
+      descLine.createSpan({
+        cls: "tasks-due-slot tasks-done-date",
+        text: formatDueShort(task.doneDate),
+        attr: { "aria-label": `Done ${formatDueDisplay(task.doneDate)}` }
+      });
+    } else if (task.due) {
+      const dueEl = descLine.createSpan({
+        cls: "tasks-due-slot tasks-due",
+        text: dueLabel(task.due),
+        attr: { "aria-label": `Due ${formatDueDisplay(task.due)}` }
+      });
+      dueEl.addClass(dueClass(task.due));
+    }
     const meta = main.createDiv({ cls: "tasks-meta" });
+    if (task.priority !== "normal") {
+      const chip = meta.createSpan({
+        cls: `tasks-priority tasks-priority-${task.priority}`,
+        attr: { "aria-label": `${PRIORITY_LABEL[task.priority]} priority` }
+      });
+      const meter = chip.createSpan({ cls: "tasks-priority-meter" });
+      const lit = priorityFilled(task.priority);
+      for (let i = 1; i <= PRIORITY_SEGMENTS; i++) {
+        const seg = meter.createSpan({ cls: "tasks-priority-seg" });
+        if (i <= lit)
+          seg.addClass("is-on");
+      }
+      chip.createSpan({ cls: "tasks-priority-label", text: PRIORITY_LABEL[task.priority] });
+    }
     for (const tag of task.tags) {
       if (parentTags.includes(tag))
         continue;
       meta.createSpan({ cls: "tasks-tag-pill", text: tag });
-    }
-    if (task.completed && task.doneDate) {
-      meta.createSpan({ cls: "tasks-done-date", text: `Done ${formatDueDisplay(task.doneDate)}` });
-    } else if (task.due) {
-      const dueEl = meta.createSpan({ cls: "tasks-due", text: dueLabel(task.due) });
-      dueEl.addClass(dueClass(task.due));
     }
     if (task.recurrence) {
       const recur = meta.createSpan({ cls: "tasks-recur" });
@@ -5974,14 +6074,6 @@ var TasksView = class extends import_obsidian3.ItemView {
     if (hasChildren) {
       const done = task.children.filter((c) => c.completed).length;
       meta.createSpan({ cls: "tasks-progress", text: `${done}/${task.children.length}` });
-    }
-    if (task.priority !== "normal") {
-      const chip = meta.createSpan({
-        cls: `tasks-priority tasks-priority-${task.priority}`,
-        attr: { "aria-label": `${PRIORITY_LABEL[task.priority]} priority` }
-      });
-      chip.createSpan({ cls: "tasks-priority-dot" });
-      chip.createSpan({ cls: "tasks-priority-label", text: PRIORITY_LABEL[task.priority] });
     }
     const focusSecs = this.taskFocusTotal(task.description);
     if (focusSecs > 0) {

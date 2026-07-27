@@ -13,7 +13,7 @@ export type SortOrder = "due" | "priority-due" | "priority" | "file";
 
 /** Human labels for each sort order (settings + section headers). */
 export const SORT_ORDER_LABELS: Record<SortOrder, string> = {
-	due: "Due date",
+	due: "Due date, then priority",
 	"priority-due": "Priority, then due date",
 	priority: "Priority only",
 	file: "File order",
@@ -61,6 +61,50 @@ export function orderSubtasks(children: Task[]): Task[] {
 	return [...children].sort((a, b) => Number(a.completed) - Number(b.completed));
 }
 
+/** Due-proximity buckets a due-sorted list is broken into, in display order. */
+export type DueBucket = "overdue" | "today" | "upcoming" | "undated";
+
+/** Header label for each bucket. */
+export const DUE_BUCKET_LABELS: Record<DueBucket, string> = {
+	overdue: "Overdue",
+	today: "Today",
+	upcoming: "Upcoming",
+	undated: "No date",
+};
+
+/** Which bucket a task falls in, relative to `todayISO` (YYYY-MM-DD). */
+export function dueBucket(task: Task, todayISO: string): DueBucket {
+	if (!task.due) return "undated";
+	// ISO dates compare correctly as strings — no Date math, no timezone traps.
+	if (task.due < todayISO) return "overdue";
+	if (task.due === todayISO) return "today";
+	return "upcoming";
+}
+
+/** One bucket's tasks, kept in the order they arrived. */
+export interface DueGroup {
+	bucket: DueBucket;
+	tasks: Task[];
+}
+
+/**
+ * Split an already-due-sorted list into its proximity buckets, dropping empty
+ * ones. Order-preserving: this only inserts boundaries, it never re-sorts.
+ */
+export function groupTasksByDue(tasks: Task[], todayISO: string): DueGroup[] {
+	const order: DueBucket[] = ["overdue", "today", "upcoming", "undated"];
+	const byBucket = new Map<DueBucket, Task[]>();
+	for (const task of tasks) {
+		const bucket = dueBucket(task, todayISO);
+		const list = byBucket.get(bucket);
+		if (list) list.push(task);
+		else byBucket.set(bucket, [task]);
+	}
+	return order
+		.filter((b) => byBucket.has(b))
+		.map((bucket) => ({ bucket, tasks: byBucket.get(bucket) as Task[] }));
+}
+
 /** Return a new array of `tasks` ordered by `order`. Stable within ties. */
 export function sortTasks(tasks: Task[], order: SortOrder): Task[] {
 	const copy = [...tasks];
@@ -75,7 +119,9 @@ export function sortTasks(tasks: Task[], order: SortOrder): Task[] {
 
 	switch (order) {
 		case "due":
-			return copy.sort(byDue);
+			// The date decides the order; priority breaks ties, so the most
+			// urgent thing on a given day sits at the top of that day's run.
+			return copy.sort((a, b) => byDue(a, b) || byPriority(a, b));
 		case "priority":
 			return copy.sort(byPriority);
 		case "priority-due":

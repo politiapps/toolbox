@@ -253,7 +253,7 @@ export class App {
 			const matching = incomplete.filter((t) => !shown.has(t) && taskHasTag(t, section.tag));
 			matching.forEach((t) => shown.add(t));
 			const sorted = sortTasks(matching, section.sort);
-			this.renderSection(screen, section.id, section.name, sorted, section.collapsedByDefault);
+			this.renderSection(screen, section.id, section.name, sorted, section.collapsedByDefault, section.tag);
 			collect(section.id, section.name, sorted);
 		}
 
@@ -323,7 +323,8 @@ export class App {
 		id: string,
 		name: string,
 		tasks: Task[],
-		collapsedByDefault: boolean
+		collapsedByDefault: boolean,
+		tag?: string
 	): void {
 		const collapsed = this.settings.collapseState[id] ?? collapsedByDefault;
 		const section = el("div", { cls: "section" });
@@ -333,6 +334,17 @@ export class App {
 		setIcon(twisty, "chevron");
 		head.append(twisty, el("span", { cls: "section-name", text: name }));
 		head.append(el("span", { cls: "section-count", text: String(tasks.length) }));
+
+		if (tag) {
+			const addBtn = el("button", { cls: "section-add-btn", attrs: { "aria-label": `Add task to ${name}` } });
+			setIcon(addBtn, "plus");
+			addBtn.addEventListener("click", (e) => {
+				e.stopPropagation();
+				openAddTask(this.ctx, tag);
+			});
+			head.append(addBtn);
+		}
+
 		head.addEventListener("click", () => {
 			this.settings.collapseState[id] = !collapsed;
 			void saveSettings(this.settings);

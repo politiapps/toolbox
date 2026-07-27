@@ -154,6 +154,28 @@ body {
 	border-radius: 20px;
 	padding: 2px 8px;
 }
+.section-add-btn {
+	display: inline-grid;
+	place-items: center;
+	width: 28px;
+	height: 28px;
+	margin-left: auto;
+	padding: 0;
+	background: transparent;
+	border: none;
+	border-radius: 6px;
+	color: var(--text-muted);
+	cursor: pointer;
+	-webkit-tap-highlight-color: transparent;
+}
+.section-add-btn:active {
+	background: var(--bg-elev-2);
+	color: var(--accent);
+}
+.section-add-btn svg {
+	width: 18px;
+	height: 18px;
+}
 .section-body {
 	padding: 4px 6px 8px;
 }

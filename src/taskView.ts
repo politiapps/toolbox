@@ -43,6 +43,8 @@ import {
 	PRIORITY_RANK,
 	PRIORITY_LABEL,
 	sortTasks,
+	groupTasksByDue,
+	DUE_BUCKET_LABELS,
 	taskHasTag,
 	countDescendants,
 	orderSubtasks,
@@ -97,6 +99,17 @@ function formatDueDisplay(iso: string): string {
 	return `${weekday} ${d.getDate()}${ordinalSuffix(d.getDate())}`;
 }
 
+/**
+ * Abbreviated form ("Thu 25th") for the row's due column. The column is a fixed
+ * width so dates line up vertically down the list; a full weekday name would
+ * either wrap or eat the description, and the short form still disambiguates.
+ */
+function formatDueShort(iso: string): string {
+	const d = parseLocalDate(iso);
+	const weekday = d.toLocaleDateString(undefined, { weekday: "short" });
+	return `${weekday} ${d.getDate()}${ordinalSuffix(d.getDate())}`;
+}
+
 /** Whole days from today to the given date (negative = past). */
 function daysUntil(iso: string): number {
 	const today = parseLocalDate(todayISO()).getTime();
@@ -104,22 +117,44 @@ function daysUntil(iso: string): number {
 	return Math.round((due - today) / 86_400_000);
 }
 
-/** Human label for a due date: "Today"/"Tomorrow" for the near term, else date. */
+/**
+ * Human label for a due date. The near term reads relatively ("Today",
+ * "3d late") because *how far off* is the triage fact; only once a date is
+ * more than a week out does the calendar date itself carry more meaning.
+ */
 function dueLabel(iso: string): string {
 	const d = daysUntil(iso);
 	if (d === 0) return "Today";
 	if (d === 1) return "Tomorrow";
-	return formatDueDisplay(iso);
+	if (d === -1) return "Yesterday";
+	if (d < -1 && d >= -7) return `${-d}d late`;
+	return formatDueShort(iso);
 }
 
-/** Proximity class driving the due-date colour ramp (sooner = warmer). */
-function dueClass(iso: string): string {
+/** Proximity bucket driving the due-date colour ramp (sooner = warmer). */
+function dueState(iso: string): "overdue" | "today" | "tomorrow" | "soon" | "upcoming" {
 	const d = daysUntil(iso);
-	if (d < 0) return "is-overdue";
-	if (d === 0) return "is-today";
-	if (d === 1) return "is-tomorrow";
-	if (d === 2) return "is-soon";
-	return "is-upcoming";
+	if (d < 0) return "overdue";
+	if (d === 0) return "today";
+	if (d === 1) return "tomorrow";
+	if (d === 2) return "soon";
+	return "upcoming";
+}
+
+/** State class for the due badge itself. */
+function dueClass(iso: string): string {
+	return `is-${dueState(iso)}`;
+}
+
+/** Segments in the priority meter — the chip encodes level as shape, not only colour. */
+const PRIORITY_SEGMENTS = 5;
+
+/** How many meter segments are lit for a priority (5 = highest … 1 = lowest). */
+function priorityFilled(p: Priority): number {
+	// Ranks reserve a slot for `normal`, which never renders a chip — close that
+	// gap so the five visible levels map onto the five segments exactly.
+	const rank = PRIORITY_RANK[p];
+	return PRIORITY_SEGMENTS - (rank > PRIORITY_RANK.normal ? rank - 1 : rank);
 }
 
 /** Format remaining milliseconds as MM:SS (rounding up so it starts at NN:00). */
@@ -675,9 +710,37 @@ export class TasksView extends ItemView {
 			const body = sectionEl.createDiv({ cls: "tasks-section-body" });
 			if (sorted.length === 0) {
 				body.createDiv({ cls: "tasks-empty", text: "Nothing due here" });
+			} else if (section.sort === "due") {
+				this.renderDueGroups(body, sorted);
 			} else {
 				for (const task of sorted) this.renderTask(body, task);
 			}
+		}
+	}
+
+	/**
+	 * Render a due-sorted list broken at its proximity boundaries. What's late
+	 * and what's due today are different jobs, so they get a visible edge
+	 * between them rather than running together as one column of rows. A single
+	 * bucket needs no label — the whole list is that bucket.
+	 */
+	private renderDueGroups(body: HTMLElement, sorted: Task[]): void {
+		const groups = groupTasksByDue(sorted, todayISO());
+		for (const group of groups) {
+			if (groups.length > 1) {
+				const divider = body.createDiv({
+					cls: `tasks-due-group is-${group.bucket}`,
+				});
+				divider.createSpan({
+					cls: "tasks-due-group-label",
+					text: DUE_BUCKET_LABELS[group.bucket],
+				});
+				divider.createSpan({
+					cls: "tasks-due-group-count",
+					text: String(group.tasks.length),
+				});
+			}
+			for (const task of group.tasks) this.renderTask(body, task);
 		}
 	}
 
@@ -726,6 +789,12 @@ export class TasksView extends ItemView {
 		const item = parent.createDiv({ cls: "tasks-item" });
 		const row = item.createDiv({ cls: "tasks-row" });
 		if (task.completed) row.addClass("is-completed");
+		// Priority is a property of the whole task, so it also colours the row's
+		// left spine — readable while scanning, before any label is read.
+		if (task.priority !== "normal") row.addClass(`is-priority-${task.priority}`);
+		// Due state is carried by the whole row too (a faint wash), not only the
+		// badge: an overdue row should register peripherally, without reading it.
+		if (!task.completed && task.due) row.addClass(`is-due-${dueState(task.due)}`);
 
 		this.attachDragHandlers(row, task);
 
@@ -755,28 +824,58 @@ export class TasksView extends ItemView {
 		const main = row.createDiv({ cls: "tasks-row-main" });
 
 		const descLine = main.createDiv({ cls: "tasks-desc-line" });
-		const desc = descLine.createSpan({ cls: "tasks-desc is-clickable", text: task.description });
+		const descWrap = descLine.createSpan({ cls: "tasks-desc-text" });
+		const desc = descWrap.createSpan({ cls: "tasks-desc is-clickable", text: task.description });
 		desc.setAttr("aria-label", "Open task");
 		desc.addEventListener("click", () => this.openDetail(task));
 		if (task.notes) {
-			const note = descLine.createSpan({ cls: "tasks-note-indicator" });
+			const note = descWrap.createSpan({ cls: "tasks-note-indicator" });
 			setIcon(note, "align-left");
 			note.setAttr("aria-label", "Has notes");
 		}
 
+		// The due date lives in a fixed right-hand column on the description line,
+		// so dates form a scannable vertical strip: the eye compares them down the
+		// list instead of hunting for them at a different offset in every row.
+		// Priority owns the left edge, due owns the right — the two facts triage
+		// turns on are separated by *position* before any colour is resolved.
+		if (task.completed && task.doneDate) {
+			descLine.createSpan({
+				cls: "tasks-due-slot tasks-done-date",
+				text: formatDueShort(task.doneDate),
+				attr: { "aria-label": `Done ${formatDueDisplay(task.doneDate)}` },
+			});
+		} else if (task.due) {
+			const dueEl = descLine.createSpan({
+				cls: "tasks-due-slot tasks-due",
+				text: dueLabel(task.due),
+				attr: { "aria-label": `Due ${formatDueDisplay(task.due)}` },
+			});
+			dueEl.addClass(dueClass(task.due));
+		}
+
 		const meta = main.createDiv({ cls: "tasks-meta" });
+
+		// Priority leads the meta line — it is the other fact triage turns on, so
+		// it gets first read; context (tags, recurrence, progress) follows.
+		if (task.priority !== "normal") {
+			const chip = meta.createSpan({
+				cls: `tasks-priority tasks-priority-${task.priority}`,
+				attr: { "aria-label": `${PRIORITY_LABEL[task.priority]} priority` },
+			});
+			const meter = chip.createSpan({ cls: "tasks-priority-meter" });
+			const lit = priorityFilled(task.priority);
+			for (let i = 1; i <= PRIORITY_SEGMENTS; i++) {
+				const seg = meter.createSpan({ cls: "tasks-priority-seg" });
+				if (i <= lit) seg.addClass("is-on");
+			}
+			chip.createSpan({ cls: "tasks-priority-label", text: PRIORITY_LABEL[task.priority] });
+		}
 
 		// Skip a tag pill the parent already shows — it's inherited, not new info.
 		for (const tag of task.tags) {
 			if (parentTags.includes(tag)) continue;
 			meta.createSpan({ cls: "tasks-tag-pill", text: tag });
-		}
-
-		if (task.completed && task.doneDate) {
-			meta.createSpan({ cls: "tasks-done-date", text: `Done ${formatDueDisplay(task.doneDate)}` });
-		} else if (task.due) {
-			const dueEl = meta.createSpan({ cls: "tasks-due", text: dueLabel(task.due) });
-			dueEl.addClass(dueClass(task.due));
 		}
 
 		if (task.recurrence) {
@@ -788,15 +887,6 @@ export class TasksView extends ItemView {
 		if (hasChildren) {
 			const done = task.children.filter((c) => c.completed).length;
 			meta.createSpan({ cls: "tasks-progress", text: `${done}/${task.children.length}` });
-		}
-
-		if (task.priority !== "normal") {
-			const chip = meta.createSpan({
-				cls: `tasks-priority tasks-priority-${task.priority}`,
-				attr: { "aria-label": `${PRIORITY_LABEL[task.priority]} priority` },
-			});
-			chip.createSpan({ cls: "tasks-priority-dot" });
-			chip.createSpan({ cls: "tasks-priority-label", text: PRIORITY_LABEL[task.priority] });
 		}
 
 		// Focus time logged against this task via the Pomodoro timer.

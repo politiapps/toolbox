@@ -1,6 +1,13 @@
 import { describe, it, expect } from "vitest";
 import { parseTasks } from "../src/taskParser";
-import { sortTasks, orderSubtasks, taskHasTag, countDescendants } from "../src/sort";
+import {
+	sortTasks,
+	orderSubtasks,
+	taskHasTag,
+	countDescendants,
+	groupTasksByDue,
+	dueBucket,
+} from "../src/sort";
 
 function tasksFrom(lines: string[]) {
 	return parseTasks(lines.join("\n")).tasks;
@@ -15,6 +22,21 @@ describe("sortTasks", () => {
 			"- [ ] B 📅 2026-02-01",
 		]);
 		expect(sortTasks(t, "due").map((x) => x.description)).toEqual(["A", "B", "C", "Z"]);
+	});
+
+	it("breaks due-date ties by priority", () => {
+		const t = tasksFrom([
+			"- [ ] Low 🔽 📅 2026-01-01",
+			"- [ ] Highest 🔺 📅 2026-01-01",
+			"- [ ] Normal 📅 2026-01-01",
+			"- [ ] Earlier 🔽 📅 2025-12-31",
+		]);
+		expect(sortTasks(t, "due").map((x) => x.description)).toEqual([
+			"Earlier",
+			"Highest",
+			"Normal",
+			"Low",
+		]);
 	});
 
 	it("orders by priority then due", () => {
@@ -51,6 +73,40 @@ describe("orderSubtasks — completed sink to the bottom, stable", () => {
 			"done first",
 			"done second",
 		]);
+	});
+});
+
+describe("groupTasksByDue", () => {
+	const TODAY = "2026-02-10";
+
+	it("buckets by proximity to today", () => {
+		const [late, now, later, none] = tasksFrom([
+			"- [ ] late 📅 2026-02-09",
+			"- [ ] now 📅 2026-02-10",
+			"- [ ] later 📅 2026-02-11",
+			"- [ ] none",
+		]);
+		expect(dueBucket(late, TODAY)).toBe("overdue");
+		expect(dueBucket(now, TODAY)).toBe("today");
+		expect(dueBucket(later, TODAY)).toBe("upcoming");
+		expect(dueBucket(none, TODAY)).toBe("undated");
+	});
+
+	it("groups in display order, drops empty buckets, keeps input order", () => {
+		const t = tasksFrom([
+			"- [ ] A 📅 2026-02-09",
+			"- [ ] B 📅 2026-02-08",
+			"- [ ] C 📅 2026-03-01",
+		]);
+		expect(groupTasksByDue(t, TODAY)).toEqual([
+			{ bucket: "overdue", tasks: [t[0], t[1]] },
+			{ bucket: "upcoming", tasks: [t[2]] },
+		]);
+	});
+
+	it("returns a single group when everything shares a bucket", () => {
+		const t = tasksFrom(["- [ ] A 📅 2026-02-10", "- [ ] B 📅 2026-02-10"]);
+		expect(groupTasksByDue(t, TODAY).map((g) => g.bucket)).toEqual(["today"]);
 	});
 });
 

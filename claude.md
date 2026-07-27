@@ -50,7 +50,7 @@ Its current (and so far only) feature is the **Tasks panel** — a sidebar that 
 
 **Priority emojis:** 🔺 highest, ⏫ high, 🔼 medium, 🔽 low, ⏬ lowest (matches the official Obsidian Tasks plugin)
 
-**Date display in UI:** "Thursday 25th" — day name + day number + ordinal suffix, no year. Overdue = red.
+**Date display in UI:** relative inside a week ("Today", "Tomorrow", "Yesterday", "3d late"), otherwise "Thursday 25th" — day name + day number + ordinal suffix, no year. Overdue = solid red badge, the loudest element on the panel. See `documentation/ui.md` for the full priority/due salience rules.
 
 ## 5. The Continuous Learning Loop
 
