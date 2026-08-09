@@ -31,6 +31,7 @@ import {
 } from "./timesheetParser";
 import { TimesheetOrg, ActiveTimer } from "./settings";
 import { InvoiceModal } from "./invoiceModal";
+import { attachDatePicker } from "./datePicker";
 
 export const VIEW_TYPE_TIMESHEET = "timesheet-view";
 
@@ -965,8 +966,9 @@ class TimesheetEntryModal extends Modal {
 			dd.onChange((v) => (this.org = v));
 		});
 
-		// Date — a tactile chip that opens the OS calendar on click and shows the
-		// day in plain language rather than a raw YYYY-MM-DD value.
+		// Date — a tactile chip that opens the custom calendar popover on click
+		// (see datePicker.ts) and shows the day in plain language rather than a
+		// raw YYYY-MM-DD value.
 		contentEl.createEl("div", { cls: "timesheet-form-label", text: "Date" });
 		const dateField = contentEl.createDiv({ cls: "timesheet-date-field" });
 		setIcon(dateField.createSpan({ cls: "timesheet-date-icon" }), "calendar");
@@ -979,15 +981,7 @@ class TimesheetEntryModal extends Modal {
 			dateDisplay.textContent = formatNiceDate(this.date);
 		};
 		syncDate();
-		const openPicker = (): void => {
-			const picker = dateInput as unknown as { showPicker?: () => void };
-			try {
-				picker.showPicker?.();
-			} catch (_) {
-				/* not user-activated or unsupported — the field is still typable */
-			}
-		};
-		dateField.addEventListener("click", openPicker);
+		attachDatePicker(dateInput, { trigger: dateField });
 		dateInput.addEventListener("change", () => {
 			if (dateInput.value) {
 				this.date = dateInput.value;

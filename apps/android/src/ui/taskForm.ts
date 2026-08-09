@@ -1,6 +1,7 @@
 import { Priority, TaskInput } from "@toolbox/task-core";
 import { el, field, toast } from "./dom";
 import { recurrenceControl } from "./recurrenceControl";
+import { attachDatePicker } from "./datePicker";
 
 export interface TaskFormInitial {
 	description?: string;
@@ -68,6 +69,7 @@ export function taskForm(parent: HTMLElement, knownTags: string[], initial: Task
 	if (due) dueInput.value = due;
 	dueInput.addEventListener("input", () => (due = dueInput.value || null));
 	field(parent, "Due date", dueInput);
+	attachDatePicker(dueInput, dueInput.closest<HTMLElement>(".form-field")!, { allowClear: true });
 
 	const prioSel = el("select", { cls: "form-input" }) as HTMLSelectElement;
 	const prios: [string, string][] = [

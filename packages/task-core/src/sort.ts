@@ -59,11 +59,14 @@ export function countDescendants(task: Task): number {
 }
 
 /**
- * Order subtasks so completed ones sink to the bottom of the list, keeping
- * incomplete and completed each in their original document order (stable).
+ * Order subtasks the same way a due-sorted section orders its rows — by due
+ * date, then priority breaking ties — so a task's own subtask list reads the
+ * same way the panel does, not just in whatever order they were typed.
+ * Completed subtasks still sink to the bottom: chaining a second stable sort
+ * on top of the due/priority order preserves it within each group.
  */
 export function orderSubtasks(children: Task[]): Task[] {
-	return [...children].sort((a, b) => Number(a.completed) - Number(b.completed));
+	return sortTasks(children, "due").sort((a, b) => Number(a.completed) - Number(b.completed));
 }
 
 /** One row a section may render, with the tags it matches sections by. */

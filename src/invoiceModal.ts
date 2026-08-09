@@ -13,6 +13,7 @@ import {
 	CustomInvoiceItem,
 } from "./invoiceGenerator";
 import { parseTimesheet } from "./timesheetParser";
+import { attachDatePicker } from "./datePicker";
 
 /** Format a Date as YYYY-MM-DD. */
 function fmtDate(d: Date): string {
@@ -299,14 +300,7 @@ export class InvoiceModal extends Modal {
 			display.textContent = formatNiceDate(get());
 		};
 		sync();
-		field.addEventListener("click", () => {
-			const picker = input as unknown as { showPicker?: () => void };
-			try {
-				picker.showPicker?.();
-			} catch (_) {
-				/* not user-activated or unsupported — the field is still typable */
-			}
-		});
+		attachDatePicker(input, { trigger: field });
 		input.addEventListener("change", () => {
 			if (input.value) {
 				set(input.value);

@@ -3,6 +3,7 @@ import { el, openModal, toast } from "./dom";
 import { taskForm } from "./taskForm";
 import type { AppContext } from "./context";
 import { openAddSubtask } from "./addModal";
+import { dueSlotEl, priorityChipEl } from "./taskRow";
 
 /** Open a task: edit its fields, notes, and manage its subtasks. */
 export function openDetail(ctx: AppContext, task: Task): void {
@@ -62,6 +63,13 @@ export function openDetail(ctx: AppContext, task: Task): void {
 					text: child.description,
 				});
 				row.append(cb, label);
+				// Same due badge / priority chip a task row shows, so a subtask's own
+				// schedule is visible without opening it — and matches the order
+				// `orderSubtasks` now lists them in (due date, then priority).
+				const dueSlot = dueSlotEl(child);
+				if (dueSlot) row.append(dueSlot);
+				const chip = priorityChipEl(child.priority);
+				if (chip) row.append(chip);
 				subWrap.append(row);
 			}
 		}

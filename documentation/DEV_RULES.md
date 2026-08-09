@@ -105,6 +105,20 @@ so the constraints live next to the code. Violating any of these is a bug.
       `-2^31` unchanged, which then indexes an array negatively. Widen to
       `long` before `Math.abs` to reproduce the JS result.
 
+## UI chrome the browser owns
+14. **The native `<input type="date">` calendar popup cannot be restyled.**
+    Chromium exposes no CSS hooks for the grid inside it — only
+    `::-webkit-calendar-picker-indicator` (the little icon) is stylable, not
+    the popup itself — so there was no way to make "today" or past dates any
+    clearer inside it. `datePicker.ts` (plugin) / `apps/android/src/ui/
+    datePicker.ts` (app) replace it entirely: the input is set `readOnly` and
+    a custom calendar (grid math shared from task-core's
+    `datePickerGrid.ts`) takes over opening it, then sets `.value` and
+    dispatches `input`/`change` so every existing listener at the call site
+    keeps working unmodified. **Every** `type="date"` field goes through
+    `attachDatePicker()` now — don't wire a bare `showPicker()` call for a
+    new one.
+
 ## Testing
 7. **Always test in a separate development vault**, never the main vault.
 

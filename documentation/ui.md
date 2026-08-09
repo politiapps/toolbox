@@ -233,6 +233,17 @@ indent is wider (13px) and its guide rail fainter than before, because at the
 old spacing the rail and the row's own 4px priority spine sat ~9px apart and
 read as a doubled rail, which stopped the spine registering as a signal at all.
 
+**A task's own subtask list — inside its detail modal, not the main list —
+carries the same two facts.** `TaskDetailModal.renderSubtasks()` (and the
+app's `openDetail()`) show each subtask's due badge and priority chip
+(`renderDueSlot`/`renderPriorityChip` — the same helpers a row uses, factored
+out so the two can't drift), and `orderSubtasks()` (task-core) lists them by
+**due date, then priority** — the same rule a due-sorted section uses —
+before sinking completed ones to the bottom. Opening a task to plan its
+subtasks used to show only a checkbox and a description in whatever order
+they were typed; the schedule wasn't visible until you opened each subtask in
+turn, and the list didn't reflect what was actually most pressing.
+
 ## Due-date group dividers (`.tasks-due-group`)
 
 A section sorted by **Due date** is really three jobs stacked — what's late,
@@ -367,13 +378,54 @@ An Obsidian `Modal` with `.tasks-form-modal`. Fields:
 2. Tag — a dropdown of existing tags (most-recently-used first) plus a
    "+ Create new tag" option that reveals a text box (`newTagSetting`, hidden by
    default). "No tag" is also available.
-3. Due date — native `type="date"` input that calls `showPicker()` on
-   click/focus so the calendar opens from anywhere in the field.
+3. Due date — a `type="date"` input driven by the custom calendar popover
+   (see below), clearable back to "no date".
 4. Priority — dropdown: None / Highest / High / Medium / Low / Lowest, matching
    the official Tasks plugin emoji (🔺 ⏫ 🔼 🔽 ⏬).
 
 Submit appends (add) or replaces (edit) the line and refreshes. Used tags are
 promoted via `touchRecentTag()`.
+
+## Date picker
+
+Every date field in the plugin (task due date in the add/detail modals, the
+reschedule popover, the timesheet entry date, the invoice From/To/Invoice-date
+chips) opens the same custom calendar via `attachDatePicker()`
+(`src/datePicker.ts`), never the OS/browser one — Chromium gives that native
+popup no CSS hooks, so "today" and past dates couldn't be told apart at a
+glance inside it (see `DEV_RULES.md` #14). The Android app has its own
+equivalent (`apps/android/src/ui/datePicker.ts`), rendered as an inline
+reveal instead of a popover — a bottom sheet is already open at every call
+site there, and stacking a floating popover on top of one risks clipping on a
+phone-width screen. Both share the same grid math
+(`datePickerGrid.buildMonthGrid`, task-core) so "today" and "this month"
+can't mean something different on the two surfaces.
+
+- **Header**: `‹ August 2026 ›` — month nav either side of a mono uppercase
+  label.
+- **Weekday row**: locale-short initials (Su Mo Tu …), faint.
+- **Day grid**: Sunday-first, padded with faint adjacent-month days so every
+  row has 7 cells.
+- **Today** gets a ring (`box-shadow`/outline in the accent colour), not a
+  fill — it has to stay legible as "today" even once another date is
+  selected (which *is* filled), so the two states can't be confused with each
+  other.
+- **Selected** (the field's current value) is filled solid in the accent
+  colour.
+- **Past dates** (and other-month days) recede to `--text-faint` — the same
+  ink-decay idea the due-date ramp already uses, just applied to a grid
+  instead of a badge. Past dates stay clickable: due dates and timesheet
+  entries can be legitimately backdated, so the picker only marks lateness,
+  it never blocks picking it.
+- **Footer**: a "Today" jump, plus "Clear" where an empty date is valid (the
+  task due-date field; not the reschedule popover, timesheet, or invoice
+  fields, which always need a value).
+
+`attachDatePicker()` only takes over *opening* the field: it sets the input
+`readOnly` (blocks the native picker/keyboard, leaves it focusable) and, on a
+day click, sets `input.value` and dispatches `input`/`change` — so every
+existing `onChange` / `addEventListener("change", …)` at the call site keeps
+working unmodified. It never introduces a new value channel.
 
 ## Class naming convention
 

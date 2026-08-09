@@ -71,7 +71,10 @@ packages/task-core/src/
                      rule grammar + next-occurrence date math (no vault access)
   sort.ts            Sort orders + priority ranking + pure list ordering
                      (sortTasks, orderSubtasks, groupTasksByDue, taskHasTag,
-                     countDescendants)
+                     countDescendants). orderSubtasks sorts by due date then
+                     priority (via sortTasks) before sinking completed ones to
+                     the bottom, so a subtask list reads the same way a
+                     due-sorted section does.
   presentation.ts    THE ONLY place a due date's LABEL or its proximity RAMP is
                      decided (dueLabel/dueState/dueClass/formatDue*), plus the
                      priority meter (priorityFilled) and the per-section accent
@@ -84,13 +87,21 @@ packages/task-core/src/
                      ONE sanctioned mirror: WidgetDates.java (see below) repeats
                      the date rules in Java, because the home-screen widget must
                      resolve them with no webview alive. Change both together.
-  index.ts           Barrel re-exporting the three modules above
+  datePickerGrid.ts  Pure month-grid math (buildMonthGrid/shiftMonth/monthOf)
+                     for the custom calendar picker — see datePicker.ts below.
+                     Not "calendar.ts": that name is already .ics feeds.
+  index.ts           Barrel re-exporting the modules above
 
 src/
   main.ts            Plugin entry point + lifecycle + vault watcher + calendar
                      fetch + Editable Columns registration / embed-click listener
                      + Timesheet registration / vault watcher
   calendar.ts        THE ONLY place .ics feeds are parsed (pure; no vault access)
+  datePicker.ts      attachDatePicker() — a custom calendar popover replacing
+                     the OS/browser one on every `type="date"` field (task due
+                     date, reschedule, timesheet, invoice). Chromium gives that
+                     native popup no CSS hooks, so "today"/past dates couldn't
+                     be made clearer inside it; see DEV_RULES.md #14.
   calendarView.ts    Shared DOM render of the "Today's events" list (pure view)
   settings.ts        Settings model, defaults, native settings tab + Org mgmt
   taskView.ts        Sidebar ItemView, rendering, interactions, add/edit modal
@@ -287,7 +298,13 @@ manifest.json        Plugin id (`toolbox`) / name (`Toolbox`) / minAppVersion (1
   raw → pure edit → write).
 - `TaskFormModal` is the quick add form (also used for "add subtask").
 - `TaskDetailModal` opens when you click a task: edit fields, a multi-line
-  **notes** textarea, and a subtask list (toggle + add).
+  **notes** textarea, and a subtask list (toggle + add). Each subtask row
+  shows the same due badge / priority chip a top-level row does
+  (`renderDueSlot`/`renderPriorityChip`, module-level helpers shared with
+  `renderTask`) and lists them via `orderSubtasks` — due date, then priority.
+- Every `type="date"` field (here and in `timesheetView.ts`/`invoiceModal.ts`)
+  opens `datePicker.ts`'s custom calendar via `attachDatePicker()` instead of
+  the OS picker.
 - Date formatting helpers are UI-only and never parse task syntax.
 
 ### `editableColumns.ts` — CM6 extension for the Editable Columns feature

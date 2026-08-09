@@ -1,4 +1,4 @@
-import { Task, PRIORITY_LABEL, orderSubtasks } from "@toolbox/task-core";
+import { Task, Priority, PRIORITY_LABEL, orderSubtasks } from "@toolbox/task-core";
 import { el, toast } from "./dom";
 import { setIcon } from "./icons";
 import {
@@ -21,6 +21,50 @@ import { openDetail } from "./detailModal";
 // and nothing urgent hides that way because dated subtasks are lifted into the
 // list as their own rows (see `sectionCandidates` in task-core).
 const expanded = new Set<string>();
+
+/**
+ * The due badge (or, once completed, the done date) in the shared
+ * `.task-due-slot` treatment, or `null` when the task has neither. Exported
+ * so the detail modal's subtask list can show the same due state a task row
+ * does, not just the main list.
+ */
+export function dueSlotEl(task: Task): HTMLElement | null {
+	if (task.completed && task.doneDate) {
+		return el("span", {
+			cls: "task-due-slot task-done-date",
+			text: formatDueShort(task.doneDate),
+			attrs: { "aria-label": `Done ${formatDueDisplay(task.doneDate)}` },
+		});
+	}
+	if (task.due) {
+		return el("span", {
+			cls: `task-due-slot task-due ${dueClass(task.due)}`,
+			text: dueLabel(task.due),
+			attrs: { "aria-label": `Due ${formatDueDisplay(task.due)}` },
+		});
+	}
+	return null;
+}
+
+/**
+ * The priority chip (five-segment meter + label), or `null` for "normal".
+ * Exported so the detail modal's subtask list can show it too — see
+ * `dueSlotEl`.
+ */
+export function priorityChipEl(priority: Priority): HTMLElement | null {
+	if (priority === "normal") return null;
+	const chip = el("span", {
+		cls: `task-priority prio-${priority}`,
+		attrs: { "aria-label": `${PRIORITY_LABEL[priority]} priority` },
+	});
+	const meter = el("span", { cls: "task-priority-meter" });
+	const lit = priorityFilled(priority);
+	for (let i = 1; i <= PRIORITY_SEGMENTS; i++) {
+		meter.append(el("span", { cls: i <= lit ? "task-priority-seg is-on" : "task-priority-seg" }));
+	}
+	chip.append(meter, el("span", { cls: "task-priority-label", text: PRIORITY_LABEL[priority] }));
+	return chip;
+}
 
 /**
  * Render one task (and its subtasks) into `parent`.
@@ -101,23 +145,8 @@ export function renderTask(
 	titleLine.append(title);
 	// The badge shows the short form ("Thu 25th") so the column stays narrow; the
 	// full weekday survives in the label for screen readers.
-	if (task.completed && task.doneDate) {
-		titleLine.append(
-			el("span", {
-				cls: "task-due-slot task-done-date",
-				text: formatDueShort(task.doneDate),
-				attrs: { "aria-label": `Done ${formatDueDisplay(task.doneDate)}` },
-			})
-		);
-	} else if (task.due) {
-		titleLine.append(
-			el("span", {
-				cls: `task-due-slot task-due ${dueClass(task.due)}`,
-				text: dueLabel(task.due),
-				attrs: { "aria-label": `Due ${formatDueDisplay(task.due)}` },
-			})
-		);
-	}
+	const dueSlot = dueSlotEl(task);
+	if (dueSlot) titleLine.append(dueSlot);
 	main.append(titleLine);
 
 	const meta = el("div", { cls: "task-meta" });
@@ -143,19 +172,8 @@ export function renderTask(
 	// Priority leads the rest of the meta line — it's the other fact triage
 	// turns on. The five-segment meter encodes rank as shape, so the level
 	// survives without colour vision.
-	if (task.priority !== "normal") {
-		const chip = el("span", {
-			cls: `task-priority prio-${task.priority}`,
-			attrs: { "aria-label": `${PRIORITY_LABEL[task.priority]} priority` },
-		});
-		const meter = el("span", { cls: "task-priority-meter" });
-		const lit = priorityFilled(task.priority);
-		for (let i = 1; i <= PRIORITY_SEGMENTS; i++) {
-			meter.append(el("span", { cls: i <= lit ? "task-priority-seg is-on" : "task-priority-seg" }));
-		}
-		chip.append(meter, el("span", { cls: "task-priority-label", text: PRIORITY_LABEL[task.priority] }));
-		meta.append(chip);
-	}
+	const chip = priorityChipEl(task.priority);
+	if (chip) meta.append(chip);
 
 	// Skip a tag pill the parent already shows — it's inherited, not new.
 	for (const tag of task.tags) {

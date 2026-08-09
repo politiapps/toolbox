@@ -9,6 +9,7 @@
 
 import { el, openModal, toast } from "./dom";
 import { todayISO, addDaysISO } from "../dates";
+import { attachDatePicker } from "./datePicker";
 import type { AppContext } from "./context";
 
 export function openReschedule(ctx: AppContext, count: number, scopeTag: string | null): void {
@@ -37,6 +38,7 @@ export function openReschedule(ctx: AppContext, count: number, scopeTag: string 
 		const dateField = el("label", { cls: "form-field" });
 		dateField.append(el("span", { cls: "form-label", text: "Or pick a date" }), dateInput);
 		content.append(dateField);
+		attachDatePicker(dateInput, dateField);
 
 		const selectQuick = (btn: HTMLButtonElement, iso: string): void => {
 			selected = iso;

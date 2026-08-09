@@ -71,6 +71,7 @@ import {
 	VIEW_WEEK,
 } from "@toolbox/task-core";
 import { renderTodayCalendar } from "./calendarView";
+import { attachDatePicker } from "./datePicker";
 import {
 	SectionConfig,
 	COMPLETED_KEY,
@@ -86,6 +87,49 @@ export const VIEW_TYPE_TASKS = "tasks-panel-view";
 /* Date formatting, the due-date ramp, the priority meter and the section
    accent hue live in `@toolbox/task-core` (presentation.ts) — the Android app
    presents the same facts, and a second copy here is how the two drift. */
+
+/**
+ * The due badge (or, once completed, the done date) in the shared
+ * `.tasks-due-slot` treatment. Shared by a task row and the detail modal's
+ * subtask list so a subtask reads the same due state either place it's
+ * shown, not just in the main list.
+ */
+function renderDueSlot(parent: HTMLElement, task: Task): void {
+	if (task.completed && task.doneDate) {
+		parent.createSpan({
+			cls: "tasks-due-slot tasks-done-date",
+			text: formatDueShort(task.doneDate),
+			attr: { "aria-label": `Done ${formatDueDisplay(task.doneDate)}` },
+		});
+	} else if (task.due) {
+		const dueEl = parent.createSpan({
+			cls: "tasks-due-slot tasks-due",
+			text: dueLabel(task.due),
+			attr: { "aria-label": `Due ${formatDueDisplay(task.due)}` },
+		});
+		dueEl.addClass(dueClass(task.due));
+	}
+}
+
+/**
+ * The priority chip (five-segment meter + label), or nothing for `normal`.
+ * Shared by a task row and the detail modal's subtask list — see
+ * `renderDueSlot`.
+ */
+function renderPriorityChip(parent: HTMLElement, priority: Priority): void {
+	if (priority === "normal") return;
+	const chip = parent.createSpan({
+		cls: `tasks-priority tasks-priority-${priority}`,
+		attr: { "aria-label": `${PRIORITY_LABEL[priority]} priority` },
+	});
+	const meter = chip.createSpan({ cls: "tasks-priority-meter" });
+	const lit = priorityFilled(priority);
+	for (let i = 1; i <= PRIORITY_SEGMENTS; i++) {
+		const seg = meter.createSpan({ cls: "tasks-priority-seg" });
+		if (i <= lit) seg.addClass("is-on");
+	}
+	chip.createSpan({ cls: "tasks-priority-label", text: PRIORITY_LABEL[priority] });
+}
 
 /** Unique descriptions of incomplete tasks, first-seen order (Pomodoro picker). */
 function uniqueIncompleteNames(flat: Task[]): string[] {
@@ -428,6 +472,7 @@ export class TasksView extends ItemView {
 		dateRow.createSpan({ cls: "tasks-reschedule-date-label", text: "or pick a date" });
 		const dateInput = dateRow.createEl("input", { cls: "tasks-reschedule-date", type: "date" });
 		dateInput.value = today;
+		attachDatePicker(dateInput);
 
 		const selectQuick = (btn: HTMLButtonElement, iso: string): void => {
 			selected = iso;
@@ -982,20 +1027,7 @@ export class TasksView extends ItemView {
 		// list instead of hunting for them at a different offset in every row.
 		// Priority owns the left edge, due owns the right — the two facts triage
 		// turns on are separated by *position* before any colour is resolved.
-		if (task.completed && task.doneDate) {
-			descLine.createSpan({
-				cls: "tasks-due-slot tasks-done-date",
-				text: formatDueShort(task.doneDate),
-				attr: { "aria-label": `Done ${formatDueDisplay(task.doneDate)}` },
-			});
-		} else if (task.due) {
-			const dueEl = descLine.createSpan({
-				cls: "tasks-due-slot tasks-due",
-				text: dueLabel(task.due),
-				attr: { "aria-label": `Due ${formatDueDisplay(task.due)}` },
-			});
-			dueEl.addClass(dueClass(task.due));
-		}
+		renderDueSlot(descLine, task);
 
 		const meta = main.createDiv({ cls: "tasks-meta" });
 
@@ -1017,19 +1049,7 @@ export class TasksView extends ItemView {
 
 		// Priority leads the meta line — it is the other fact triage turns on, so
 		// it gets first read; context (tags, recurrence, progress) follows.
-		if (task.priority !== "normal") {
-			const chip = meta.createSpan({
-				cls: `tasks-priority tasks-priority-${task.priority}`,
-				attr: { "aria-label": `${PRIORITY_LABEL[task.priority]} priority` },
-			});
-			const meter = chip.createSpan({ cls: "tasks-priority-meter" });
-			const lit = priorityFilled(task.priority);
-			for (let i = 1; i <= PRIORITY_SEGMENTS; i++) {
-				const seg = meter.createSpan({ cls: "tasks-priority-seg" });
-				if (i <= lit) seg.addClass("is-on");
-			}
-			chip.createSpan({ cls: "tasks-priority-label", text: PRIORITY_LABEL[task.priority] });
-		}
+		renderPriorityChip(meta, task.priority);
 
 		// Skip a tag pill the parent already shows — it's inherited, not new info.
 		for (const tag of task.tags) {
@@ -1711,18 +1731,7 @@ class TaskFormModal extends Modal {
 			input.addClass("tasks-form-date");
 			if (this.due) text.setValue(this.due);
 			text.onChange((v) => (this.due = v || null));
-			// Open the native calendar from anywhere in the field, not just the
-			// tiny built-in icon.
-			const openPicker = () => {
-				const picker = input as unknown as { showPicker?: () => void };
-				try {
-					picker.showPicker?.();
-				} catch (_) {
-					/* showPicker unsupported or not user-activated — ignore */
-				}
-			};
-			input.addEventListener("click", openPicker);
-			input.addEventListener("focus", openPicker);
+			attachDatePicker(input, { allowClear: true });
 		});
 
 		new Setting(contentEl).setName("Priority").addDropdown((dd) => {
@@ -1874,16 +1883,7 @@ class TaskDetailModal extends Modal {
 			input.addClass("tasks-form-date");
 			if (this.due) t.setValue(this.due);
 			t.onChange((v) => (this.due = v || null));
-			const open = () => {
-				const p = input as unknown as { showPicker?: () => void };
-				try {
-					p.showPicker?.();
-				} catch (_) {
-					/* ignore */
-				}
-			};
-			input.addEventListener("click", open);
-			input.addEventListener("focus", open);
+			attachDatePicker(input, { allowClear: true });
 		});
 
 		new Setting(contentEl).setName("Priority").addDropdown((dd) => {
@@ -1946,6 +1946,11 @@ class TaskDetailModal extends Modal {
 			});
 			const span = row.createSpan({ cls: "tasks-detail-subtitle", text: child.description });
 			if (child.completed) span.addClass("is-completed");
+			// Same due badge / priority chip a top-level row shows, so a subtask's
+			// own schedule is visible without opening it — and matches the order
+			// `orderSubtasks` now lists them in (due date, then priority).
+			renderDueSlot(row, child);
+			renderPriorityChip(row, child.priority);
 		}
 	}
 

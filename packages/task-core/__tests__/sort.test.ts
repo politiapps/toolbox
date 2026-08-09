@@ -76,6 +76,26 @@ describe("orderSubtasks — completed sink to the bottom, stable", () => {
 			"done second",
 		]);
 	});
+
+	it("orders each group by due date then priority, like a due-sorted section", () => {
+		const parent = tasksFrom([
+			"- [ ] Parent",
+			"    - [ ] open, no date, low ⏬",
+			"    - [ ] open, due later 📅 2026-02-20",
+			"    - [ ] open, due sooner, high ⏫ 📅 2026-02-10",
+			"    - [ ] open, due sooner, normal 📅 2026-02-10",
+			"    - [x] done, due later ✅ 2026-02-15 📅 2026-02-20",
+			"    - [x] done, due sooner ✅ 2026-02-14 📅 2026-02-05",
+		])[0];
+		expect(orderSubtasks(parent.children).map((c) => c.description)).toEqual([
+			"open, due sooner, high",
+			"open, due sooner, normal",
+			"open, due later",
+			"open, no date, low",
+			"done, due sooner",
+			"done, due later",
+		]);
+	});
 });
 
 describe("groupTasksByDue", () => {

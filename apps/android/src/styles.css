@@ -890,6 +890,128 @@ body.modal-open {
 	border-color: transparent;
 }
 
+/* --------------------------- date picker panel ------------------------- */
+
+/* Replaces the OS calendar on every date field (see ui/datePicker.ts): it
+   can't be restyled to make "today" or past dates any clearer, and a phone
+   has no room to spare on a popover risking clipping inside a sheet that's
+   already scrolling — an inline reveal keeps it in the document flow. */
+.datepicker-panel {
+	background: var(--bg-elev-2);
+	border: 1px solid var(--border);
+	border-radius: var(--radius-sm);
+	padding: 10px;
+	margin: -6px 0 13px;
+}
+.datepicker-header {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	padding-bottom: 6px;
+}
+.datepicker-nav {
+	display: inline-grid;
+	place-items: center;
+	width: 36px;
+	height: 36px;
+	padding: 0;
+	background: transparent;
+	border: none;
+	border-radius: 8px;
+	color: var(--text-muted);
+	-webkit-tap-highlight-color: transparent;
+}
+.datepicker-nav:active {
+	background: var(--bg-elev);
+}
+.datepicker-nav svg {
+	width: 16px;
+	height: 16px;
+}
+.datepicker-nav.is-next svg {
+	transform: rotate(180deg);
+}
+.datepicker-label {
+	font-family: var(--font-mono);
+	font-size: 0.8rem;
+	font-weight: 700;
+	letter-spacing: 0.04em;
+	text-transform: uppercase;
+}
+.datepicker-weekdays,
+.datepicker-grid {
+	display: grid;
+	grid-template-columns: repeat(7, 1fr);
+}
+.datepicker-weekday {
+	text-align: center;
+	font-family: var(--font-mono);
+	font-size: 0.62rem;
+	letter-spacing: 0.04em;
+	text-transform: uppercase;
+	color: var(--text-faint);
+	padding-bottom: 4px;
+}
+.datepicker-day {
+	aspect-ratio: 1;
+	min-height: 36px;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	margin: 1px 0;
+	padding: 0;
+	background: transparent;
+	border: none;
+	border-radius: 50%;
+	font-size: 0.86rem;
+	font-variant-numeric: tabular-nums;
+	color: var(--text);
+	-webkit-tap-highlight-color: transparent;
+}
+.datepicker-day:active {
+	background: var(--bg-elev);
+}
+/* Ink decays with distance from "now", same idea as the due-date ramp. */
+.datepicker-day.is-past {
+	color: var(--text-faint);
+}
+.datepicker-day.is-other-month {
+	color: var(--text-faint);
+	opacity: 0.5;
+}
+/* Today gets a ring, not a fill — it has to stay legible as "today" even once
+   another date is selected (filled), so the two states never collide. */
+.datepicker-day.is-today {
+	box-shadow: inset 0 0 0 1.5px var(--accent);
+	color: var(--accent);
+	font-weight: 700;
+}
+.datepicker-day.is-selected {
+	background: var(--accent);
+	color: var(--accent-contrast);
+	font-weight: 700;
+}
+.datepicker-footer {
+	display: flex;
+	justify-content: space-between;
+	margin-top: 4px;
+	padding-top: 8px;
+	border-top: 1px solid var(--border);
+}
+.datepicker-today-btn,
+.datepicker-clear-btn {
+	background: transparent;
+	border: none;
+	padding: 6px 8px;
+	font-size: 0.82rem;
+	font-weight: 600;
+	color: var(--accent);
+	min-height: 36px;
+}
+.datepicker-clear-btn {
+	color: var(--text-muted);
+}
+
 /* ------------------------------- forms -------------------------------- */
 
 .form-field {
@@ -919,6 +1041,12 @@ body.modal-open {
 }
 select.form-input {
 	appearance: none;
+}
+/* The custom calendar panel owns date fields now (see ui/datePicker.ts) —
+   readonly blocks the OS keyboard/picker; the pointer cursor is the only
+   hint left that the field is still tappable. */
+input[type="date"].form-input[readonly] {
+	cursor: pointer;
 }
 .notes-input {
 	resize: vertical;
@@ -984,13 +1112,20 @@ select.form-input {
 .detail-subrow {
 	display: flex;
 	align-items: center;
-	gap: 10px;
+	flex-wrap: wrap;
+	gap: 6px 10px;
 	padding: 7px 4px;
 }
 .detail-subrow input {
 	width: 20px;
 	height: 20px;
 	accent-color: var(--accent);
+}
+/* Grows to push the due badge / priority chip to the row's right edge, same
+   as the due column does in the main list. */
+.detail-subtitle {
+	flex: 1;
+	min-width: 40%;
 }
 .detail-subtitle.is-completed {
 	text-decoration: line-through;
