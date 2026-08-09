@@ -23,6 +23,9 @@ import {
 	collectTags,
 	parseRecurrence,
 	nextDueDate,
+	sectionCandidates,
+	tagListHasTag,
+	SectionCandidate,
 } from "@toolbox/task-core";
 import type { AppSettings } from "./appState";
 import { touchRecentTag } from "./appState";
@@ -240,5 +243,36 @@ export class TaskService {
 		const next = moveTaskAsChild(lines, dragged, target);
 		if (next === lines) return;
 		await this.writeContent(next.join("\n"));
+	}
+
+	/**
+	 * Push every overdue task in scope to `newDue`. Re-reads and re-selects the
+	 * target set from a fresh parse (same read-before-write discipline as every
+	 * other mutation here), then rewrites every match's `due` in one pass.
+	 * `scopeTag` null means every incomplete overdue task in the file; set it
+	 * to reschedule only the tasks matching one section's tag (own + inherited).
+	 */
+	async rescheduleOverdue(newDue: string, scopeTag: string | null): Promise<void> {
+		const content = await this.readContent();
+		const { tasks, lines } = parseTasks(content);
+		const today = todayISO();
+		const targets: SectionCandidate[] = sectionCandidates(tasks)
+			.filter((c) => !c.task.completed && c.task.due && c.task.due < today)
+			.filter((c) => !scopeTag || tagListHasTag(c.tags, scopeTag));
+		if (targets.length === 0) return;
+
+		for (const { task: t } of targets) {
+			lines[t.blockStart] = serializeTask({
+				indent: t.indent,
+				description: t.description,
+				tags: t.tags,
+				due: newDue,
+				priority: t.priority,
+				recurrence: t.recurrence,
+				completed: false,
+				doneDate: null,
+			});
+		}
+		await this.writeContent(lines.join("\n"));
 	}
 }

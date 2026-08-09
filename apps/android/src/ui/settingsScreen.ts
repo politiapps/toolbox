@@ -1,4 +1,4 @@
-import { SORT_ORDER_LABELS, SortOrder } from "@toolbox/task-core";
+import { SORT_ORDER_LABELS, SortOrder, VIEW_ALL } from "@toolbox/task-core";
 import { el, field } from "./dom";
 import { iconButton } from "./icons";
 import { newId } from "../appState";
@@ -171,6 +171,8 @@ export function renderSettings(ctx: AppContext, root: HTMLElement, onBack: () =>
 		del.addEventListener("click", () => {
 			ctx.settings.sections.splice(index, 1);
 			delete ctx.settings.collapseState[section.id];
+			// A deleted section can't stay the active view.
+			if (ctx.settings.activeView === section.id) ctx.settings.activeView = VIEW_ALL;
 			persist();
 			rerender();
 		});

@@ -111,3 +111,35 @@ Add a note here whenever a non-obvious API behaviour bites you.
   `insertTaskLineBefore` — mirroring Tasks' per-line model. Only the single line
   recurs; subtasks are not copied. A recurring task with no due date can't
   advance, so it just completes normally.
+
+## Android home-screen widget (RemoteViews)
+- **RemoteViews inflates only a whitelist of view classes, and `android.view.View`
+  is not on it.** A bare `<View>` used as a 4dp spacer/spine fails with
+  `InflateException: Class not allowed to be inflated android.view.View`, which
+  kills the *whole row* — the list then shows the framework's default
+  "Loading…" placeholder forever, with the real cause only visible in logcat
+  under `W/RemoteViewsAdapter`. A stuck "Loading…" widget almost always means a
+  row-layout inflation failure, not a slow or empty data source. Use an
+  `ImageView` (or one of the allowed `*Layout`s) for coloured bars and spacers.
+- The allowed set is roughly: `FrameLayout`, `LinearLayout`, `RelativeLayout`,
+  `GridLayout`, `TextView`, `ImageView`, `Button`, `ImageButton`, `ProgressBar`,
+  `Chronometer`, `AnalogClock`, `ListView`, `GridView`, `StackView`,
+  `AdapterViewFlipper`, `ViewFlipper`, `ViewStub`. Anything else — including
+  plain `View` — is rejected at inflation time, not at compile time.
+- **A ListView row is recycled, so every conditional property needs an `else`
+  branch.** `RemoteViews` mutations are replayed onto whatever view the launcher
+  hands back, and anything you set on one row persists onto the next one that
+  reuses it. Setting the overdue badge's red fill only in the `if` left a *later*
+  task wearing it — a recycled row lying about its urgency. Every branch in
+  `TaskWidgetService.getViewAt` therefore sets the background explicitly, with
+  `setInt(id, "setBackgroundResource", 0)` to clear it.
+- Arbitrary colours and drawables are reachable without a custom view via the
+  remotable-method escape hatch: `setInt(id, "setBackgroundColor", argb)` and
+  `setInt(id, "setBackgroundResource", R.drawable.x)`. Rounded fills, tints and
+  hairline outlines all have to be `<shape>` drawables — there is no runtime
+  equivalent of `color-mix()`, so tint percentages are baked in as `#AARRGGBB`
+  (28% ≈ `47`, 20% ≈ `33`, 8% ≈ `14`).
+- `RemoteViews.setViewLayoutHeight` is **API 31+**. Below that a row cannot size
+  its own children, so any encoding that relies on varying a view's dimensions
+  per item (the priority spine's rank-as-length) is unavailable at `minSdk 23`
+  and has to fall back to colour plus a chip.

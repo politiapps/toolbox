@@ -24,11 +24,20 @@ Everything the Tasks feature does today, to be reproduced 1:1:
 **Rendering & interaction** (from `taskView.ts` — ported, Obsidian deps swapped)
 - [ ] User-configured **sections**, each matched by a tag, with per-section **sort order**
       (`due`, `priority`, `priority-due`, `file`)
-- [ ] Each top-level task shown in the first matching section only; subtasks under parent
+- [ ] Each task shown in the first matching section only; membership, lifting and tag
+      inheritance all come from `sectionCandidates()` in task-core (shared with the plugin)
+- [ ] **Dated subtasks lifted into the list** as their own rows with a `↳ Parent` breadcrumb,
+      while still rendering nested under their parent; undated subtasks stay nested only
+- [ ] Subtask trees **collapsed by default** (nothing urgent hides — dated ones are lifted)
 - [ ] Completed section, "most-recently-done first"
 - [ ] Completed **subtasks sink to the bottom** of the subtask list (the beta.11 behavior)
-- [ ] Due-date colour ramp: overdue / today / tomorrow / soon / upcoming; "Thursday 25th" format
-- [ ] Priority chips, `done/total` subtask progress counter, per-task focus time badge
+- [ ] Due date in a **fixed right-hand column** so dates align vertically; relative labels
+      ("Today", "3d late") inside a week, else short "Thu 25th"
+- [ ] Due-date colour ramp: overdue / today filled, tomorrow tinted, soon outlined, upcoming
+      bare; overdue also washes the whole row
+- [ ] **Due-date group dividers** (Overdue / Today / Upcoming / No date) in due-sorted sections
+- [ ] Priority as a left row spine (rank by colour *and* spine height) plus a squared chip
+      with a five-segment meter; `done/total` progress counter, per-task focus time badge
 - [ ] "Today" header + pressure line (overdue / due-today counts)
 - [ ] Add form + detail modal (description, tag dropdown with recent-first, due date,
       priority, recurrence builder, notes, subtasks); the **"Add & open"** button
@@ -156,6 +165,11 @@ on resume, app icon, signing, sideload APK (no Play Store fee required for perso
 - **Shared golden tests** in `task-core`: a corpus of `tasks.md` snippets asserted through
   parse → serialize → parse round-trips. Both the plugin and the app import the same package,
   so they can't diverge on format behavior.
+- **Shared list assembly:** *which rows a section shows* is `sectionCandidates()` in
+  `task-core`, not per-app logic — including lifting dated subtasks into the list and
+  inheriting ancestor tags. Anything that decides membership, ordering or grouping belongs
+  there; the two render layers should only differ in markup and CSS. See
+  `documentation/ui.md` § Subtask integration.
 - **Fixture parity:** render the same `tasks.md` in plugin and app, compare section/sort output.
 - Manual: external-edit-during-write, recurrence rollover across month boundaries, subtask
   reparent, Pomodoro accrual across background/resume.

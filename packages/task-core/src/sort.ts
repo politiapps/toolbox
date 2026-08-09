@@ -39,11 +39,16 @@ export const PRIORITY_LABEL: Record<Priority, string> = {
 	lowest: "Lowest",
 };
 
-/** Whether a task carries `tag` (leading '#' optional on the argument). */
-export function taskHasTag(task: Task, tag: string): boolean {
+/** Whether a tag list contains `tag` (leading '#' optional on the argument). */
+export function tagListHasTag(tags: string[], tag: string): boolean {
 	if (!tag) return false;
 	const normalised = tag.startsWith("#") ? tag : "#" + tag;
-	return task.tags.includes(normalised);
+	return tags.includes(normalised);
+}
+
+/** Whether a task carries `tag` (leading '#' optional on the argument). */
+export function taskHasTag(task: Task, tag: string): boolean {
+	return tagListHasTag(task.tags, tag);
 }
 
 /** Total number of descendant tasks (subtasks at any depth). */
@@ -61,6 +66,59 @@ export function orderSubtasks(children: Task[]): Task[] {
 	return [...children].sort((a, b) => Number(a.completed) - Number(b.completed));
 }
 
+/** One row a section may render, with the tags it matches sections by. */
+export interface SectionCandidate {
+	task: Task;
+	/**
+	 * The task's own tags plus every ancestor's, de-duplicated in
+	 * outermost-first order. **Nesting is what tag inheritance means**: a
+	 * subtask belongs to its parent's project whether or not anyone retyped the
+	 * tag on it. Matching on raw `task.tags` instead would drop a hand-written
+	 * untagged subtask out of every section.
+	 */
+	tags: string[];
+	/**
+	 * The immediate parent when this row is a dated subtask lifted out to stand
+	 * on its own; null for a genuine top-level task. The view shows it as a
+	 * breadcrumb.
+	 */
+	parent: Task | null;
+}
+
+/**
+ * Flatten a task tree into the rows a section list should consider: every
+ * incomplete top-level task, plus every incomplete **dated** subtask at any
+ * depth, lifted to stand on its own.
+ *
+ * A subtask with a due date is a scheduled commitment in its own right — it has
+ * to appear where its date puts it, not only folded inside a parent that may
+ * itself be undated. The lifted row is a *second view* of the same task: it
+ * still renders nested under its parent too, so a parent's subtask list stays a
+ * complete plan. Note that the parent does **not** inherit the child's date in
+ * return (see `dueBucket`) — the lifted row already carries that urgency.
+ *
+ * Both the plugin and the Android app build their sections from this, so the
+ * two can't drift on which tasks are listed or which tags they match.
+ */
+export function sectionCandidates(tasks: Task[]): SectionCandidate[] {
+	const out: SectionCandidate[] = [];
+	const merge = (inherited: string[], own: string[]): string[] => [
+		...new Set([...inherited, ...own]),
+	];
+
+	const walk = (task: Task, inherited: string[], parent: Task | null): void => {
+		const tags = merge(inherited, task.tags);
+		// Top-level tasks always list; nested ones only once they're scheduled.
+		if (!task.completed && (parent === null || task.due)) {
+			out.push({ task, tags, parent });
+		}
+		for (const child of task.children) walk(child, tags, task);
+	};
+
+	for (const root of tasks) walk(root, [], null);
+	return out;
+}
+
 /** Due-proximity buckets a due-sorted list is broken into, in display order. */
 export type DueBucket = "overdue" | "today" | "upcoming" | "undated";
 
@@ -72,7 +130,14 @@ export const DUE_BUCKET_LABELS: Record<DueBucket, string> = {
 	undated: "No date",
 };
 
-/** Which bucket a task falls in, relative to `todayISO` (YYYY-MM-DD). */
+/**
+ * Which bucket a task falls in, relative to `todayISO` (YYYY-MM-DD).
+ *
+ * Strictly the task's *own* date. A parent does not inherit a subtask's
+ * urgency, because `scheduledSubtasks()` lifts that subtask into the list as
+ * its own row — rolling the date up as well would file two rows under Overdue
+ * for one piece of late work.
+ */
 export function dueBucket(task: Task, todayISO: string): DueBucket {
 	if (!task.due) return "undated";
 	// ISO dates compare correctly as strings — no Date math, no timezone traps.

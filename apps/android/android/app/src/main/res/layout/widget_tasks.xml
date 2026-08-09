@@ -23,14 +23,9 @@
             android:textSize="15sp"
             android:textStyle="bold" />
 
-        <TextView
-            android:id="@+id/widget_updated"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:textColor="#8A8A94"
-            android:textSize="11sp"
-            android:paddingEnd="8dp"
-            android:paddingRight="8dp" />
+        <!-- No clock here: the phone shows the time in its own status bar a few
+             dp above this, and a second one only competed with the task list for
+             the widget's very limited width. -->
 
         <ImageView
             android:id="@+id/widget_add"

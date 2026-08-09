@@ -1,5 +1,6 @@
 import { Preferences } from "@capacitor/preferences";
-import type { SortOrder } from "@toolbox/task-core";
+import { VIEW_ALL } from "@toolbox/task-core";
+import type { SortOrder, ViewId } from "@toolbox/task-core";
 import type { VaultRef } from "./storage";
 
 /** One user-defined section, matched by a tag (mirrors the plugin). */
@@ -54,6 +55,13 @@ export interface AppSettings {
 	recentTags: string[];
 	/** Collapse state keyed by section id (and "__completed__"). */
 	collapseState: Record<string, boolean>;
+	/**
+	 * The list screen's currently selected view: `VIEW_ALL` (every section
+	 * stacked, the historical behaviour), `VIEW_TODAY`/`VIEW_WEEK` (cross-
+	 * cutting due-window views), or a `SectionConfig.id`. Local to the device,
+	 * like `collapseState` — not mirrored from the plugin's data.json.
+	 */
+	activeView: ViewId;
 	pomodoroConfig: PomodoroConfig;
 	pomodoro: PomodoroState | null;
 	/** Accumulated focus seconds per task, keyed by task description. */
@@ -69,6 +77,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
 	sections: [],
 	recentTags: [],
 	collapseState: {},
+	activeView: VIEW_ALL,
 	pomodoroConfig: { enabled: true, workMin: 25, shortMin: 5, longMin: 15, longEvery: 4 },
 	pomodoro: null,
 	taskFocusSeconds: {},

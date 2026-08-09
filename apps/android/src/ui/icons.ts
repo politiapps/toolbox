@@ -18,9 +18,13 @@ const ICONS: Record<string, string> = {
 	coffee:
 		'<path d="M10 2v2"/><path d="M14 2v2"/><path d="M16 8a1 1 0 0 1 1 1v8a4 4 0 0 1-4 4H7a4 4 0 0 1-4-4V9a1 1 0 0 1 1-1h14a4 4 0 1 1 0 8h-1"/><path d="M6 2v2"/>',
 	chevron: '<path d="m9 18 6-6-6-6"/>',
+	// lucide `align-left` — the plugin's "this task has notes" glyph.
+	notes: '<path d="M15 12H3"/><path d="M17 18H3"/><path d="M21 6H3"/>',
 	back: '<path d="m15 18-6-6 6-6"/>',
 	folder:
 		'<path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z"/>',
+	// A plain calendar — the reschedule action's glyph.
+	calendar: '<rect x="3" y="4" width="18" height="17" rx="2"/><path d="M3 9h18"/><path d="M8 2v4"/><path d="M16 2v4"/>',
 };
 
 /** Replace `target`'s contents with the named icon as an inline SVG. */

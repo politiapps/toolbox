@@ -16,6 +16,11 @@ import java.util.Map;
  * Reads the flat JSON snapshot the app writes (categories + tasks) and turns it
  * into rows for a widget — filtered, grouped and sorted per that widget's config.
  * No markdown is parsed here; the app already did that with @toolbox/task-core.
+ *
+ * Due dates arrive absolute (YYYY-MM-DD) and everything relative about them —
+ * days away, label, colour class, date bucket — is derived on *every* read via
+ * WidgetDates. The snapshot can be days stale, so anything resolved against
+ * "today" has to be resolved at render time or the widget quietly lies.
  */
 final class WidgetCache {
 
@@ -29,28 +34,39 @@ final class WidgetCache {
         final String due;
         final String dueClass;
         final String priority;
+        /**
+         * For headers only: the group's key — a date bucket ("overdue", "today", …)
+         * or a category id. It is what the header is *coloured* by, so a date
+         * header can reuse the due ramp and a category header its lane accent.
+         */
+        final String groupKey;
+        /** For headers only: true when grouping by date rather than by category. */
+        final boolean dateGroup;
 
-        private Item(boolean header, String text, String raw, String due, String dueClass, String priority) {
+        private Item(boolean header, String text, String raw, String due, String dueClass,
+                     String priority, String groupKey, boolean dateGroup) {
             this.header = header;
             this.text = text;
             this.raw = raw;
             this.due = due;
             this.dueClass = dueClass;
             this.priority = priority;
+            this.groupKey = groupKey;
+            this.dateGroup = dateGroup;
         }
 
-        static Item header(String name) {
-            return new Item(true, name, null, null, null, null);
+        static Item header(String name, String groupKey, boolean dateGroup) {
+            return new Item(true, name, null, null, null, null, groupKey, dateGroup);
         }
 
         static Item task(TaskData t) {
-            return new Item(false, t.text, t.raw, t.dueLabel, t.dueClass, t.priority);
+            return new Item(false, t.text, t.raw, t.dueLabel, t.dueClass, t.priority, null, false);
         }
     }
 
     private static final class TaskData {
-        String text, raw, dueLabel, dueClass, priority, cat, catName;
-        Integer dueDays; // null = undated
+        String text, raw, due, dueLabel, dueClass, priority, cat, catName;
+        Integer dueDays; // null = undated (or an unparseable date)
         int catOrder;
     }
 
@@ -68,9 +84,13 @@ final class WidgetCache {
                 TaskData d = new TaskData();
                 d.text = t.optString("text");
                 d.raw = t.optString("raw");
-                d.dueDays = t.isNull("dueDays") ? null : t.optInt("dueDays");
-                d.dueLabel = t.isNull("dueLabel") ? null : t.optString("dueLabel", null);
-                d.dueClass = t.isNull("dueClass") ? null : t.optString("dueClass", null);
+                d.due = t.isNull("due") ? null : t.optString("due", null);
+                // Resolved against today, not against the day this was cached.
+                d.dueDays = d.due == null ? null : WidgetDates.daysUntil(d.due);
+                if (d.dueDays != null) {
+                    d.dueLabel = WidgetDates.label(d.due, d.dueDays);
+                    d.dueClass = WidgetDates.cssClass(d.dueDays);
+                }
                 d.priority = t.optString("priority", "normal");
                 d.cat = t.optString("cat");
                 d.catName = t.optString("catName");
@@ -97,17 +117,6 @@ final class WidgetCache {
         } catch (Exception ignored) {
         }
         return out;
-    }
-
-    static String updatedLabel(Context ctx) {
-        String raw = WidgetPrefs.readCache(ctx);
-        if (raw == null) return "";
-        try {
-            long ts = new JSONObject(raw).optLong("updatedAt", 0);
-            return ts <= 0 ? "" : TaskWidgetProvider.timeLabel(ts);
-        } catch (Exception e) {
-            return "";
-        }
     }
 
     /* --------------------- buckets, sort, build -------------------- */
@@ -200,11 +209,12 @@ final class WidgetCache {
             }
         }
 
+        boolean dateGroup = "date".equals(cfg.groupBy);
         for (Map.Entry<String, List<TaskData>> e : groups.entrySet()) {
             List<TaskData> list = e.getValue();
             if (list.isEmpty()) continue;
             Collections.sort(list, cmp);
-            out.add(Item.header(labels.get(e.getKey())));
+            out.add(Item.header(labels.get(e.getKey()), e.getKey(), dateGroup));
             for (TaskData t : list) out.add(Item.task(t));
         }
         return out;

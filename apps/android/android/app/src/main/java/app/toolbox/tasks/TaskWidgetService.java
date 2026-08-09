@@ -3,7 +3,6 @@ package app.toolbox.tasks;
 import android.appwidget.AppWidgetManager;
 import android.content.Context;
 import android.content.Intent;
-import android.graphics.Color;
 import android.view.View;
 import android.widget.RemoteViews;
 import android.widget.RemoteViewsService;
@@ -66,6 +65,7 @@ public class TaskWidgetService extends RemoteViewsService {
                 row.setViewVisibility(R.id.row_header, View.VISIBLE);
                 row.setViewVisibility(R.id.row_task, View.GONE);
                 row.setTextViewText(R.id.row_header, item.text.toUpperCase());
+                styleHeader(row, item);
                 return row;
             }
 
@@ -73,20 +73,38 @@ public class TaskWidgetService extends RemoteViewsService {
             row.setViewVisibility(R.id.row_task, View.VISIBLE);
             row.setTextViewText(R.id.row_text, item.text);
 
+            // Overdue washes the whole row, not just its badge — it is the one
+            // state that must be findable under any grouping without reading.
+            boolean overdue = "is-overdue".equals(item.dueClass);
+            row.setInt(R.id.row_task, "setBackgroundResource",
+                overdue ? R.drawable.widget_row_overdue : 0);
+
+            // Priority owns the left edge; only the top three levels earn ink.
+            row.setInt(R.id.row_spine, "setBackgroundColor", WidgetTheme.spineColor(item.priority));
+
+            // The due date owns the fixed right-hand column. Rows are recycled, so
+            // every branch sets the background explicitly (0 clears it) — a stale
+            // red fill left on a reused row would be a lie about a task's urgency.
             if (item.due != null) {
                 row.setViewVisibility(R.id.row_due, View.VISIBLE);
                 row.setTextViewText(R.id.row_due, item.due);
-                row.setTextColor(R.id.row_due, dueColor(item.dueClass));
+                row.setTextColor(R.id.row_due, WidgetTheme.dueTextColor(item.dueClass));
+                row.setInt(R.id.row_due, "setBackgroundResource",
+                    WidgetTheme.dueBackground(item.dueClass));
             } else {
                 row.setViewVisibility(R.id.row_due, View.GONE);
+                row.setInt(R.id.row_due, "setBackgroundResource", 0);
             }
 
             if (item.priority != null && !item.priority.equals("normal")) {
                 row.setViewVisibility(R.id.row_priority, View.VISIBLE);
-                row.setTextViewText(R.id.row_priority, priorityLabel(item.priority));
-                row.setTextColor(R.id.row_priority, priorityColor(item.priority));
+                row.setTextViewText(R.id.row_priority, WidgetTheme.priorityLabel(item.priority));
+                row.setTextColor(R.id.row_priority, WidgetTheme.priorityColor(item.priority));
+                row.setInt(R.id.row_priority, "setBackgroundResource",
+                    WidgetTheme.priorityBackground(item.priority));
             } else {
                 row.setViewVisibility(R.id.row_priority, View.GONE);
+                row.setInt(R.id.row_priority, "setBackgroundResource", 0);
             }
 
             // Tapping the checkbox completes the task; tapping the text opens the app.
@@ -102,37 +120,34 @@ public class TaskWidgetService extends RemoteViewsService {
             return row;
         }
 
-        private int dueColor(String dueClass) {
-            if (dueClass == null) return Color.parseColor("#8A8A94");
-            switch (dueClass) {
-                case "is-overdue":
-                    return Color.parseColor("#FF6B6B");
-                case "is-today":
-                    return Color.parseColor("#FF9F43");
-                case "is-tomorrow":
-                    return Color.parseColor("#FFD166");
+        /**
+         * A group header is coloured by what it groups: a date header reuses the
+         * due ramp (so the header and the rows beneath it read as one signal —
+         * overdue a filled tab, today an outlined one, the rest plain captions),
+         * and a category header takes its lane's accent, the same hue that
+         * section carries in the app and the sidebar.
+         */
+        private void styleHeader(RemoteViews row, WidgetCache.Item item) {
+            if (!item.dateGroup) {
+                row.setTextColor(R.id.row_header, WidgetTheme.sectionAccent(item.groupKey));
+                row.setInt(R.id.row_header, "setBackgroundResource", 0);
+                return;
+            }
+            String bucket = item.groupKey == null ? "" : item.groupKey;
+            switch (bucket) {
+                case "overdue":
+                    row.setTextColor(R.id.row_header, WidgetTheme.ON_FILL);
+                    row.setInt(R.id.row_header, "setBackgroundResource", R.drawable.widget_group_overdue);
+                    break;
+                case "today":
+                    row.setTextColor(R.id.row_header, WidgetTheme.TODAY);
+                    row.setInt(R.id.row_header, "setBackgroundResource", R.drawable.widget_group_today);
+                    break;
                 default:
-                    return Color.parseColor("#8A8A94");
-            }
-        }
-
-        private String priorityLabel(String p) {
-            switch (p) {
-                case "highest": return "Highest";
-                case "high": return "High";
-                case "medium": return "Medium";
-                case "low": return "Low";
-                case "lowest": return "Lowest";
-                default: return "";
-            }
-        }
-
-        private int priorityColor(String p) {
-            switch (p) {
-                case "highest": return Color.parseColor("#E23B3B");
-                case "high": return Color.parseColor("#F2711C");
-                case "medium": return Color.parseColor("#E0A419");
-                default: return Color.parseColor("#8A8A94");
+                    // Further out is reference, not signal.
+                    row.setTextColor(R.id.row_header, WidgetTheme.FAINT);
+                    row.setInt(R.id.row_header, "setBackgroundResource", 0);
+                    break;
             }
         }
 

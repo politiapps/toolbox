@@ -126,6 +126,165 @@
 	height: 17px;
 }
 
+/* Mass reschedule: a quiet icon button riding on the "N overdue" stat, so it
+   only ever appears with a backlog behind it. */
+.tasks-reschedule-wrap {
+	position: relative;
+	display: inline-flex;
+}
+
+.tasks-reschedule-btn {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	width: 20px;
+	height: 20px;
+	padding: 0;
+	margin-left: 2px;
+	background: transparent;
+	border: none;
+	box-shadow: none;
+	border-radius: 5px;
+	color: var(--text-faint);
+	cursor: pointer;
+	transition: color 0.12s ease, background-color 0.12s ease;
+}
+
+.tasks-reschedule-btn:hover {
+	color: var(--color-red, #ef4444);
+	background-color: color-mix(in srgb, var(--color-red, #ef4444) 14%, transparent);
+}
+
+.tasks-reschedule-btn svg {
+	width: 13px;
+	height: 13px;
+}
+
+.tasks-reschedule-popup {
+	position: absolute;
+	top: calc(100% + 4px);
+	left: 0;
+	z-index: 10;
+	display: flex;
+	flex-direction: column;
+	gap: 8px;
+	width: 210px;
+	background-color: var(--background-primary);
+	border: 1px solid var(--background-modifier-border);
+	border-radius: 8px;
+	padding: 10px;
+	box-shadow: 0 4px 14px rgba(0, 0, 0, 0.3);
+	text-transform: none;
+	letter-spacing: normal;
+	font-family: var(--font-interface);
+}
+
+.tasks-reschedule-title {
+	font-size: 0.8rem;
+	font-weight: 600;
+	color: var(--text-normal);
+}
+
+.tasks-reschedule-quick {
+	display: flex;
+	gap: 6px;
+}
+
+.tasks-reschedule-quick-btn {
+	flex: 1;
+	padding: 4px 0;
+	font-size: 0.78rem;
+	cursor: pointer;
+}
+
+.tasks-reschedule-quick-btn.is-selected {
+	color: var(--text-on-accent);
+	background-color: var(--interactive-accent);
+	border-color: var(--interactive-accent);
+}
+
+.tasks-reschedule-date-row {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	font-size: 0.76rem;
+	color: var(--text-muted);
+}
+
+.tasks-reschedule-date {
+	flex: 1;
+	min-width: 0;
+	font-size: 0.76rem;
+}
+
+.tasks-reschedule-actions {
+	display: flex;
+	justify-content: flex-end;
+	gap: 6px;
+}
+
+.tasks-reschedule-actions button {
+	padding: 2px 10px;
+	font-size: 0.76rem;
+	cursor: pointer;
+}
+
+/* ── View switcher ─────────────────────────────────────────────────────── */
+/* A horizontally-scrolling chip strip standing in for showing every section
+   at once: "All", the two cross-cutting due-window views, then one chip per
+   configured section (its own accent dot carried over from its card). Same
+   ink-decay language as the rest of the panel — solid means active. */
+.tasks-view-switcher {
+	display: flex;
+	gap: 6px;
+	overflow-x: auto;
+	padding: 2px 2px 10px;
+	margin: -2px -2px 4px;
+	scrollbar-width: none;
+}
+
+.tasks-view-switcher::-webkit-scrollbar {
+	display: none;
+}
+
+.tasks-view-chip {
+	flex-shrink: 0;
+	display: inline-flex;
+	align-items: center;
+	gap: 5px;
+	padding: 4px 11px;
+	font-family: var(--font-monospace);
+	font-size: 0.66rem;
+	font-weight: 600;
+	letter-spacing: 0.08em;
+	text-transform: uppercase;
+	color: var(--text-muted);
+	background-color: transparent;
+	border: 1px solid var(--background-modifier-border);
+	border-radius: 999px;
+	box-shadow: none;
+	cursor: pointer;
+	transition: color 0.12s ease, background-color 0.12s ease, border-color 0.12s ease;
+}
+
+.tasks-view-chip:hover {
+	color: var(--text-normal);
+	border-color: var(--text-faint);
+}
+
+.tasks-view-chip.is-active {
+	color: var(--text-on-accent);
+	background-color: var(--interactive-accent);
+	border-color: var(--interactive-accent);
+}
+
+.tasks-view-chip-dot {
+	width: 6px;
+	height: 6px;
+	border-radius: 50%;
+	background-color: var(--section-accent);
+}
+
 /* ── Today's calendar ─────────────────────────────────────────────────── */
 .tasks-calendar {
 	background-color: var(--background-primary);
@@ -647,11 +806,23 @@
 	flex-direction: column;
 }
 
-/* Subtasks indent off their parent with a hairline guide. */
+/* Subtasks indent off their parent with a hairline guide. The guide is faint
+   and the indent generous on purpose: a subtask row carries its own 4px
+   priority spine, and at a tighter indent the two vertical lines sat ~9px apart
+   and read as a doubled rail — the spine stopped registering as a signal and
+   became part of the indent furniture. */
 .tasks-children {
-	margin-left: 10px;
-	padding-left: 8px;
-	border-left: 1px solid var(--background-modifier-border);
+	margin-left: 11px;
+	padding-left: 13px;
+	border-left: 1px solid color-mix(in srgb, var(--background-modifier-border) 60%, transparent);
+}
+
+/* Subtasks are subordinate in type, not in treatment: the description steps
+   down a size so the hierarchy is legible while scanning, but priority chips,
+   due badges and the row spine stay identical to a top-level task's. A subtask
+   with a deadline is a real deadline and must not be drawn as a lesser one. */
+.tasks-children .tasks-desc {
+	font-size: 0.83rem;
 }
 
 .tasks-twisty {
@@ -741,6 +912,7 @@
 	background-color: var(--background-modifier-hover);
 }
 
+
 .tasks-desc.is-clickable {
 	cursor: pointer;
 }
@@ -770,6 +942,43 @@
 	background-color: var(--background-modifier-border);
 	border-radius: 4px;
 	padding: 0 5px;
+}
+
+/* ── Lifted subtask rows ──────────────────────────────────────────────── */
+/* A dated subtask stands in the list as its own row. It needs to say where it
+   came from without being demoted for it: the deadline is real, so the row
+   keeps a top-level task's full treatment (spine, chips, badge, overdue wash)
+   and only adds this breadcrumb. It leads the meta line because placing the
+   task ("outline — of what?") comes before any other context on the row. */
+.tasks-parent-crumb {
+	display: inline-flex;
+	align-items: baseline;
+	gap: 3px;
+	min-width: 0;
+	max-width: 100%;
+	font-size: 0.68rem;
+	color: var(--text-muted);
+	cursor: pointer;
+	border-radius: 3px;
+	padding: 0 3px 0 2px;
+}
+
+.tasks-parent-crumb:hover {
+	color: var(--text-normal);
+	background-color: var(--background-modifier-hover);
+}
+
+.tasks-parent-crumb-mark {
+	color: var(--text-faint);
+	flex-shrink: 0;
+}
+
+/* The parent's title can be long and is context, not the row's subject — it
+   truncates rather than wrapping the meta line onto a second row. */
+.tasks-parent-crumb-name {
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
 }
 
 .tasks-row:hover {

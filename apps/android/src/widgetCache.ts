@@ -31,11 +31,15 @@ export interface WidgetTask {
 	text: string;
 	/** The exact markdown line, so the native widget can locate it to tick off. */
 	raw: string;
-	/** Whole days until due (negative = overdue), or null when undated. */
-	dueDays: number | null;
-	dueLabel: string | null;
-	/** Proximity class: is-overdue / is-today / … (drives the widget's due colour). */
-	dueClass: string | null;
+	/**
+	 * Due date as YYYY-MM-DD, or null when undated. Deliberately absolute: the
+	 * widget renders from this snapshot long after it was written — often days,
+	 * since nothing regenerates it unless the app is opened — so "how far off"
+	 * has to be worked out against the day it is *read*. Caching a precomputed
+	 * "Today" is how the widget ends up calling a two-day-old task due today.
+	 * `WidgetDates.java` derives the label, colour class and bucket at render.
+	 */
+	due: string | null;
 	priority: string;
 	/** Owning category id + name + order, so the widget can group/filter by category. */
 	cat: string;

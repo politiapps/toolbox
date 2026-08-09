@@ -8,8 +8,8 @@
 
 import { App, PluginSettingTab, Setting } from "obsidian";
 import type TasksPlugin from "./main";
-import { SORT_ORDER_LABELS } from "@toolbox/task-core";
-import type { SortOrder } from "@toolbox/task-core";
+import { SORT_ORDER_LABELS, VIEW_ALL } from "@toolbox/task-core";
+import type { SortOrder, ViewId } from "@toolbox/task-core";
 
 // The sort-order vocabulary is owned by task-core (shared with the app). Re-export
 // so existing plugin imports of `SortOrder` / `SORT_ORDER_LABELS` from settings
@@ -131,6 +131,13 @@ export interface TasksPluginSettings {
 	/** Persisted collapse state keyed by section id (and the completed key). */
 	collapseState: Record<string, boolean>;
 	/**
+	 * The panel's currently selected view: `VIEW_ALL` (every section stacked,
+	 * the historical behaviour), `VIEW_TODAY`/`VIEW_WEEK` (cross-cutting due-
+	 * window views), or a `SectionConfig.id` (just that one section). Ephemeral
+	 * UI state, like `collapseState` — not exposed in the settings tab.
+	 */
+	activeView: ViewId;
+	/**
 	 * Deprecated: legacy single/newline-separated .ics URL field. Migrated into
 	 * `calendars` on load and no longer read directly. Kept so old data parses.
 	 */
@@ -171,6 +178,7 @@ export const DEFAULT_SETTINGS: TasksPluginSettings = {
 	sections: [],
 	recentTags: [],
 	collapseState: {},
+	activeView: VIEW_ALL,
 	icsUrl: "",
 	calendars: [],
 	editableColumnsEnabled: true,
@@ -534,6 +542,10 @@ export class TasksSettingTab extends PluginSettingTab {
 					.onClick(async () => {
 						this.plugin.settings.sections.splice(index, 1);
 						delete this.plugin.settings.collapseState[section.id];
+						// A deleted section can't stay the active view.
+						if (this.plugin.settings.activeView === section.id) {
+							this.plugin.settings.activeView = VIEW_ALL;
+						}
 						await this.plugin.saveSettings();
 						this.plugin.refreshViews();
 						this.display();

@@ -1,4 +1,13 @@
-/* Toolbox Tasks — mobile styles. Dark by default, light via prefers-color-scheme. */
+/* Toolbox Tasks — mobile styles. Dark by default, light via prefers-color-scheme.
+
+   The design language is the Obsidian panel's (documentation/ui.md), carried
+   over so the two surfaces read as one product: priority owns each row's left
+   edge, the due date owns a fixed right-hand column, both ramps decay in ink as
+   well as hue, and overdue is the only thing allowed to shout. Personality
+   comes from type *treatment* — uppercase letter-spaced mono eyebrows for
+   structure, tabular mono for counts and dates (an "ops console" register), the
+   system face for content. Where the plugin reads an Obsidian theme variable,
+   the equivalent literal is used here. */
 
 :root {
 	--bg: #1a1a1c;
@@ -11,11 +20,15 @@
 	--accent: #6c8cff;
 	--accent-contrast: #ffffff;
 	--danger: #ff5c5c;
-	--overdue: #ff6b6b;
-	--today: #ff9f43;
-	--soon: #ffd166;
+	/* The proximity/urgency ramp. These are the plugin's own fallback hexes
+	   (--color-red / --color-orange / --color-yellow), so a badge is the same
+	   colour on the phone as in the sidebar. */
+	--overdue: #ef4444;
+	--today: #f97316;
+	--soon: #eab308;
 	--upcoming: #8a8a94;
 	--done-green: #4caf82;
+	--font-mono: ui-monospace, "Roboto Mono", "SF Mono", "DejaVu Sans Mono", Menlo, monospace;
 	--radius: 14px;
 	--radius-sm: 9px;
 	--tap: 44px;
@@ -31,8 +44,11 @@
 		--text-muted: #62626c;
 		--text-faint: #9a9aa4;
 		--accent: #3b62ff;
-		--overdue: #e23b3b;
-		--today: #d9791f;
+		/* Same three hues, one step darker: the ramp's later steps colour *text*
+		   rather than fill, and the dark-mode values don't hold contrast on white. */
+		--overdue: #dc2626;
+		--today: #ea580c;
+		--soon: #a16207;
 		--upcoming: #8a8a94;
 	}
 }
@@ -75,11 +91,14 @@ body {
 	justify-content: space-between;
 }
 .app-today-eyebrow {
-	font-size: 0.72rem;
-	letter-spacing: 0.14em;
+	font-family: var(--font-mono);
+	font-size: 0.68rem;
+	letter-spacing: 0.18em;
 	text-transform: uppercase;
 	color: var(--text-faint);
 }
+/* Larger than the sidebar's 1.05rem on purpose — this is the whole screen's
+   heading here, not a strip above a list of panes. */
 .app-today-date {
 	font-size: 1.7rem;
 	font-weight: 700;
@@ -105,30 +124,115 @@ body {
 	width: 22px;
 	height: 22px;
 }
+/* The hero: today's load as a typeset console readout, not a stat card. Both
+   segments reuse the due-date proximity colours; overdue shouts. */
 .app-pressure {
 	margin-top: 10px;
 	display: flex;
-	gap: 14px;
-	font-size: 0.86rem;
-	font-variant-numeric: tabular-nums;
+	align-items: baseline;
+	flex-wrap: wrap;
+	gap: 8px;
+	font-family: var(--font-mono);
+	font-size: 0.7rem;
+	letter-spacing: 0.12em;
+	text-transform: uppercase;
 }
-.pressure-clear {
+.stat {
+	display: inline-flex;
+	align-items: baseline;
+	gap: 4px;
+	color: var(--text-muted);
+}
+.stat-num {
+	font-size: 0.88rem;
+	font-weight: 700;
+	font-variant-numeric: tabular-nums;
+	letter-spacing: 0;
+}
+.stat-label {
+	opacity: 0.82;
+}
+.stat.is-overdue {
+	color: var(--overdue);
+}
+.stat.is-today {
+	color: var(--today);
+}
+.stat-sep {
 	color: var(--text-faint);
 }
-.pressure-overdue {
-	color: var(--overdue);
-	font-weight: 600;
+.pressure-clear {
+	color: var(--text-muted);
 }
-.pressure-today {
-	color: var(--today);
+
+/* Mass reschedule: a quiet icon button riding on the "N overdue" stat, so it
+   only ever appears with a backlog behind it. */
+.reschedule-btn {
+	width: 28px;
+	height: 28px;
+	margin-left: -2px;
+}
+.reschedule-btn svg {
+	width: 16px;
+	height: 16px;
+}
+
+/* ------------------------- view switcher ------------------------------ */
+
+/* A horizontally-scrolling chip strip standing in for showing every category
+   at once: "All", the two cross-cutting due-window views, then one chip per
+   configured section (its own accent dot carried over from its card). Same
+   ink-decay language as the rest of the app — solid means active. */
+.view-switcher {
+	display: flex;
+	gap: 7px;
+	overflow-x: auto;
+	padding: 10px 2px 2px;
+	margin: 0 -2px;
+	scrollbar-width: none;
+}
+.view-switcher::-webkit-scrollbar {
+	display: none;
+}
+.view-chip {
+	flex-shrink: 0;
+	display: inline-flex;
+	align-items: center;
+	gap: 6px;
+	padding: 7px 13px;
+	min-height: 32px;
+	font-family: var(--font-mono);
+	font-size: 0.72rem;
 	font-weight: 600;
+	letter-spacing: 0.06em;
+	text-transform: uppercase;
+	color: var(--text-muted);
+	background: var(--bg-elev);
+	border: 1px solid var(--border);
+	border-radius: 999px;
+	cursor: pointer;
+}
+.view-chip.is-active {
+	color: var(--accent-contrast);
+	background: var(--accent);
+	border-color: var(--accent);
+}
+.view-chip-dot {
+	width: 7px;
+	height: 7px;
+	border-radius: 50%;
+	background: var(--section-accent);
 }
 
 /* ------------------------------ sections ------------------------------ */
 
+/* Each lane's identity is its left spine, tinted by --section-accent (set
+   inline per section from a hash of its id). This is the one place colour is
+   spent on identity rather than urgency. */
 .section {
 	background: var(--bg-elev);
 	border: 1px solid var(--border);
+	border-left: 3px solid var(--section-accent, var(--border));
 	border-radius: var(--radius);
 	margin-top: 12px;
 	overflow: hidden;
@@ -148,7 +252,9 @@ body {
 .section-count {
 	min-width: 24px;
 	text-align: center;
-	font-size: 0.8rem;
+	font-family: var(--font-mono);
+	font-size: 0.78rem;
+	font-variant-numeric: tabular-nums;
 	color: var(--text-muted);
 	background: var(--bg-elev-2);
 	border-radius: 20px;
@@ -179,6 +285,14 @@ body {
 .section-body {
 	padding: 4px 6px 8px;
 }
+/* Completed reads as a quieter, dashed card with no lane colour — its left edge
+   matches the others rather than carrying a spine. */
+.section-completed {
+	background: transparent;
+	border-style: dashed;
+	border-left-width: 1px;
+	border-left-color: var(--border);
+}
 .section-completed .task-title {
 	color: var(--text-muted);
 }
@@ -188,9 +302,17 @@ body {
 	padding: 8px 12px;
 }
 
+/* A twisty is a chevron, not a button — strip the UA button chrome or it
+   renders as a raised grey chip next to the checkbox and reads as the row's
+   primary control. */
 .twisty {
 	display: inline-grid;
 	place-items: center;
+	padding: 0;
+	border: none;
+	background: transparent;
+	appearance: none;
+	-webkit-appearance: none;
 	transition: transform 0.15s ease;
 	color: var(--text-muted);
 }
@@ -216,27 +338,111 @@ body {
 .task-row {
 	display: flex;
 	align-items: flex-start;
-	gap: 10px;
-	padding: 9px 8px;
+	gap: 8px;
+	padding: 9px 10px 9px 13px;
 	border-radius: var(--radius-sm);
+	position: relative;
+}
+/* The row's body is the tap target for opening the task. */
+.task-main {
+	cursor: pointer;
 }
 .task-row.is-completed .task-title {
 	text-decoration: line-through;
 	color: var(--text-faint);
 }
+
+/* Priority spine: the row's own left edge carries its urgency, so a stack of
+   rows is triageable peripherally — before a single label is read. Rank also
+   reads as spine *height*, which survives without colour. Only the top three
+   levels earn ink; low and lowest leave it blank so "loud" always means "sooner
+   or more important". Every row reserves the gutter whether it paints or not. */
+.task-row::before {
+	content: "";
+	position: absolute;
+	left: 2px;
+	top: 4px;
+	bottom: 4px;
+	width: 4px;
+	border-radius: 2px;
+	background: var(--priority-colour, transparent);
+}
+.task-row.is-priority-highest {
+	--priority-colour: var(--overdue);
+}
+.task-row.is-priority-high {
+	--priority-colour: var(--today);
+}
+.task-row.is-priority-high::before {
+	top: 7px;
+	bottom: 7px;
+}
+.task-row.is-priority-medium {
+	--priority-colour: var(--soon);
+}
+.task-row.is-priority-medium::before {
+	top: 11px;
+	bottom: 11px;
+	opacity: 0.8;
+}
+.task-row.is-completed::before {
+	background: transparent;
+}
+
+/* Overdue washes the whole row, not just its badge — it is the one state that
+   must be findable in any section, under any sort order, without reading. Only
+   overdue gets this: give it to "today" as well and neither reads as an alarm. */
+.task-row.is-due-overdue {
+	background: color-mix(in srgb, var(--overdue) 8%, transparent);
+}
+.task-row.is-due-overdue .task-title {
+	font-weight: 600;
+}
+/* Round, hand-built checkbox — reads as a task app, not a form. The platform
+   default renders as a hard white square that outweighs everything else on the
+   row, including the overdue badge it sits next to. */
 .task-checkbox {
-	width: 21px;
-	height: 21px;
-	margin-top: 1px;
-	accent-color: var(--accent);
+	appearance: none;
+	-webkit-appearance: none;
+	width: 22px;
+	height: 22px;
+	margin: 1px 0 0;
 	flex: none;
+	position: relative;
+	border: 2px solid var(--text-faint);
+	border-radius: 50%;
+	background: transparent;
+	transition: background-color 0.12s ease, border-color 0.12s ease;
+}
+.task-checkbox:checked {
+	background: var(--accent);
+	border-color: var(--accent);
+}
+.task-checkbox:checked::after {
+	content: "";
+	position: absolute;
+	left: 6px;
+	top: 2px;
+	width: 5px;
+	height: 10px;
+	border: solid var(--accent-contrast);
+	border-width: 0 2px 2px 0;
+	transform: rotate(45deg);
 }
 .task-main {
 	flex: 1;
 	min-width: 0;
 }
+/* Title line = description (flexible) + due column (fixed, right). */
+.task-title-line {
+	display: flex;
+	align-items: baseline;
+	gap: 9px;
+}
 .task-title {
 	word-break: break-word;
+	flex: 1;
+	min-width: 0;
 }
 .task-meta {
 	display: flex;
@@ -246,30 +452,84 @@ body {
 	align-items: center;
 	font-size: 0.76rem;
 }
+.task-meta:empty {
+	display: none;
+}
+/* Tags are context, not signal: a quiet neutral chip. Squared off (4px) so it
+   can't be mistaken for the rounded due badge at a glance. */
 .task-tag {
-	color: var(--accent);
-	background: color-mix(in srgb, var(--accent) 14%, transparent);
+	color: var(--text-muted);
+	background: var(--border);
 	padding: 1px 7px;
-	border-radius: 20px;
+	border-radius: 4px;
+}
+/* A task with notes says so on the row, so you don't have to open each one. */
+.task-note-indicator {
+	display: inline-flex;
+	vertical-align: text-bottom;
+	margin-left: 5px;
+	color: var(--text-faint);
+}
+.task-note-indicator svg {
+	width: 13px;
+	height: 13px;
+}
+/* The fixed due column. Right-aligned with a reserved width so every row's date
+   starts and ends at the same x — that vertical alignment is what makes dates
+   comparable at a glance, more than any colour on them. Priority owns the row's
+   left edge, due owns the right, so the two can't be confused by position. */
+/* Dates are monospace — the operational register — and the due badge is
+   *rounded*, the counterpart silhouette to the squared priority chip. */
+.task-due-slot {
+	flex: none;
+	min-width: 62px;
+	text-align: center;
+	white-space: nowrap;
+	font-family: var(--font-mono);
+	font-size: 0.74rem;
+	font-variant-numeric: tabular-nums;
 }
 .task-due {
 	padding: 1px 7px;
-	border-radius: 20px;
-	background: var(--bg-elev-2);
-	color: var(--upcoming);
+	border-radius: 999px;
+	line-height: 1.5;
+	color: var(--text-muted);
 }
+/* Proximity ramp: sooner is warmer and, just as importantly, louder. Ink decays
+   with distance (solid → tinted → outlined → bare) so nearness reads without
+   resolving the hue. The first two steps are both filled because "act now" vs
+   "act later" is the split that matters; the fade is spent on the later steps. */
 .task-due.is-overdue {
-	color: var(--overdue);
-	background: color-mix(in srgb, var(--overdue) 15%, transparent);
-	font-weight: 600;
+	color: #fff;
+	background: var(--overdue);
+	font-weight: 700;
 }
 .task-due.is-today {
-	color: var(--today);
-	background: color-mix(in srgb, var(--today) 15%, transparent);
-	font-weight: 600;
+	color: #fff;
+	background: var(--today);
+	font-weight: 700;
 }
 .task-due.is-tomorrow {
 	color: var(--soon);
+	background: color-mix(in srgb, var(--soon) 20%, transparent);
+	box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--soon) 40%, transparent);
+	font-weight: 600;
+}
+.task-due.is-soon {
+	color: var(--text-muted);
+	box-shadow: inset 0 0 0 1px var(--border);
+	font-weight: 600;
+}
+/* Far enough out to be reference, not signal — no badge at all. */
+.task-due.is-upcoming {
+	color: var(--upcoming);
+	padding: 1px 0;
+}
+.task-row.is-completed .task-due {
+	opacity: 0.55;
+}
+.task-done-date {
+	color: var(--text-faint);
 }
 .task-recur,
 .task-focus {
@@ -278,6 +538,10 @@ body {
 	gap: 3px;
 	color: var(--text-muted);
 }
+.task-focus {
+	font-family: var(--font-mono);
+	font-variant-numeric: tabular-nums;
+}
 .task-recur-icon svg,
 .task-focus-icon svg {
 	width: 13px;
@@ -285,43 +549,193 @@ body {
 	display: block;
 }
 .task-progress {
+	font-family: var(--font-mono);
+	font-size: 0.72rem;
 	color: var(--text-muted);
+	background: var(--border);
+	border-radius: 4px;
+	padding: 0 5px;
 	font-variant-numeric: tabular-nums;
 }
+/* Priority: a squared chip (the counterpart silhouette to the rounded due
+   badge) carrying a five-segment level meter. The meter encodes rank as
+   *shape* — count the lit bars — so the level survives without colour vision,
+   and ink decays by rank so adjacent levels never differ by hue alone. */
 .task-priority {
-	padding: 1px 7px;
-	border-radius: 20px;
-	font-weight: 600;
+	display: inline-flex;
+	align-items: center;
+	gap: 5px;
+	padding: 1px 6px 1px 5px;
+	border-radius: 3px;
+	font-family: var(--font-mono);
+	line-height: 1.5;
+	font-size: 0.7rem;
+	font-weight: 700;
+	letter-spacing: 0.06em;
+	text-transform: uppercase;
+	color: var(--priority-colour, var(--text-muted));
+	background: color-mix(in srgb, var(--priority-colour, transparent) 14%, transparent);
+	box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--priority-colour, transparent) 32%, transparent);
+}
+.task-priority-meter {
+	display: inline-flex;
+	align-items: flex-end;
+	gap: 1.5px;
+	height: 11px;
+}
+.task-priority-seg {
+	width: 3px;
+	border-radius: 1px;
+	background: color-mix(in srgb, var(--priority-colour, var(--text-muted)) 20%, transparent);
+}
+.task-priority-seg.is-on {
+	background: var(--priority-colour, var(--text-muted));
+}
+.task-priority-seg:nth-child(1) {
+	height: 3px;
+}
+.task-priority-seg:nth-child(2) {
+	height: 5px;
+}
+.task-priority-seg:nth-child(3) {
+	height: 7px;
+}
+.task-priority-seg:nth-child(4) {
+	height: 9px;
+}
+.task-priority-seg:nth-child(5) {
+	height: 11px;
 }
 .prio-highest {
-	color: #fff;
-	background: #e23b3b;
+	--priority-colour: var(--overdue);
+	background: color-mix(in srgb, var(--overdue) 28%, transparent);
+	box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--overdue) 70%, transparent);
 }
 .prio-high {
-	color: #fff;
-	background: #f2711c;
+	--priority-colour: var(--today);
+	background: color-mix(in srgb, var(--today) 18%, transparent);
+	box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--today) 45%, transparent);
 }
 .prio-medium {
-	color: #1c1c20;
-	background: #ffd166;
+	--priority-colour: var(--soon);
+	background: color-mix(in srgb, var(--soon) 10%, transparent);
+	box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--soon) 25%, transparent);
 }
-.prio-low {
-	color: var(--text);
-	background: var(--bg-elev-2);
-}
+/* Low and lowest recede: outline only, no fill, muted label. */
+.prio-low,
 .prio-lowest {
+	--priority-colour: var(--text-muted);
 	color: var(--text-muted);
-	background: var(--bg-elev-2);
+	background: transparent;
+	box-shadow: inset 0 0 0 1px var(--border);
+	font-weight: 600;
 }
-.task-actions {
-	display: flex;
-	gap: 2px;
+.task-row.is-completed .task-priority {
+	opacity: 0.5;
+}
+
+/* Lifted subtask rows: a dated subtask stands in the list as its own row. It
+   says where it came from without being demoted for it — the deadline is real,
+   so the row keeps a top-level task's full treatment and only adds this
+   breadcrumb, leading the meta line because placing the task comes first. */
+.task-parent-crumb {
+	display: inline-flex;
+	align-items: baseline;
+	gap: 3px;
+	min-width: 0;
+	max-width: 100%;
+	color: var(--text-muted);
+	padding: 0 3px 0 2px;
+	border-radius: 3px;
+}
+.task-parent-crumb-mark {
+	color: var(--text-faint);
 	flex: none;
 }
+/* The parent's title is context, not the row's subject — truncate rather than
+   wrap the meta line onto a second row. */
+.task-parent-crumb-name {
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+/* Subtasks indent off their parent with a faint guide. The indent is generous
+   and the rail light on purpose: a subtask row carries its own 4px priority
+   spine, and at a tighter indent the two vertical lines read as a doubled rail
+   and the spine stops registering as a signal. */
 .task-children {
-	margin-left: 20px;
-	border-left: 2px solid var(--border);
-	padding-left: 4px;
+	margin-left: 16px;
+	border-left: 1px solid color-mix(in srgb, var(--border) 60%, transparent);
+	padding-left: 12px;
+}
+/* Subordinate in type, not in treatment: the title steps down a size so the
+   hierarchy is legible, but chips, badges and the spine stay identical to a
+   top-level task's — a subtask with a deadline is a real deadline. */
+.task-children .task-title {
+	font-size: 0.94rem;
+}
+
+/* ── Due-date group dividers ──────────────────────────────────────────── */
+/* A due-sorted lane is really three jobs stacked — late, today, later — so the
+   boundaries are drawn rather than implied. The ramp matches the due badges so
+   a divider and the rows beneath it read as the same signal. */
+.due-group {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	margin: 12px 0 4px;
+	font-family: var(--font-mono);
+	font-size: 0.68rem;
+	font-weight: 700;
+	letter-spacing: 0.09em;
+	text-transform: uppercase;
+	color: var(--group-colour, var(--text-faint));
+}
+.section-body > .due-group:first-child {
+	margin-top: 2px;
+}
+.due-group::after {
+	content: "";
+	flex: 1;
+	height: 1px;
+	background: color-mix(in srgb, var(--group-colour, var(--text-faint)) 35%, transparent);
+}
+.due-group-count {
+	font-variant-numeric: tabular-nums;
+	font-weight: 600;
+	opacity: 0.75;
+}
+/* Overdue is the loudest divider — a filled tab, not a caption. */
+.due-group.is-overdue {
+	--group-colour: var(--overdue);
+}
+.due-group.is-overdue .due-group-label {
+	color: #fff;
+	background: var(--group-colour);
+	border-radius: 3px;
+	padding: 1px 5px;
+}
+.due-group.is-overdue .due-group-count {
+	color: var(--group-colour);
+	background: color-mix(in srgb, var(--group-colour) 22%, transparent);
+	border-radius: 3px;
+	padding: 1px 5px;
+}
+/* Today: present but not alarming — outlined in the same orange as its badges. */
+.due-group.is-today {
+	--group-colour: var(--today);
+}
+.due-group.is-today .due-group-label {
+	background: color-mix(in srgb, var(--group-colour) 16%, transparent);
+	box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--group-colour) 45%, transparent);
+	border-radius: 3px;
+	padding: 1px 5px;
+}
+/* Everything further out is reference, not signal. */
+.due-group.is-upcoming,
+.due-group.is-undated {
+	--group-colour: var(--text-faint);
+	font-weight: 600;
 }
 .twisty-spacer {
 	width: 18px;
@@ -457,6 +871,23 @@ body {
 }
 body.modal-open {
 	overflow: hidden;
+}
+
+/* Reschedule sheet: Today / Tomorrow quick picks, either standing in for the
+   date field below or overridden by it. */
+.reschedule-quick {
+	display: flex;
+	gap: 10px;
+	margin-bottom: 4px;
+}
+.reschedule-quick-btn {
+	flex: 1;
+	text-align: center;
+}
+.reschedule-quick-btn.is-selected {
+	background: var(--accent);
+	color: var(--accent-contrast);
+	border-color: transparent;
 }
 
 /* ------------------------------- forms -------------------------------- */
@@ -598,10 +1029,12 @@ select.form-input {
 }
 .pomodoro-cycle {
 	margin-left: auto;
+	font-family: var(--font-mono);
 	font-variant-numeric: tabular-nums;
 	color: var(--text-faint);
 }
 .pomodoro-clock {
+	font-family: var(--font-mono);
 	font-size: 3rem;
 	font-weight: 700;
 	font-variant-numeric: tabular-nums;

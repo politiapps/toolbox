@@ -7,6 +7,8 @@ import {
 	countDescendants,
 	groupTasksByDue,
 	dueBucket,
+	sectionCandidates,
+	tagListHasTag,
 } from "../src/sort";
 
 function tasksFrom(lines: string[]) {
@@ -126,5 +128,68 @@ describe("taskHasTag / countDescendants", () => {
 			"    - [ ] B",
 		])[0];
 		expect(countDescendants(t)).toBe(3);
+	});
+});
+
+describe("sectionCandidates — what a section lists", () => {
+	const descs = (tasks: ReturnType<typeof tasksFrom>) =>
+		sectionCandidates(tasks).map((c) => c.task.description);
+
+	it("lists incomplete top-level tasks", () => {
+		expect(descs(tasksFrom(["- [ ] A", "- [ ] B"]))).toEqual(["A", "B"]);
+	});
+
+	it("omits completed tasks", () => {
+		expect(descs(tasksFrom(["- [ ] A", "- [x] B ✅ 2026-02-09"]))).toEqual(["A"]);
+	});
+
+	it("lifts a dated subtask and names its parent", () => {
+		const c = sectionCandidates(tasksFrom(["- [ ] Root", "    - [ ] Child 📅 2026-02-08"]));
+		expect(c.map((x) => x.task.description)).toEqual(["Root", "Child"]);
+		expect(c[0].parent).toBeNull();
+		expect(c[1].parent?.description).toBe("Root");
+	});
+
+	it("leaves undated subtasks nested — they are not listed", () => {
+		expect(descs(tasksFrom(["- [ ] Root", "    - [ ] Child"]))).toEqual(["Root"]);
+	});
+
+	it("skips completed subtasks even when dated", () => {
+		const t = tasksFrom(["- [ ] Root", "    - [x] Child 📅 2026-02-08 ✅ 2026-02-09"]);
+		expect(descs(t)).toEqual(["Root"]);
+	});
+
+	it("lifts from any depth, reporting the immediate parent", () => {
+		const c = sectionCandidates(
+			tasksFrom(["- [ ] Root", "    - [ ] Mid", "        - [ ] Deep 📅 2026-02-08"])
+		);
+		expect(c.map((x) => x.task.description)).toEqual(["Root", "Deep"]);
+		expect(c[1].parent?.description).toBe("Mid");
+	});
+
+	it("inherits ancestor tags so an untagged subtask still matches a section", () => {
+		const c = sectionCandidates(tasksFrom(["- [ ] Root #work", "    - [ ] Child 📅 2026-02-08"]));
+		expect(tagListHasTag(c[1].tags, "work")).toBe(true);
+	});
+
+	it("inherits through every level of nesting", () => {
+		const c = sectionCandidates(
+			tasksFrom(["- [ ] Root #work", "    - [ ] Mid", "        - [ ] Deep 📅 2026-02-08"])
+		);
+		expect(tagListHasTag(c[1].tags, "work")).toBe(true);
+	});
+
+	it("keeps a subtask's own tags alongside inherited ones, without duplicates", () => {
+		const c = sectionCandidates(
+			tasksFrom(["- [ ] Root #work", "    - [ ] Child #work #urgent 📅 2026-02-08"])
+		);
+		expect(c[1].tags).toEqual(["#work", "#urgent"]);
+	});
+
+	it("does not roll a subtask's date up onto its parent", () => {
+		// The lifted row carries the urgency; rolling it up as well would file
+		// two rows under Overdue for one piece of late work.
+		const root = tasksFrom(["- [ ] Root", "    - [ ] Child 📅 2026-02-08"])[0];
+		expect(dueBucket(root, "2026-02-10")).toBe("undated");
 	});
 });

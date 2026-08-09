@@ -4715,11 +4715,11 @@ var PRIORITY_LABEL = {
   low: "Low",
   lowest: "Lowest"
 };
-function taskHasTag(task, tag) {
+function tagListHasTag(tags, tag) {
   if (!tag)
     return false;
   const normalised = tag.startsWith("#") ? tag : "#" + tag;
-  return task.tags.includes(normalised);
+  return tags.includes(normalised);
 }
 function countDescendants(task) {
   let n = task.children.length;
@@ -4729,6 +4729,23 @@ function countDescendants(task) {
 }
 function orderSubtasks(children) {
   return [...children].sort((a, b) => Number(a.completed) - Number(b.completed));
+}
+function sectionCandidates(tasks) {
+  const out = [];
+  const merge = (inherited, own) => [
+    .../* @__PURE__ */ new Set([...inherited, ...own])
+  ];
+  const walk = (task, inherited, parent) => {
+    const tags = merge(inherited, task.tags);
+    if (!task.completed && (parent === null || task.due)) {
+      out.push({ task, tags, parent });
+    }
+    for (const child of task.children)
+      walk(child, tags, task);
+  };
+  for (const root of tasks)
+    walk(root, [], null);
+  return out;
 }
 var DUE_BUCKET_LABELS = {
   overdue: "Overdue",
@@ -4781,6 +4798,120 @@ function sortTasks(tasks, order) {
     default:
       return copy.sort((a, b) => a.lineIndex - b.lineIndex);
   }
+}
+
+// packages/task-core/src/presentation.ts
+function todayISO() {
+  const d = new Date();
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
+function parseLocalDate(iso) {
+  const [y, m, d] = iso.split("-").map((n) => parseInt(n, 10));
+  return new Date(y, m - 1, d);
+}
+function ordinalSuffix2(n) {
+  const v = n % 100;
+  if (v >= 11 && v <= 13)
+    return "th";
+  switch (n % 10) {
+    case 1:
+      return "st";
+    case 2:
+      return "nd";
+    case 3:
+      return "rd";
+    default:
+      return "th";
+  }
+}
+function formatDueDisplay(iso) {
+  const d = parseLocalDate(iso);
+  const weekday = d.toLocaleDateString(void 0, { weekday: "long" });
+  return `${weekday} ${d.getDate()}${ordinalSuffix2(d.getDate())}`;
+}
+function formatDueShort(iso) {
+  const d = parseLocalDate(iso);
+  const weekday = d.toLocaleDateString(void 0, { weekday: "short" });
+  return `${weekday} ${d.getDate()}${ordinalSuffix2(d.getDate())}`;
+}
+function daysUntil(iso, today = todayISO()) {
+  const from = parseLocalDate(today).getTime();
+  const due = parseLocalDate(iso).getTime();
+  return Math.round((due - from) / 864e5);
+}
+function dueLabel(iso, today = todayISO()) {
+  const d = daysUntil(iso, today);
+  if (d === 0)
+    return "Today";
+  if (d === 1)
+    return "Tomorrow";
+  if (d === -1)
+    return "Yesterday";
+  if (d < -1 && d >= -7)
+    return `${-d}d late`;
+  return formatDueShort(iso);
+}
+function dueState(iso, today = todayISO()) {
+  const d = daysUntil(iso, today);
+  if (d < 0)
+    return "overdue";
+  if (d === 0)
+    return "today";
+  if (d === 1)
+    return "tomorrow";
+  if (d === 2)
+    return "soon";
+  return "upcoming";
+}
+function dueClass(iso, today = todayISO()) {
+  return `is-${dueState(iso, today)}`;
+}
+var PRIORITY_SEGMENTS = 5;
+function priorityFilled(p) {
+  const rank = PRIORITY_RANK[p];
+  return PRIORITY_SEGMENTS - (rank > PRIORITY_RANK.normal ? rank - 1 : rank);
+}
+var SECTION_ACCENTS = [
+  "#6366f1",
+  // indigo
+  "#0ea5e9",
+  // sky
+  "#14b8a6",
+  // teal
+  "#f59e0b",
+  // amber
+  "#ec4899",
+  // pink
+  "#8b5cf6"
+  // violet
+];
+function sectionAccent(id) {
+  return SECTION_ACCENTS[hash32(id) % SECTION_ACCENTS.length];
+}
+function hash32(s) {
+  let h = 0;
+  for (let i = 0; i < s.length; i++)
+    h = h * 31 + s.charCodeAt(i) | 0;
+  return Math.abs(h);
+}
+function formatFocus(secs) {
+  if (secs < 60)
+    return `${secs}s`;
+  const mins = Math.floor(secs / 60);
+  if (mins < 60)
+    return `${mins}m`;
+  const h = Math.floor(mins / 60);
+  const rm = mins % 60;
+  return rm ? `${h}h ${rm}m` : `${h}h`;
+}
+function formatClock(ms) {
+  const total = Math.ceil(Math.max(0, ms) / 1e3);
+  const m = Math.floor(total / 60);
+  const s = total % 60;
+  return `${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
 }
 
 // src/settings.ts
@@ -5365,95 +5496,6 @@ function renderTodayCalendar(container, events, error2) {
 
 // src/taskView.ts
 var VIEW_TYPE_TASKS = "tasks-panel-view";
-function todayISO() {
-  const d = new Date();
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, "0");
-  const day = String(d.getDate()).padStart(2, "0");
-  return `${y}-${m}-${day}`;
-}
-function parseLocalDate(iso) {
-  const [y, m, d] = iso.split("-").map((n) => parseInt(n, 10));
-  return new Date(y, m - 1, d);
-}
-function ordinalSuffix2(n) {
-  const v = n % 100;
-  if (v >= 11 && v <= 13)
-    return "th";
-  switch (n % 10) {
-    case 1:
-      return "st";
-    case 2:
-      return "nd";
-    case 3:
-      return "rd";
-    default:
-      return "th";
-  }
-}
-function formatDueDisplay(iso) {
-  const d = parseLocalDate(iso);
-  const weekday = d.toLocaleDateString(void 0, { weekday: "long" });
-  return `${weekday} ${d.getDate()}${ordinalSuffix2(d.getDate())}`;
-}
-function formatDueShort(iso) {
-  const d = parseLocalDate(iso);
-  const weekday = d.toLocaleDateString(void 0, { weekday: "short" });
-  return `${weekday} ${d.getDate()}${ordinalSuffix2(d.getDate())}`;
-}
-function daysUntil(iso) {
-  const today = parseLocalDate(todayISO()).getTime();
-  const due = parseLocalDate(iso).getTime();
-  return Math.round((due - today) / 864e5);
-}
-function dueLabel(iso) {
-  const d = daysUntil(iso);
-  if (d === 0)
-    return "Today";
-  if (d === 1)
-    return "Tomorrow";
-  if (d === -1)
-    return "Yesterday";
-  if (d < -1 && d >= -7)
-    return `${-d}d late`;
-  return formatDueShort(iso);
-}
-function dueState(iso) {
-  const d = daysUntil(iso);
-  if (d < 0)
-    return "overdue";
-  if (d === 0)
-    return "today";
-  if (d === 1)
-    return "tomorrow";
-  if (d === 2)
-    return "soon";
-  return "upcoming";
-}
-function dueClass(iso) {
-  return `is-${dueState(iso)}`;
-}
-var PRIORITY_SEGMENTS = 5;
-function priorityFilled(p) {
-  const rank = PRIORITY_RANK[p];
-  return PRIORITY_SEGMENTS - (rank > PRIORITY_RANK.normal ? rank - 1 : rank);
-}
-function formatClock(ms) {
-  const total = Math.ceil(Math.max(0, ms) / 1e3);
-  const m = Math.floor(total / 60);
-  const s = total % 60;
-  return `${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
-}
-function formatFocus(secs) {
-  if (secs < 60)
-    return `${secs}s`;
-  const mins = Math.floor(secs / 60);
-  if (mins < 60)
-    return `${mins}m`;
-  const h = Math.floor(mins / 60);
-  const rm = mins % 60;
-  return rm ? `${h}h ${rm}m` : `${h}h`;
-}
 function uniqueIncompleteNames(flat) {
   const seen = /* @__PURE__ */ new Set();
   const names = [];
@@ -5560,11 +5602,13 @@ var TasksView = class extends import_obsidian3.ItemView {
       this.renderMissingFileNotice(root);
       return;
     }
-    const incomplete = tasks.filter((t) => !t.completed);
+    const candidates = sectionCandidates(tasks);
     const shown = /* @__PURE__ */ new Set();
     for (const section of this.plugin.settings.sections) {
-      const matching = incomplete.filter((t) => !shown.has(t) && taskHasTag(t, section.tag));
-      matching.forEach((t) => shown.add(t));
+      const matching = candidates.filter(
+        (c) => !shown.has(c.task) && tagListHasTag(c.tags, section.tag)
+      );
+      matching.forEach((c) => shown.add(c.task));
       this.renderSection(root, section, matching);
     }
     const completed = tasks.filter((t) => t.completed);
@@ -5903,8 +5947,13 @@ var TasksView = class extends import_obsidian3.ItemView {
     this.plugin.settings.collapseState[key] = collapsed;
     await this.plugin.saveSettings();
   }
-  renderSection(root, section, tasks) {
+  renderSection(root, section, entries) {
     const collapsed = this.isCollapsed(section.id, section.collapsedByDefault);
+    const promotedBy = /* @__PURE__ */ new Map();
+    for (const c of entries)
+      if (c.parent)
+        promotedBy.set(c.task, c.parent);
+    const tasks = entries.map((c) => c.task);
     const sorted = sortTasks(tasks, section.sort);
     const sectionEl = root.createDiv({ cls: "tasks-section" });
     sectionEl.style.setProperty("--section-accent", sectionAccent(section.id));
@@ -5925,10 +5974,10 @@ var TasksView = class extends import_obsidian3.ItemView {
       if (sorted.length === 0) {
         body.createDiv({ cls: "tasks-empty", text: "Nothing due here" });
       } else if (section.sort === "due") {
-        this.renderDueGroups(body, sorted);
+        this.renderDueGroups(body, sorted, promotedBy);
       } else {
         for (const task of sorted)
-          this.renderTask(body, task);
+          this.renderTask(body, task, [], promotedBy.get(task));
       }
     }
   }
@@ -5938,7 +5987,7 @@ var TasksView = class extends import_obsidian3.ItemView {
    * between them rather than running together as one column of rows. A single
    * bucket needs no label — the whole list is that bucket.
    */
-  renderDueGroups(body, sorted) {
+  renderDueGroups(body, sorted, promotedBy) {
     const groups = groupTasksByDue(sorted, todayISO());
     for (const group of groups) {
       if (groups.length > 1) {
@@ -5955,7 +6004,7 @@ var TasksView = class extends import_obsidian3.ItemView {
         });
       }
       for (const task of group.tasks)
-        this.renderTask(body, task);
+        this.renderTask(body, task, [], promotedBy.get(task));
     }
   }
   renderCompletedSection(root, tasks) {
@@ -5990,11 +6039,21 @@ var TasksView = class extends import_obsidian3.ItemView {
     header.addEventListener("click", () => onToggle(!collapsed));
     return header;
   }
-  renderTask(parent, task, parentTags = []) {
+  /**
+   * Render one task row.
+   *
+   * `parentTags` suppresses tag pills inherited from the row's parent when the
+   * row is nested. `promotedFrom` is set only on the *lifted* copy of a dated
+   * subtask standing in the main list — it names the parent for the breadcrumb
+   * and marks the row so it can't be mistaken for a top-level commitment.
+   */
+  renderTask(parent, task, parentTags = [], promotedFrom) {
     const item = parent.createDiv({ cls: "tasks-item" });
     const row = item.createDiv({ cls: "tasks-row" });
     if (task.completed)
       row.addClass("is-completed");
+    if (promotedFrom)
+      row.addClass("is-promoted");
     if (task.priority !== "normal")
       row.addClass(`is-priority-${task.priority}`);
     if (!task.completed && task.due)
@@ -6002,7 +6061,7 @@ var TasksView = class extends import_obsidian3.ItemView {
     this.attachDragHandlers(row, task);
     const hasChildren = task.children.length > 0;
     const collapseKey = "task:" + hashKey(task.raw);
-    const collapsed = hasChildren && this.isCollapsed(collapseKey, false);
+    const collapsed = hasChildren && this.isCollapsed(collapseKey, true);
     const twisty = row.createSpan({ cls: "tasks-twisty" });
     if (hasChildren) {
       (0, import_obsidian3.setIcon)(twisty, collapsed ? "chevron-right" : "chevron-down");
@@ -6047,6 +6106,18 @@ var TasksView = class extends import_obsidian3.ItemView {
       dueEl.addClass(dueClass(task.due));
     }
     const meta = main.createDiv({ cls: "tasks-meta" });
+    if (promotedFrom) {
+      const crumb = meta.createSpan({
+        cls: "tasks-parent-crumb",
+        attr: { "aria-label": `Subtask of ${promotedFrom.description}` }
+      });
+      crumb.createSpan({ cls: "tasks-parent-crumb-mark", text: "\u21B3" });
+      crumb.createSpan({ cls: "tasks-parent-crumb-name", text: promotedFrom.description });
+      crumb.addEventListener("click", (e) => {
+        e.stopPropagation();
+        this.openDetail(promotedFrom);
+      });
+    }
     if (task.priority !== "normal") {
       const chip = meta.createSpan({
         cls: `tasks-priority tasks-priority-${task.priority}`,
@@ -6073,7 +6144,11 @@ var TasksView = class extends import_obsidian3.ItemView {
     }
     if (hasChildren) {
       const done = task.children.filter((c) => c.completed).length;
-      meta.createSpan({ cls: "tasks-progress", text: `${done}/${task.children.length}` });
+      meta.createSpan({
+        cls: "tasks-progress",
+        text: `${done}/${task.children.length}`,
+        attr: { "aria-label": `${done} of ${task.children.length} subtasks done` }
+      });
     }
     const focusSecs = this.taskFocusTotal(task.description);
     if (focusSecs > 0) {
@@ -6388,29 +6463,6 @@ var TasksView = class extends import_obsidian3.ItemView {
     return findTaskByRaw(flat, raw);
   }
 };
-var SECTION_ACCENTS = [
-  "#6366f1",
-  // indigo
-  "#0ea5e9",
-  // sky
-  "#14b8a6",
-  // teal
-  "#f59e0b",
-  // amber
-  "#ec4899",
-  // pink
-  "#8b5cf6"
-  // violet
-];
-function sectionAccent(id) {
-  return SECTION_ACCENTS[hash32(id) % SECTION_ACCENTS.length];
-}
-function hash32(s) {
-  let h = 0;
-  for (let i = 0; i < s.length; i++)
-    h = h * 31 + s.charCodeAt(i) | 0;
-  return Math.abs(h);
-}
 function hashKey(s) {
   return hash32(s).toString(36);
 }

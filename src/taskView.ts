@@ -45,9 +45,30 @@ import {
 	sortTasks,
 	groupTasksByDue,
 	DUE_BUCKET_LABELS,
-	taskHasTag,
+	tagListHasTag,
 	countDescendants,
 	orderSubtasks,
+	sectionCandidates,
+	SectionCandidate,
+	todayISO,
+	formatDueDisplay,
+	formatDueShort,
+	daysUntil,
+	dueLabel,
+	dueState,
+	dueClass,
+	PRIORITY_SEGMENTS,
+	priorityFilled,
+	formatClock,
+	formatFocus,
+	sectionAccent,
+	hash32,
+	dueWithin,
+	addDaysISO,
+	ViewId,
+	VIEW_ALL,
+	VIEW_TODAY,
+	VIEW_WEEK,
 } from "@toolbox/task-core";
 import { renderTodayCalendar } from "./calendarView";
 import {
@@ -60,120 +81,11 @@ import {
 export const VIEW_TYPE_TASKS = "tasks-panel-view";
 
 /* ------------------------------------------------------------------ */
-/* Date helpers (UI presentation only — no task syntax is parsed here) */
+/* View-local helpers                                                  */
 /* ------------------------------------------------------------------ */
-
-function todayISO(): string {
-	const d = new Date();
-	const y = d.getFullYear();
-	const m = String(d.getMonth() + 1).padStart(2, "0");
-	const day = String(d.getDate()).padStart(2, "0");
-	return `${y}-${m}-${day}`;
-}
-
-/** Parse YYYY-MM-DD as a local date (avoids UTC off-by-one). */
-function parseLocalDate(iso: string): Date {
-	const [y, m, d] = iso.split("-").map((n) => parseInt(n, 10));
-	return new Date(y, m - 1, d);
-}
-
-function ordinalSuffix(n: number): string {
-	const v = n % 100;
-	if (v >= 11 && v <= 13) return "th";
-	switch (n % 10) {
-		case 1:
-			return "st";
-		case 2:
-			return "nd";
-		case 3:
-			return "rd";
-		default:
-			return "th";
-	}
-}
-
-/** Format a due date as "Thursday 25th" — weekday + day + ordinal, no year. */
-function formatDueDisplay(iso: string): string {
-	const d = parseLocalDate(iso);
-	const weekday = d.toLocaleDateString(undefined, { weekday: "long" });
-	return `${weekday} ${d.getDate()}${ordinalSuffix(d.getDate())}`;
-}
-
-/**
- * Abbreviated form ("Thu 25th") for the row's due column. The column is a fixed
- * width so dates line up vertically down the list; a full weekday name would
- * either wrap or eat the description, and the short form still disambiguates.
- */
-function formatDueShort(iso: string): string {
-	const d = parseLocalDate(iso);
-	const weekday = d.toLocaleDateString(undefined, { weekday: "short" });
-	return `${weekday} ${d.getDate()}${ordinalSuffix(d.getDate())}`;
-}
-
-/** Whole days from today to the given date (negative = past). */
-function daysUntil(iso: string): number {
-	const today = parseLocalDate(todayISO()).getTime();
-	const due = parseLocalDate(iso).getTime();
-	return Math.round((due - today) / 86_400_000);
-}
-
-/**
- * Human label for a due date. The near term reads relatively ("Today",
- * "3d late") because *how far off* is the triage fact; only once a date is
- * more than a week out does the calendar date itself carry more meaning.
- */
-function dueLabel(iso: string): string {
-	const d = daysUntil(iso);
-	if (d === 0) return "Today";
-	if (d === 1) return "Tomorrow";
-	if (d === -1) return "Yesterday";
-	if (d < -1 && d >= -7) return `${-d}d late`;
-	return formatDueShort(iso);
-}
-
-/** Proximity bucket driving the due-date colour ramp (sooner = warmer). */
-function dueState(iso: string): "overdue" | "today" | "tomorrow" | "soon" | "upcoming" {
-	const d = daysUntil(iso);
-	if (d < 0) return "overdue";
-	if (d === 0) return "today";
-	if (d === 1) return "tomorrow";
-	if (d === 2) return "soon";
-	return "upcoming";
-}
-
-/** State class for the due badge itself. */
-function dueClass(iso: string): string {
-	return `is-${dueState(iso)}`;
-}
-
-/** Segments in the priority meter — the chip encodes level as shape, not only colour. */
-const PRIORITY_SEGMENTS = 5;
-
-/** How many meter segments are lit for a priority (5 = highest … 1 = lowest). */
-function priorityFilled(p: Priority): number {
-	// Ranks reserve a slot for `normal`, which never renders a chip — close that
-	// gap so the five visible levels map onto the five segments exactly.
-	const rank = PRIORITY_RANK[p];
-	return PRIORITY_SEGMENTS - (rank > PRIORITY_RANK.normal ? rank - 1 : rank);
-}
-
-/** Format remaining milliseconds as MM:SS (rounding up so it starts at NN:00). */
-function formatClock(ms: number): string {
-	const total = Math.ceil(Math.max(0, ms) / 1000);
-	const m = Math.floor(total / 60);
-	const s = total % 60;
-	return `${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
-}
-
-/** Format focus seconds compactly: "45s", "25m", "1h 20m". */
-function formatFocus(secs: number): string {
-	if (secs < 60) return `${secs}s`;
-	const mins = Math.floor(secs / 60);
-	if (mins < 60) return `${mins}m`;
-	const h = Math.floor(mins / 60);
-	const rm = mins % 60;
-	return rm ? `${h}h ${rm}m` : `${h}h`;
-}
+/* Date formatting, the due-date ramp, the priority meter and the section
+   accent hue live in `@toolbox/task-core` (presentation.ts) — the Android app
+   presents the same facts, and a second copy here is how the two drift. */
 
 /** Unique descriptions of incomplete tasks, first-seen order (Pomodoro picker). */
 function uniqueIncompleteNames(flat: Task[]): string[] {
@@ -291,11 +203,21 @@ export class TasksView extends ItemView {
 		this.allTags = this.mergedTagList(flat);
 		this.pomodoroTaskNames = uniqueIncompleteNames(flat);
 
+		// Incomplete top-level tasks plus every dated subtask lifted to stand on
+		// its own, each carrying its inherited tags. Shared with the Android app
+		// so the two can't drift on what's listed or how tags match. Computed once
+		// up front so the header's scoped overdue count, the view switcher and
+		// whichever view is active all agree on the same candidate set.
+		const candidates = sectionCandidates(tasks);
+		const activeView = this.resolveActiveView();
+		const scopeTag = this.scopeTagFor(activeView);
+
 		const root = this.contentEl;
 		root.empty();
 		root.addClass("tasks-panel-content");
 
-		this.renderPanelHeader(root, countPressure(flat));
+		this.renderPanelHeader(root, countPressure(flat), candidates, scopeTag);
+		this.renderViewSwitcher(root, activeView);
 		this.renderPomodoro(root);
 		this.renderCalendar(root);
 
@@ -306,19 +228,105 @@ export class TasksView extends ItemView {
 			return;
 		}
 
-		const incomplete = tasks.filter((t) => !t.completed);
-
-		// A top-level task renders in the first section it matches only — never
-		// twice. Subtasks are never section rows; they render under their parent.
-		const shown = new Set<Task>();
-		for (const section of this.plugin.settings.sections) {
-			const matching = incomplete.filter((t) => !shown.has(t) && taskHasTag(t, section.tag));
-			matching.forEach((t) => shown.add(t));
-			this.renderSection(root, section, matching);
+		if (activeView === VIEW_TODAY || activeView === VIEW_WEEK) {
+			this.renderCrossCuttingView(root, candidates, activeView === VIEW_TODAY ? 0 : 6);
+		} else {
+			// A task renders in the first section it matches only — never twice
+			// within the section list. A lifted subtask's nested copy is rendered by
+			// its parent's row, not from here, so the two views don't collide.
+			const shown = new Set<Task>();
+			const sectionsToShow =
+				activeView === VIEW_ALL
+					? this.plugin.settings.sections
+					: this.plugin.settings.sections.filter((s) => s.id === activeView);
+			for (const section of sectionsToShow) {
+				const matching = candidates.filter(
+					(c) => !shown.has(c.task) && tagListHasTag(c.tags, section.tag)
+				);
+				matching.forEach((c) => shown.add(c.task));
+				this.renderSection(root, section, matching);
+			}
 		}
 
 		const completed = tasks.filter((t) => t.completed);
 		this.renderCompletedSection(root, completed);
+	}
+
+	/** The active view, falling back to "All" if it names a since-deleted section. */
+	private resolveActiveView(): ViewId {
+		const v = this.plugin.settings.activeView;
+		if (v === VIEW_ALL || v === VIEW_TODAY || v === VIEW_WEEK) return v;
+		return this.plugin.settings.sections.some((s) => s.id === v) ? v : VIEW_ALL;
+	}
+
+	/** The section tag a view is scoped to, or null when it spans every task. */
+	private scopeTagFor(view: ViewId): string | null {
+		if (view === VIEW_ALL || view === VIEW_TODAY || view === VIEW_WEEK) return null;
+		return this.plugin.settings.sections.find((s) => s.id === view)?.tag ?? null;
+	}
+
+	private async setActiveView(view: ViewId): Promise<void> {
+		if (this.plugin.settings.activeView === view) return;
+		this.plugin.settings.activeView = view;
+		await this.plugin.saveSettings();
+		await this.refresh();
+	}
+
+	/**
+	 * The chip strip below the header: "All", the two cross-cutting due-window
+	 * views, then one chip per configured section (carrying that section's own
+	 * accent dot, so identity follows through from its card). Replaces showing
+	 * every section stacked at once with a choice of what to look at.
+	 */
+	private renderViewSwitcher(root: HTMLElement, activeView: ViewId): void {
+		const strip = root.createDiv({ cls: "tasks-view-switcher" });
+
+		const chip = (id: ViewId, label: string, accent?: string): void => {
+			const btn = strip.createEl("button", { cls: "tasks-view-chip" });
+			if (id === activeView) btn.addClass("is-active");
+			if (accent) {
+				const dot = btn.createSpan({ cls: "tasks-view-chip-dot" });
+				dot.style.setProperty("--section-accent", accent);
+			}
+			btn.createSpan({ text: label });
+			btn.addEventListener("click", () => this.setActiveView(id));
+		};
+
+		chip(VIEW_ALL, "All");
+		chip(VIEW_TODAY, "Today");
+		chip(VIEW_WEEK, "This week");
+		for (const section of this.plugin.settings.sections) {
+			chip(section.id, section.name, sectionAccent(section.id));
+		}
+	}
+
+	/**
+	 * Every incomplete task in the file (any section, any depth, via the same
+	 * `sectionCandidates` a normal section uses) whose due date falls inside the
+	 * window, run through the same due-group dividers a due-sorted section uses.
+	 * `days` is 0 for "Today" (overdue + due today only) and 6 for "This week"
+	 * (a rolling 7-day span, not a calendar week) — undated tasks never appear
+	 * in either.
+	 */
+	private renderCrossCuttingView(root: HTMLElement, candidates: SectionCandidate[], days: number): void {
+		const filtered = candidates.filter((c) => c.task.due && dueWithin(c.task.due, days));
+		const promotedBy = new Map<Task, Task>();
+		for (const c of filtered) if (c.parent) promotedBy.set(c.task, c.parent);
+		const sorted = sortTasks(
+			filtered.map((c) => c.task),
+			"due"
+		);
+
+		const wrap = root.createDiv({ cls: "tasks-section tasks-section-crosscut" });
+		if (sorted.length === 0) {
+			wrap.createDiv({
+				cls: "tasks-empty",
+				text: days === 0 ? "Nothing due today" : "Nothing due this week",
+			});
+			return;
+		}
+		const body = wrap.createDiv({ cls: "tasks-section-body" });
+		this.renderDueGroups(body, sorted, promotedBy);
 	}
 
 	/** Tags from the file, ordered by recently-used first, then file order. */
@@ -331,7 +339,12 @@ export class TasksView extends ItemView {
 		return [...recent, ...rest];
 	}
 
-	private renderPanelHeader(root: HTMLElement, pressure: Pressure): void {
+	private renderPanelHeader(
+		root: HTMLElement,
+		pressure: Pressure,
+		candidates: SectionCandidate[],
+		scopeTag: string | null
+	): void {
 		// The panel is framed around "today" — the lens for due-date triage.
 		const header = root.createDiv({ cls: "tasks-header" });
 
@@ -365,6 +378,112 @@ export class TasksView extends ItemView {
 				s.createSpan({ cls: "tasks-stat-label", text: "due today" });
 			}
 		}
+
+		// Mass reschedule, scoped to whatever view is active — offered only when
+		// there's a backlog to act on, so "Reschedule" never appears with nothing
+		// behind it. Matches `pressure.overdue` exactly when unscoped (both walk
+		// every incomplete dated task), so the header's count and the button's
+		// reach can never disagree (see DEV_RULES.md §11).
+		const overdue = overdueCandidates(candidates, scopeTag, todayISO());
+		if (overdue.length > 0) {
+			const wrap = status.createSpan({ cls: "tasks-reschedule-wrap" });
+			const btn = wrap.createEl("button", { cls: "tasks-reschedule-btn" });
+			setIcon(btn, "calendar-clock");
+			btn.setAttr("aria-label", "Reschedule overdue tasks");
+			btn.addEventListener("click", (e) => {
+				e.stopPropagation();
+				this.openReschedulePopup(
+					wrap,
+					overdue.map((c) => c.task),
+					scopeTag
+				);
+			});
+		}
+	}
+
+	/**
+	 * Inline popover (styled like `.tasks-confirm-popup`) offering Today /
+	 * Tomorrow / a custom date, then applying it via `rescheduleOverdue`.
+	 */
+	private openReschedulePopup(anchor: HTMLElement, targets: Task[], scopeTag: string | null): void {
+		anchor.querySelector(".tasks-reschedule-popup")?.remove();
+
+		const today = todayISO();
+		let selected = today;
+
+		const popup = anchor.createDiv({ cls: "tasks-reschedule-popup" });
+		popup.createDiv({
+			cls: "tasks-reschedule-title",
+			text: `Reschedule ${targets.length} overdue task${targets.length === 1 ? "" : "s"} to…`,
+		});
+
+		const quick = popup.createDiv({ cls: "tasks-reschedule-quick" });
+		const todayBtn = quick.createEl("button", {
+			cls: "tasks-reschedule-quick-btn is-selected",
+			text: "Today",
+		});
+		const tomorrowBtn = quick.createEl("button", { cls: "tasks-reschedule-quick-btn", text: "Tomorrow" });
+
+		const dateRow = popup.createDiv({ cls: "tasks-reschedule-date-row" });
+		dateRow.createSpan({ cls: "tasks-reschedule-date-label", text: "or pick a date" });
+		const dateInput = dateRow.createEl("input", { cls: "tasks-reschedule-date", type: "date" });
+		dateInput.value = today;
+
+		const selectQuick = (btn: HTMLButtonElement, iso: string): void => {
+			selected = iso;
+			dateInput.value = iso;
+			todayBtn.removeClass("is-selected");
+			tomorrowBtn.removeClass("is-selected");
+			btn.addClass("is-selected");
+		};
+		todayBtn.addEventListener("click", () => selectQuick(todayBtn, today));
+		tomorrowBtn.addEventListener("click", () => selectQuick(tomorrowBtn, addDaysISO(today, 1)));
+		dateInput.addEventListener("change", () => {
+			if (!dateInput.value) return;
+			selected = dateInput.value;
+			todayBtn.removeClass("is-selected");
+			tomorrowBtn.removeClass("is-selected");
+		});
+
+		const actions = popup.createDiv({ cls: "tasks-reschedule-actions" });
+		const confirmBtn = actions.createEl("button", { cls: "mod-cta", text: "Confirm" });
+		const cancelBtn = actions.createEl("button", { text: "Cancel" });
+		const cleanup = (): void => popup.remove();
+		confirmBtn.addEventListener("click", async () => {
+			cleanup();
+			await this.rescheduleOverdue(selected, scopeTag);
+		});
+		cancelBtn.addEventListener("click", cleanup);
+	}
+
+	/**
+	 * Push every overdue task in scope to `newDue`. Re-reads and re-selects the
+	 * target set from a fresh parse — like `applyStructural` — so a task that
+	 * changed or was completed since the view last rendered isn't touched, then
+	 * rewrites every match's `due` in a single read-modify-write pass.
+	 */
+	private async rescheduleOverdue(newDue: string, scopeTag: string | null): Promise<void> {
+		const file = this.getTasksFile();
+		if (!file) return;
+		const content = await this.app.vault.read(file);
+		const { tasks, lines } = parseTasks(content);
+		const targets = overdueCandidates(sectionCandidates(tasks), scopeTag, todayISO());
+		if (targets.length === 0) return;
+
+		for (const { task: t } of targets) {
+			lines[t.blockStart] = serializeTask({
+				indent: t.indent,
+				description: t.description,
+				tags: t.tags,
+				due: newDue,
+				priority: t.priority,
+				recurrence: t.recurrence,
+				completed: false,
+				doneDate: null,
+			});
+		}
+		await this.app.vault.modify(file, lines.join("\n"));
+		await this.refresh();
 	}
 
 	/** "Today" calendar block above the tasks (only when an .ics URL is set). */
@@ -682,8 +801,13 @@ export class TasksView extends ItemView {
 		await this.plugin.saveSettings();
 	}
 
-	private renderSection(root: HTMLElement, section: SectionConfig, tasks: Task[]): void {
+	private renderSection(root: HTMLElement, section: SectionConfig, entries: SectionCandidate[]): void {
 		const collapsed = this.isCollapsed(section.id, section.collapsedByDefault);
+		// Ordering and grouping stay pure `Task[]` operations (task-core owns
+		// them); the lifted-subtask parentage rides alongside in a lookup.
+		const promotedBy = new Map<Task, Task>();
+		for (const c of entries) if (c.parent) promotedBy.set(c.task, c.parent);
+		const tasks = entries.map((c) => c.task);
 		const sorted = sortTasks(tasks, section.sort);
 
 		const sectionEl = root.createDiv({ cls: "tasks-section" });
@@ -711,9 +835,9 @@ export class TasksView extends ItemView {
 			if (sorted.length === 0) {
 				body.createDiv({ cls: "tasks-empty", text: "Nothing due here" });
 			} else if (section.sort === "due") {
-				this.renderDueGroups(body, sorted);
+				this.renderDueGroups(body, sorted, promotedBy);
 			} else {
-				for (const task of sorted) this.renderTask(body, task);
+				for (const task of sorted) this.renderTask(body, task, [], promotedBy.get(task));
 			}
 		}
 	}
@@ -724,7 +848,7 @@ export class TasksView extends ItemView {
 	 * between them rather than running together as one column of rows. A single
 	 * bucket needs no label — the whole list is that bucket.
 	 */
-	private renderDueGroups(body: HTMLElement, sorted: Task[]): void {
+	private renderDueGroups(body: HTMLElement, sorted: Task[], promotedBy: Map<Task, Task>): void {
 		const groups = groupTasksByDue(sorted, todayISO());
 		for (const group of groups) {
 			if (groups.length > 1) {
@@ -740,7 +864,7 @@ export class TasksView extends ItemView {
 					text: String(group.tasks.length),
 				});
 			}
-			for (const task of group.tasks) this.renderTask(body, task);
+			for (const task of group.tasks) this.renderTask(body, task, [], promotedBy.get(task));
 		}
 	}
 
@@ -785,10 +909,24 @@ export class TasksView extends ItemView {
 		return header;
 	}
 
-	private renderTask(parent: HTMLElement, task: Task, parentTags: string[] = []): void {
+	/**
+	 * Render one task row.
+	 *
+	 * `parentTags` suppresses tag pills inherited from the row's parent when the
+	 * row is nested. `promotedFrom` is set only on the *lifted* copy of a dated
+	 * subtask standing in the main list — it names the parent for the breadcrumb
+	 * and marks the row so it can't be mistaken for a top-level commitment.
+	 */
+	private renderTask(
+		parent: HTMLElement,
+		task: Task,
+		parentTags: string[] = [],
+		promotedFrom?: Task
+	): void {
 		const item = parent.createDiv({ cls: "tasks-item" });
 		const row = item.createDiv({ cls: "tasks-row" });
 		if (task.completed) row.addClass("is-completed");
+		if (promotedFrom) row.addClass("is-promoted");
 		// Priority is a property of the whole task, so it also colours the row's
 		// left spine — readable while scanning, before any label is read.
 		if (task.priority !== "normal") row.addClass(`is-priority-${task.priority}`);
@@ -800,7 +938,12 @@ export class TasksView extends ItemView {
 
 		const hasChildren = task.children.length > 0;
 		const collapseKey = "task:" + hashKey(task.raw);
-		const collapsed = hasChildren && this.isCollapsed(collapseKey, false);
+		// Subtasks fold away by default: the panel is a triage board of top-level
+		// commitments, not a full outline, and expanding everything buries that
+		// structure. Nothing urgent hides this way — a dated subtask is lifted
+		// into the list as its own row by `scheduledSubtasks()`, so it is visible
+		// whether or not its parent happens to be open.
+		const collapsed = hasChildren && this.isCollapsed(collapseKey, true);
 
 		// Expand/collapse twisty (or a spacer to keep rows aligned).
 		const twisty = row.createSpan({ cls: "tasks-twisty" });
@@ -856,6 +999,22 @@ export class TasksView extends ItemView {
 
 		const meta = main.createDiv({ cls: "tasks-meta" });
 
+		// On a lifted row, the parent leads the meta line: it is the first thing
+		// you need in order to place the task ("outline — of what?"), and without
+		// it the row is indistinguishable from a top-level commitment.
+		if (promotedFrom) {
+			const crumb = meta.createSpan({
+				cls: "tasks-parent-crumb",
+				attr: { "aria-label": `Subtask of ${promotedFrom.description}` },
+			});
+			crumb.createSpan({ cls: "tasks-parent-crumb-mark", text: "↳" });
+			crumb.createSpan({ cls: "tasks-parent-crumb-name", text: promotedFrom.description });
+			crumb.addEventListener("click", (e) => {
+				e.stopPropagation();
+				this.openDetail(promotedFrom);
+			});
+		}
+
 		// Priority leads the meta line — it is the other fact triage turns on, so
 		// it gets first read; context (tags, recurrence, progress) follows.
 		if (task.priority !== "normal") {
@@ -886,7 +1045,11 @@ export class TasksView extends ItemView {
 
 		if (hasChildren) {
 			const done = task.children.filter((c) => c.completed).length;
-			meta.createSpan({ cls: "tasks-progress", text: `${done}/${task.children.length}` });
+			meta.createSpan({
+				cls: "tasks-progress",
+				text: `${done}/${task.children.length}`,
+				attr: { "aria-label": `${done} of ${task.children.length} subtasks done` },
+			});
 		}
 
 		// Focus time logged against this task via the Pomodoro timer.
@@ -1240,28 +1403,6 @@ export class TasksView extends ItemView {
 /* Pure helpers                                                        */
 /* ------------------------------------------------------------------ */
 
-// A small, theme-agnostic accent set. Each section gets a stable hue from its
-// id (so colour follows the lane, not its position) — used only for thin spines
-// and dots, never fills, so it sits quietly over any Obsidian theme.
-const SECTION_ACCENTS = [
-	"#6366f1", // indigo
-	"#0ea5e9", // sky
-	"#14b8a6", // teal
-	"#f59e0b", // amber
-	"#ec4899", // pink
-	"#8b5cf6", // violet
-];
-
-function sectionAccent(id: string): string {
-	return SECTION_ACCENTS[hash32(id) % SECTION_ACCENTS.length];
-}
-
-function hash32(s: string): number {
-	let h = 0;
-	for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) | 0;
-	return Math.abs(h);
-}
-
 /** Stable persistence key for a task's expand/collapse state. */
 function hashKey(s: string): string {
 	return hash32(s).toString(36);
@@ -1283,6 +1424,24 @@ function countPressure(flat: Task[]): Pressure {
 		else if (d === 0) dueToday++;
 	}
 	return { overdue, dueToday };
+}
+
+/**
+ * Overdue, incomplete candidates — every dated task at any depth (matching
+ * `countPressure`'s "every incomplete dated task" rule) when `scopeTag` is
+ * null, or just the ones matching that tag (own + inherited, like section
+ * membership) when scoped to one view. Shared by the header's reschedule
+ * button and `rescheduleOverdue` so the count shown and the set acted on are
+ * always the same tasks.
+ */
+function overdueCandidates(
+	candidates: SectionCandidate[],
+	scopeTag: string | null,
+	todayIso: string
+): SectionCandidate[] {
+	return candidates
+		.filter((c) => !c.task.completed && c.task.due && c.task.due < todayIso)
+		.filter((c) => !scopeTag || tagListHasTag(c.tags, scopeTag));
 }
 
 /**

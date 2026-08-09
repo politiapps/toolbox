@@ -14,15 +14,16 @@ there); shared and future code lives under `packages/` and `apps/`.
   src/                 plugin source (views, settings, feature modules)
 packages/
   task-core/           @toolbox/task-core — Obsidian-free task logic, shared
-    src/               taskParser.ts, recurrence.ts, sort.ts, index.ts (barrel)
+    src/               taskParser.ts, recurrence.ts, sort.ts, presentation.ts,
+                       index.ts (barrel)
     __tests__/         vitest golden round-trip tests (the "don't drift" guard)
 apps/
   android/             (planned) Capacitor tasks app — see documentation/android-app-plan.md
 ```
 
 **`@toolbox/task-core`** holds everything the plugin and the Android app must
-agree on: markdown task parsing/serialisation, recurrence, and list ordering —
-all pure (no vault, DOM, or network). The plugin resolves it via a `tsconfig`
+agree on: markdown task parsing/serialisation, recurrence, list ordering, and
+how dates and priorities are *presented* — all pure (no vault, DOM, or network). The plugin resolves it via a `tsconfig`
 `paths` alias (`@toolbox/task-core` → `packages/task-core/src/index.ts`), which
 esbuild honours too, so it is bundled into `main.js` with zero runtime change.
 Run the shared tests with `npm test` (vitest) from the root.
@@ -71,6 +72,18 @@ packages/task-core/src/
   sort.ts            Sort orders + priority ranking + pure list ordering
                      (sortTasks, orderSubtasks, groupTasksByDue, taskHasTag,
                      countDescendants)
+  presentation.ts    THE ONLY place a due date's LABEL or its proximity RAMP is
+                     decided (dueLabel/dueState/dueClass/formatDue*), plus the
+                     priority meter (priorityFilled) and the per-section accent
+                     hue (sectionAccent). Shared so the sidebar and the app can't
+                     drift on what "overdue" looks like. Also owns dueWithin()
+                     (the cross-cutting "Today"/"This week" view filter),
+                     addDaysISO(), and the ViewId vocabulary (VIEW_ALL /
+                     VIEW_TODAY / VIEW_WEEK) so the plugin and the app never
+                     hand-roll diverging string literals for the special views.
+                     ONE sanctioned mirror: WidgetDates.java (see below) repeats
+                     the date rules in Java, because the home-screen widget must
+                     resolve them with no webview alive. Change both together.
   index.ts           Barrel re-exporting the three modules above
 
 src/
@@ -180,12 +193,26 @@ manifest.json        Plugin id (`toolbox`) / name (`Toolbox`) / minAppVersion (1
   upcoming → undated` runs (empty buckets dropped, input order preserved) so the
   view can draw a boundary between them. Compares ISO dates as strings — no Date
   math, no timezone traps.
+- **`sectionCandidates(tasks)` → `SectionCandidate[] { task, tags, parent }`** —
+  the single definition of what a section lists: incomplete top-level tasks plus
+  every incomplete **dated** subtask at any depth, lifted to stand on its own
+  (`parent` non-null identifies a lifted row; the view draws it as a breadcrumb).
+  `tags` is the task's own tags plus every ancestor's, de-duplicated — nesting
+  *is* tag inheritance, so an untagged subtask still matches its parent's
+  section. **Both the plugin and the Android app build sections from this**, so
+  the two can't drift. `dueBucket` deliberately does **not** roll a subtask's
+  date up onto its parent — the lifted row already carries that urgency.
+  `tagListHasTag(tags, tag)` is the array-level matcher `taskHasTag` delegates
+  to. See `documentation/ui.md` § Subtask integration.
 - `settings.ts` re-exports `SortOrder` / `SORT_ORDER_LABELS` from here so existing
   plugin imports are unchanged.
 
 ### `settings.ts`
 - `TasksPluginSettings`: `tasksFilePath`, `sections[]`, `recentTags[]`,
-  `collapseState{}`, `calendars[]`, `editableColumnsEnabled`, `timesheetFilePath`,
+  `collapseState{}`, `activeView` (the panel's current view — `VIEW_ALL` /
+  `VIEW_TODAY` / `VIEW_WEEK` / a section id; ephemeral UI state like
+  `collapseState`, not exposed in the settings tab), `calendars[]`,
+  `editableColumnsEnabled`, `timesheetFilePath`,
   `timesheetOrgs[]`, `activeTimer`, `invoice{businessName, abn, businessAddress,
   bankName, bsb, accountNumber, invoiceFolder}`, `pomodoroEnabled`,
   `pomodoroWorkMin`, `pomodoroShortMin`, `pomodoroLongMin`, `pomodoroLongEvery`,
@@ -209,14 +236,24 @@ manifest.json        Plugin id (`toolbox`) / name (`Toolbox`) / minAppVersion (1
   section's collapse state.
 
 ### `taskView.ts` — `TasksView extends ItemView`
-- Rendering: header (today + add + triage status line) → user sections (in
-  settings order) → Completed. If the configured file does not exist, renders a
-  "No tasks file found" notice (with a Create-file action) instead of empty
-  sections.
+- Rendering: header (today + add + triage status line) → view switcher →
+  Pomodoro/calendar → whichever view is active (every user section, one
+  section, or a cross-cutting due-window list) → Completed. If the configured
+  file does not exist, renders a "No tasks file found" notice (with a
+  Create-file action) instead of empty sections.
 - **Triage status line (the panel's hero):** below the date, `renderPanelHeader`
   shows today's load — `countPressure(flat)` counts incomplete dated tasks that
   are overdue / due today, rendered as a mono console readout (overdue in alarm
   red, colour-bonded to the due-date ramp) or "Nothing due today" when clear.
+- **View switcher & mass reschedule:** `renderViewSwitcher()` renders the chip
+  strip (`settings.activeView`, resolved by `resolveActiveView()` with a
+  fallback to `VIEW_ALL` for a since-deleted section); `refresh()` branches on
+  it to render all sections, one section, or `renderCrossCuttingView()` (via
+  `sectionCandidates()` + `dueWithin()` + `renderDueGroups()`). A reschedule
+  button beside the "N overdue" stat opens `openReschedulePopup()`
+  (Today/Tomorrow/custom date), which calls `rescheduleOverdue()` — re-reads,
+  re-selects the scoped overdue set (`overdueCandidates()`), and rewrites each
+  target's `due` line in one pass. See `documentation/ui.md`.
 - **Due-date group dividers:** a section whose sort is `due` renders through
   `renderDueGroups()`, which runs the sorted list through `groupTasksByDue()` and
   emits a labelled divider (`.tasks-due-group.is-<bucket>`) above each run —

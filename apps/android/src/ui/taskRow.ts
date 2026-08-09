@@ -1,24 +1,60 @@
 import { Task, PRIORITY_LABEL, orderSubtasks } from "@toolbox/task-core";
 import { el, toast } from "./dom";
-import { setIcon, iconButton } from "./icons";
-import { dueLabel, dueClass, formatFocus } from "../dates";
+import { setIcon } from "./icons";
+import {
+	dueLabel,
+	dueClass,
+	dueState,
+	formatDueShort,
+	formatDueDisplay,
+	formatFocus,
+	priorityFilled,
+	PRIORITY_SEGMENTS,
+} from "../dates";
 import { describeRecurrenceText } from "@toolbox/task-core";
 import type { AppContext } from "./context";
 import { openDetail } from "./detailModal";
-import { openAddSubtask } from "./addModal";
 
-// Per-session collapse state for subtask trees, keyed by description (stable
-// enough across the raw-line changes an edit causes).
-const collapsed = new Set<string>();
+// Per-session expand state for subtask trees, keyed by description (stable
+// enough across the raw-line changes an edit causes). Subtasks fold by default
+// — the list is a triage board of top-level commitments, not a full outline,
+// and nothing urgent hides that way because dated subtasks are lifted into the
+// list as their own rows (see `sectionCandidates` in task-core).
+const expanded = new Set<string>();
 
-/** Render one task (and its subtasks) into `parent`. */
-export function renderTask(ctx: AppContext, parent: HTMLElement, task: Task, depth = 0): void {
+/**
+ * Render one task (and its subtasks) into `parent`.
+ *
+ * `parentTags` suppresses tag pills inherited from the row's parent when the
+ * row is nested — a tag the parent already shows is inheritance, not new
+ * information about the child. `promotedFrom` is set only on the *lifted* copy
+ * of a dated subtask standing in the main list — it names the parent for the
+ * breadcrumb and marks the row so it can't be mistaken for a top-level
+ * commitment.
+ */
+export function renderTask(
+	ctx: AppContext,
+	parent: HTMLElement,
+	task: Task,
+	parentTags: string[] = [],
+	promotedFrom?: Task
+): void {
 	const item = el("div", { cls: "task-item" });
-	const row = el("div", { cls: task.completed ? "task-row is-completed" : "task-row" });
+	const rowCls = ["task-row"];
+	if (task.completed) rowCls.push("is-completed");
+	if (promotedFrom) rowCls.push("is-promoted");
+	// Priority colours the row's left spine — readable while scanning, before
+	// any label is read. Due state washes the row for the same reason.
+	if (task.priority !== "normal") rowCls.push(`is-priority-${task.priority}`);
+	if (!task.completed && task.due) rowCls.push(`is-due-${dueState(task.due)}`);
+	const row = el("div", { cls: rowCls.join(" ") });
 
 	const hasChildren = task.children.length > 0;
-	const isCollapsed = collapsed.has(task.description);
+	const isCollapsed = hasChildren && !expanded.has(task.description);
 
+	// The twisty's slot is reserved on *every* row, painted or not: without it a
+	// childless row's checkbox sits a chevron's width left of a parent's, and the
+	// checkbox column — the thing the eye runs down while ticking off — bends.
 	if (hasChildren) {
 		const twisty = el("button", {
 			cls: isCollapsed ? "twisty is-collapsed" : "twisty",
@@ -26,12 +62,12 @@ export function renderTask(ctx: AppContext, parent: HTMLElement, task: Task, dep
 		});
 		setIcon(twisty, "chevron");
 		twisty.addEventListener("click", () => {
-			if (collapsed.has(task.description)) collapsed.delete(task.description);
-			else collapsed.add(task.description);
+			if (expanded.has(task.description)) expanded.delete(task.description);
+			else expanded.add(task.description);
 			void ctx.refresh();
 		});
 		row.append(twisty);
-	} else if (depth > 0) {
+	} else {
 		row.append(el("span", { cls: "twisty-spacer" }));
 	}
 
@@ -48,13 +84,84 @@ export function renderTask(ctx: AppContext, parent: HTMLElement, task: Task, dep
 	row.append(cb);
 
 	const main = el("div", { cls: "task-main" });
+
+	// Title line = description (flexible) + due column (fixed, right). The due
+	// column is what makes dates comparable: every row's date starts and ends at
+	// the same x, so the eye scans a strip instead of hunting for a badge at a
+	// different offset in every row. Priority owns the left edge, due the right.
+	const titleLine = el("div", { cls: "task-title-line" });
 	const title = el("div", { cls: "task-title", text: task.description });
-	title.addEventListener("click", () => openDetail(ctx, task));
-	main.append(title);
+	// A task with notes says so on the row — otherwise the only way to find out
+	// is to open every task in turn.
+	if (task.notes) {
+		const note = el("span", { cls: "task-note-indicator", attrs: { "aria-label": "Has notes" } });
+		setIcon(note, "notes");
+		title.append(note);
+	}
+	titleLine.append(title);
+	// The badge shows the short form ("Thu 25th") so the column stays narrow; the
+	// full weekday survives in the label for screen readers.
+	if (task.completed && task.doneDate) {
+		titleLine.append(
+			el("span", {
+				cls: "task-due-slot task-done-date",
+				text: formatDueShort(task.doneDate),
+				attrs: { "aria-label": `Done ${formatDueDisplay(task.doneDate)}` },
+			})
+		);
+	} else if (task.due) {
+		titleLine.append(
+			el("span", {
+				cls: `task-due-slot task-due ${dueClass(task.due)}`,
+				text: dueLabel(task.due),
+				attrs: { "aria-label": `Due ${formatDueDisplay(task.due)}` },
+			})
+		);
+	}
+	main.append(titleLine);
 
 	const meta = el("div", { cls: "task-meta" });
-	for (const tag of task.tags) meta.append(el("span", { cls: "task-tag", text: tag }));
-	if (task.due) meta.append(el("span", { cls: `task-due ${dueClass(task.due)}`, text: dueLabel(task.due) }));
+
+	// On a lifted row the parent leads: it's the first thing you need in order
+	// to place the task, and without it the row looks like a top-level task.
+	if (promotedFrom) {
+		const crumb = el("span", {
+			cls: "task-parent-crumb",
+			attrs: { "aria-label": `Subtask of ${promotedFrom.description}` },
+		});
+		crumb.append(
+			el("span", { cls: "task-parent-crumb-mark", text: "↳" }),
+			el("span", { cls: "task-parent-crumb-name", text: promotedFrom.description })
+		);
+		crumb.addEventListener("click", (e) => {
+			e.stopPropagation();
+			openDetail(ctx, promotedFrom);
+		});
+		meta.append(crumb);
+	}
+
+	// Priority leads the rest of the meta line — it's the other fact triage
+	// turns on. The five-segment meter encodes rank as shape, so the level
+	// survives without colour vision.
+	if (task.priority !== "normal") {
+		const chip = el("span", {
+			cls: `task-priority prio-${task.priority}`,
+			attrs: { "aria-label": `${PRIORITY_LABEL[task.priority]} priority` },
+		});
+		const meter = el("span", { cls: "task-priority-meter" });
+		const lit = priorityFilled(task.priority);
+		for (let i = 1; i <= PRIORITY_SEGMENTS; i++) {
+			meter.append(el("span", { cls: i <= lit ? "task-priority-seg is-on" : "task-priority-seg" }));
+		}
+		chip.append(meter, el("span", { cls: "task-priority-label", text: PRIORITY_LABEL[task.priority] }));
+		meta.append(chip);
+	}
+
+	// Skip a tag pill the parent already shows — it's inherited, not new.
+	for (const tag of task.tags) {
+		if (parentTags.includes(tag)) continue;
+		meta.append(el("span", { cls: "task-tag", text: tag }));
+	}
 	if (task.recurrence) {
 		const recur = el("span", { cls: "task-recur" });
 		const ic = el("span", { cls: "task-recur-icon" });
@@ -64,13 +171,11 @@ export function renderTask(ctx: AppContext, parent: HTMLElement, task: Task, dep
 	}
 	if (hasChildren) {
 		const done = task.children.filter((c) => c.completed).length;
-		meta.append(el("span", { cls: "task-progress", text: `${done}/${task.children.length}` }));
-	}
-	if (task.priority !== "normal") {
 		meta.append(
 			el("span", {
-				cls: `task-priority prio-${task.priority}`,
-				text: PRIORITY_LABEL[task.priority],
+				cls: "task-progress",
+				text: `${done}/${task.children.length}`,
+				attrs: { "aria-label": `${done} of ${task.children.length} subtasks done` },
 			})
 		);
 	}
@@ -83,21 +188,24 @@ export function renderTask(ctx: AppContext, parent: HTMLElement, task: Task, dep
 		meta.append(f);
 	}
 	if (meta.childElementCount > 0) main.append(meta);
+	// The whole body of the row is the tap target for "open this task" — on a
+	// touch screen the row *is* the button, so the target is the full block
+	// rather than the description's own text box. The checkbox and twisty sit
+	// outside it and keep their own actions.
+	main.setAttribute("role", "button");
+	main.addEventListener("click", () => openDetail(ctx, task));
 	row.append(main);
 
-	const actions = el("div", { cls: "task-actions" });
-	const addBtn = iconButton("plus", "Add subtask");
-	addBtn.addEventListener("click", () => openAddSubtask(ctx, task));
-	const editBtn = iconButton("pencil", "Open task");
-	editBtn.addEventListener("click", () => openDetail(ctx, task));
-	actions.append(addBtn, editBtn);
-	row.append(actions);
-
+	// No per-row action buttons. The sidebar can afford them because it reveals
+	// them on hover — a phone has no hover, so they would sit there permanently
+	// costing ~88px of a ~300px row, which is what broke descriptions across
+	// lines mid-word. Tapping the row opens the detail sheet, which carries the
+	// same actions (edit fields, notes, + Add subtask) with room to show them.
 	item.append(row);
 
 	if (hasChildren && !isCollapsed) {
 		const childWrap = el("div", { cls: "task-children" });
-		for (const child of orderSubtasks(task.children)) renderTask(ctx, childWrap, child, depth + 1);
+		for (const child of orderSubtasks(task.children)) renderTask(ctx, childWrap, child, task.tags);
 		item.append(childWrap);
 	}
 
