@@ -405,6 +405,10 @@ export class TasksView extends ItemView {
 		// Triage status line: today's load, in the ops-console register. Overdue is
 		// the one thing allowed to shout, colour-bonded to the due-date ramp below.
 		const status = header.createDiv({ cls: "tasks-pressure" });
+		// `overdueCandidates` uses the exact same candidate set + scopeTag filter
+		// `countPressure` above does, so `pressure.overdue > 0` and
+		// `overdue.length > 0` can never disagree on any view (DEV_RULES.md §11).
+		const overdue = overdueCandidates(candidates, scopeTag, todayISO());
 		if (pressure.overdue === 0 && pressure.dueToday === 0) {
 			status.createSpan({ cls: "tasks-pressure-clear", text: "Nothing due today" });
 		} else {
@@ -412,6 +416,27 @@ export class TasksView extends ItemView {
 				const s = status.createDiv({ cls: "tasks-stat is-overdue" });
 				s.createSpan({ cls: "tasks-stat-num", text: String(pressure.overdue) });
 				s.createSpan({ cls: "tasks-stat-label", text: "overdue" });
+
+				// Mass reschedule rides directly on the "overdue" stat it acts on,
+				// not the tail of the whole status line — it only ever touches
+				// overdue tasks, so it belongs next to that number, not floating
+				// past "due today" as if it applied to both. Labelled (not just an
+				// icon) so it reads as an actionable button, not a faint glyph.
+				if (overdue.length > 0) {
+					const wrap = s.createSpan({ cls: "tasks-reschedule-wrap" });
+					const btn = wrap.createEl("button", { cls: "tasks-reschedule-btn" });
+					setIcon(btn.createSpan({ cls: "tasks-reschedule-btn-icon" }), "calendar-clock");
+					btn.createSpan({ cls: "tasks-reschedule-btn-label", text: "Reschedule" });
+					btn.setAttr("aria-label", "Reschedule overdue tasks");
+					btn.addEventListener("click", (e) => {
+						e.stopPropagation();
+						this.openReschedulePopup(
+							wrap,
+							overdue.map((c) => c.task),
+							scopeTag
+						);
+					});
+				}
 			}
 			if (pressure.overdue > 0 && pressure.dueToday > 0) {
 				status.createSpan({ cls: "tasks-stat-sep", text: "·" });
@@ -421,30 +446,6 @@ export class TasksView extends ItemView {
 				s.createSpan({ cls: "tasks-stat-num", text: String(pressure.dueToday) });
 				s.createSpan({ cls: "tasks-stat-label", text: "due today" });
 			}
-		}
-
-		// Mass reschedule, scoped to whatever view is active — offered only when
-		// there's a backlog to act on, so "Reschedule" never appears with nothing
-		// behind it. `overdueCandidates` uses the exact same candidate set +
-		// scopeTag filter `countPressure` above does, so the header's number and
-		// this button's reach can never disagree on any view (DEV_RULES.md §11).
-		// Labelled (not just an icon) so it reads as an actionable button at a
-		// glance rather than a faint glyph riding on the status line.
-		const overdue = overdueCandidates(candidates, scopeTag, todayISO());
-		if (overdue.length > 0) {
-			const wrap = status.createSpan({ cls: "tasks-reschedule-wrap" });
-			const btn = wrap.createEl("button", { cls: "tasks-reschedule-btn" });
-			setIcon(btn.createSpan({ cls: "tasks-reschedule-btn-icon" }), "calendar-clock");
-			btn.createSpan({ cls: "tasks-reschedule-btn-label", text: "Reschedule" });
-			btn.setAttr("aria-label", "Reschedule overdue tasks");
-			btn.addEventListener("click", (e) => {
-				e.stopPropagation();
-				this.openReschedulePopup(
-					wrap,
-					overdue.map((c) => c.task),
-					scopeTag
-				);
-			});
 		}
 	}
 

@@ -165,12 +165,16 @@ body {
 	color: var(--text-muted);
 }
 
-/* Mass reschedule: a quiet icon button riding on the "N overdue" stat, so it
-   only ever appears with a backlog behind it. */
+/* Mass reschedule: a quiet icon button riding directly on the "N overdue"
+   stat it acts on (not the tail of the whole status line), so it only ever
+   appears with a backlog behind it and reads as acting on that number. */
 .reschedule-btn {
 	width: 28px;
 	height: 28px;
 	margin-left: -2px;
+	/* `.stat` aligns its children by text baseline; centre the icon button
+	   against the digit/label instead of trusting its synthesized baseline. */
+	align-self: center;
 }
 .reschedule-btn svg {
 	width: 16px;

@@ -460,6 +460,9 @@ export class App {
 		// while the label stays quiet. Colour-bonded to the due ramp below, and
 		// overdue is the one thing allowed to shout.
 		const pressure = el("div", { cls: "app-pressure" });
+		// `overdue`/`dueToday` above and `overdueCandidates` below read the same
+		// candidate set + scopeTag filter, so they can never disagree on any view.
+		const overdueTargets = overdueCandidates(candidates, scopeTag, todayIso);
 		if (overdue === 0 && dueToday === 0) {
 			pressure.append(el("span", { cls: "pressure-clear", text: "Nothing due today" }));
 		} else {
@@ -469,6 +472,21 @@ export class App {
 					el("span", { cls: "stat-num", text: String(overdue) }),
 					el("span", { cls: "stat-label", text: "overdue" })
 				);
+
+				// Mass reschedule rides directly on the "overdue" stat it acts on,
+				// not the tail of the whole status line — it only ever touches
+				// overdue tasks, so it belongs next to that number, not floating
+				// past "due today" as if it applied to both.
+				if (overdueTargets.length > 0) {
+					const btn = el("button", {
+						cls: "icon-button reschedule-btn",
+						attrs: { "aria-label": "Reschedule overdue tasks" },
+					});
+					setIcon(btn, "calendar");
+					btn.addEventListener("click", () => openReschedule(this.ctx, overdueTargets.length, scopeTag));
+					s.append(btn);
+				}
+
 				pressure.append(s);
 			}
 			if (overdue > 0 && dueToday > 0) {
@@ -482,21 +500,6 @@ export class App {
 				);
 				pressure.append(s);
 			}
-		}
-
-		// Mass reschedule, scoped to whatever view is active — offered only when
-		// there's a backlog to act on. Matches `overdue` above exactly when
-		// unscoped (both walk every incomplete dated task), so the count shown
-		// and the button's reach can never disagree.
-		const overdueTargets = overdueCandidates(candidates, scopeTag, todayISO());
-		if (overdueTargets.length > 0) {
-			const btn = el("button", {
-				cls: "icon-button reschedule-btn",
-				attrs: { "aria-label": "Reschedule overdue tasks" },
-			});
-			setIcon(btn, "calendar");
-			btn.addEventListener("click", () => openReschedule(this.ctx, overdueTargets.length, scopeTag));
-			pressure.append(btn);
 		}
 
 		header.append(pressure);

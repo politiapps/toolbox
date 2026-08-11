@@ -134,6 +134,10 @@
 .tasks-reschedule-wrap {
 	position: relative;
 	display: inline-flex;
+	/* Rides inside `.tasks-stat.is-overdue` (align-items: baseline) — centre it
+	   against the digit/label instead of trusting the pill's own text baseline,
+	   which sits low against the taller stat-num next to it. */
+	align-self: center;
 }
 
 .tasks-reschedule-btn {

@@ -5964,6 +5964,7 @@ var TasksView = class extends import_obsidian4.ItemView {
     add.setAttr("aria-label", "Add task");
     add.addEventListener("click", () => this.openAddForm());
     const status = header.createDiv({ cls: "tasks-pressure" });
+    const overdue = overdueCandidates(candidates, scopeTag, todayISO());
     if (pressure.overdue === 0 && pressure.dueToday === 0) {
       status.createSpan({ cls: "tasks-pressure-clear", text: "Nothing due today" });
     } else {
@@ -5971,6 +5972,21 @@ var TasksView = class extends import_obsidian4.ItemView {
         const s = status.createDiv({ cls: "tasks-stat is-overdue" });
         s.createSpan({ cls: "tasks-stat-num", text: String(pressure.overdue) });
         s.createSpan({ cls: "tasks-stat-label", text: "overdue" });
+        if (overdue.length > 0) {
+          const wrap = s.createSpan({ cls: "tasks-reschedule-wrap" });
+          const btn = wrap.createEl("button", { cls: "tasks-reschedule-btn" });
+          (0, import_obsidian4.setIcon)(btn.createSpan({ cls: "tasks-reschedule-btn-icon" }), "calendar-clock");
+          btn.createSpan({ cls: "tasks-reschedule-btn-label", text: "Reschedule" });
+          btn.setAttr("aria-label", "Reschedule overdue tasks");
+          btn.addEventListener("click", (e) => {
+            e.stopPropagation();
+            this.openReschedulePopup(
+              wrap,
+              overdue.map((c) => c.task),
+              scopeTag
+            );
+          });
+        }
       }
       if (pressure.overdue > 0 && pressure.dueToday > 0) {
         status.createSpan({ cls: "tasks-stat-sep", text: "\xB7" });
@@ -5980,22 +5996,6 @@ var TasksView = class extends import_obsidian4.ItemView {
         s.createSpan({ cls: "tasks-stat-num", text: String(pressure.dueToday) });
         s.createSpan({ cls: "tasks-stat-label", text: "due today" });
       }
-    }
-    const overdue = overdueCandidates(candidates, scopeTag, todayISO());
-    if (overdue.length > 0) {
-      const wrap = status.createSpan({ cls: "tasks-reschedule-wrap" });
-      const btn = wrap.createEl("button", { cls: "tasks-reschedule-btn" });
-      (0, import_obsidian4.setIcon)(btn.createSpan({ cls: "tasks-reschedule-btn-icon" }), "calendar-clock");
-      btn.createSpan({ cls: "tasks-reschedule-btn-label", text: "Reschedule" });
-      btn.setAttr("aria-label", "Reschedule overdue tasks");
-      btn.addEventListener("click", (e) => {
-        e.stopPropagation();
-        this.openReschedulePopup(
-          wrap,
-          overdue.map((c) => c.task),
-          scopeTag
-        );
-      });
     }
   }
   /**
