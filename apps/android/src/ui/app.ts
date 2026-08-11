@@ -12,7 +12,7 @@ import {
 } from "@toolbox/task-core";
 import { el } from "./dom";
 import { setIcon, iconButton } from "./icons";
-import { todayISO, formatDueDisplay, daysUntil, sectionAccent, dueWithin } from "../dates";
+import { todayISO, formatDueDisplay, sectionAccent, dueWithin } from "../dates";
 import {
 	writeWidgetCache,
 	consumePendingWidgetAction,
@@ -235,7 +235,7 @@ export class App {
 		this.root.replaceChildren();
 		const screen = el("div", { cls: "screen list-screen" });
 
-		this.renderHeader(screen, flat, candidates, scopeTag);
+		this.renderHeader(screen, candidates, scopeTag);
 		renderViewSwitcher(this.ctx, screen, activeView);
 
 		if (this.settings.pomodoroConfig.enabled) {
@@ -418,7 +418,6 @@ export class App {
 
 	private renderHeader(
 		parent: HTMLElement,
-		flat: Task[],
 		candidates: SectionCandidate[],
 		scopeTag: string | null
 	): void {
@@ -442,13 +441,18 @@ export class App {
 		top.append(actions);
 		header.append(top);
 
+		// Read from the same candidate set + scopeTag filter `overdueCandidates`
+		// below uses, so this count and the reschedule button's reach can never
+		// disagree on any view — not just the unscoped ones (matches the fix in
+		// the Obsidian plugin's taskView.ts; see DEV_RULES.md §11 there).
+		const todayIso = todayISO();
 		let overdue = 0;
 		let dueToday = 0;
-		for (const t of flat) {
-			if (t.completed || !t.due) continue;
-			const d = daysUntil(t.due);
-			if (d < 0) overdue++;
-			else if (d === 0) dueToday++;
+		for (const c of candidates) {
+			if (c.task.completed || !c.task.due) continue;
+			if (scopeTag && !tagListHasTag(c.tags, scopeTag)) continue;
+			if (c.task.due < todayIso) overdue++;
+			else if (c.task.due === todayIso) dueToday++;
 		}
 
 		// Triage status line: today's load as a typeset console readout — the

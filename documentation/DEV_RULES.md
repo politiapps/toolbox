@@ -71,7 +71,7 @@ so the constraints live next to the code. Violating any of these is a bug.
 
 ## Aggregates
 11. **Anything that counts tasks must agree with anything that lists them.**
-    The header's `countPressure(flat)` walks every task at any depth, while
+    The header's `countPressure(flat)` walked every task at any depth, while
     `sortTasks` / `dueBucket` read only a top-level task's own `due`. A dated
     subtask was therefore counted in "N overdue" but never shown as a row — the
     panel asserted work it then hid. Whenever a field gains a new consumer, walk
@@ -85,6 +85,21 @@ so the constraints live next to the code. Violating any of these is a bug.
       lifts a nested task into a tag-filtered list has to consider **inherited**
       tags (`ScheduledSubtask.tags`), or the lifted row matches nothing and
       silently disappears.
+    - **The same class of bug recurred with view scoping**: the header's
+      overdue/due-today count (`countPressure`) walked the *whole file*
+      unconditionally, while the mass-reschedule button's target set
+      (`overdueCandidates`) was filtered to the active view's `scopeTag`. On
+      `All`/`Today`/`This week` (`scopeTag === null`) the two happened to
+      agree, which is exactly what made it easy to ship and not notice — but
+      on a section chip, "N overdue" could read nonzero (counting other
+      sections' overdue work) while the button silently had nothing in scope
+      and didn't render at all. The panel asserted a number no visible control
+      could act on. Fixed by making `countPressure` read the *same*
+      `sectionCandidates` + `scopeTag` filter `overdueCandidates` already used,
+      rather than a second, differently-scoped walk of the data. When a count
+      and an action are meant to describe the same set, **derive both from one
+      filter, in one place** — don't let one gain a scope the other doesn't
+      pick up in the same change.
 
 ## Cross-surface presentation
 12. **A presentation rule with two renderers belongs in `task-core`.** The due

@@ -5844,7 +5844,7 @@ var TasksView = class extends import_obsidian4.ItemView {
     const root = this.contentEl;
     root.empty();
     root.addClass("tasks-panel-content");
-    this.renderPanelHeader(root, countPressure(flat), candidates, scopeTag);
+    this.renderPanelHeader(root, countPressure(candidates, scopeTag, todayISO()), candidates, scopeTag);
     this.renderViewSwitcher(root, activeView);
     this.renderPomodoro(root);
     this.renderCalendar(root);
@@ -5985,7 +5985,8 @@ var TasksView = class extends import_obsidian4.ItemView {
     if (overdue.length > 0) {
       const wrap = status.createSpan({ cls: "tasks-reschedule-wrap" });
       const btn = wrap.createEl("button", { cls: "tasks-reschedule-btn" });
-      (0, import_obsidian4.setIcon)(btn, "calendar-clock");
+      (0, import_obsidian4.setIcon)(btn.createSpan({ cls: "tasks-reschedule-btn-icon" }), "calendar-clock");
+      btn.createSpan({ cls: "tasks-reschedule-btn-label", text: "Reschedule" });
       btn.setAttr("aria-label", "Reschedule overdue tasks");
       btn.addEventListener("click", (e) => {
         e.stopPropagation();
@@ -6895,16 +6896,17 @@ var TasksView = class extends import_obsidian4.ItemView {
 function hashKey(s) {
   return hash32(s).toString(36);
 }
-function countPressure(flat) {
+function countPressure(candidates, scopeTag, todayIso) {
   let overdue = 0;
   let dueToday = 0;
-  for (const t of flat) {
-    if (t.completed || !t.due)
+  for (const c of candidates) {
+    if (c.task.completed || !c.task.due)
       continue;
-    const d = daysUntil(t.due);
-    if (d < 0)
+    if (scopeTag && !tagListHasTag(c.tags, scopeTag))
+      continue;
+    if (c.task.due < todayIso)
       overdue++;
-    else if (d === 0)
+    else if (c.task.due === todayIso)
       dueToday++;
   }
   return { overdue, dueToday };

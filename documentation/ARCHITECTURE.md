@@ -258,9 +258,12 @@ manifest.json        Plugin id (`toolbox`) / name (`Toolbox`) / minAppVersion (1
   file does not exist, renders a "No tasks file found" notice (with a
   Create-file action) instead of empty sections.
 - **Triage status line (the panel's hero):** below the date, `renderPanelHeader`
-  shows today's load — `countPressure(flat)` counts incomplete dated tasks that
-  are overdue / due today, rendered as a mono console readout (overdue in alarm
-  red, colour-bonded to the due-date ramp) or "Nothing due today" when clear.
+  shows today's load — `countPressure(candidates, scopeTag, todayISO())` counts
+  incomplete dated tasks that are overdue / due today from the same
+  `sectionCandidates` set (and `scopeTag` filter) the reschedule button below
+  reads, so the number can't disagree with what that button actually reaches
+  on any view — rendered as a mono console readout (overdue in alarm red,
+  colour-bonded to the due-date ramp) or "Nothing due today" when clear.
 - **View switcher & mass reschedule:** `renderViewSwitcher()` renders the chip
   strip (`settings.activeView`, resolved by `resolveActiveView()` with a
   fallback to `VIEW_ALL` for a since-deleted section); `refresh()` branches on

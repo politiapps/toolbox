@@ -54,7 +54,6 @@ import {
 	todayISO,
 	formatDueDisplay,
 	formatDueShort,
-	daysUntil,
 	dueLabel,
 	dueState,
 	dueClass,
@@ -261,7 +260,7 @@ export class TasksView extends ItemView {
 		root.empty();
 		root.addClass("tasks-panel-content");
 
-		this.renderPanelHeader(root, countPressure(flat), candidates, scopeTag);
+		this.renderPanelHeader(root, countPressure(candidates, scopeTag, todayISO()), candidates, scopeTag);
 		this.renderViewSwitcher(root, activeView);
 		this.renderPomodoro(root);
 		this.renderCalendar(root);
@@ -426,14 +425,17 @@ export class TasksView extends ItemView {
 
 		// Mass reschedule, scoped to whatever view is active — offered only when
 		// there's a backlog to act on, so "Reschedule" never appears with nothing
-		// behind it. Matches `pressure.overdue` exactly when unscoped (both walk
-		// every incomplete dated task), so the header's count and the button's
-		// reach can never disagree (see DEV_RULES.md §11).
+		// behind it. `overdueCandidates` uses the exact same candidate set +
+		// scopeTag filter `countPressure` above does, so the header's number and
+		// this button's reach can never disagree on any view (DEV_RULES.md §11).
+		// Labelled (not just an icon) so it reads as an actionable button at a
+		// glance rather than a faint glyph riding on the status line.
 		const overdue = overdueCandidates(candidates, scopeTag, todayISO());
 		if (overdue.length > 0) {
 			const wrap = status.createSpan({ cls: "tasks-reschedule-wrap" });
 			const btn = wrap.createEl("button", { cls: "tasks-reschedule-btn" });
-			setIcon(btn, "calendar-clock");
+			setIcon(btn.createSpan({ cls: "tasks-reschedule-btn-icon" }), "calendar-clock");
+			btn.createSpan({ cls: "tasks-reschedule-btn-label", text: "Reschedule" });
 			btn.setAttr("aria-label", "Reschedule overdue tasks");
 			btn.addEventListener("click", (e) => {
 				e.stopPropagation();
@@ -1463,25 +1465,31 @@ interface Pressure {
 	dueToday: number;
 }
 
-function countPressure(flat: Task[]): Pressure {
+/**
+ * Today's load — overdue + due-today counts — read from the same candidate
+ * set (`sectionCandidates`, filtered by `scopeTag` exactly like
+ * `overdueCandidates` below) the reschedule button acts on, so the header's
+ * number and the button's reach can never disagree on *any* view (not just
+ * the unscoped ones — see DEV_RULES.md §11).
+ */
+function countPressure(candidates: SectionCandidate[], scopeTag: string | null, todayIso: string): Pressure {
 	let overdue = 0;
 	let dueToday = 0;
-	for (const t of flat) {
-		if (t.completed || !t.due) continue;
-		const d = daysUntil(t.due);
-		if (d < 0) overdue++;
-		else if (d === 0) dueToday++;
+	for (const c of candidates) {
+		if (c.task.completed || !c.task.due) continue;
+		if (scopeTag && !tagListHasTag(c.tags, scopeTag)) continue;
+		if (c.task.due < todayIso) overdue++;
+		else if (c.task.due === todayIso) dueToday++;
 	}
 	return { overdue, dueToday };
 }
 
 /**
- * Overdue, incomplete candidates — every dated task at any depth (matching
- * `countPressure`'s "every incomplete dated task" rule) when `scopeTag` is
- * null, or just the ones matching that tag (own + inherited, like section
- * membership) when scoped to one view. Shared by the header's reschedule
- * button and `rescheduleOverdue` so the count shown and the set acted on are
- * always the same tasks.
+ * Overdue, incomplete candidates — every dated task at any depth when
+ * `scopeTag` is null, or just the ones matching that tag (own + inherited,
+ * like section membership) when scoped to one view. Shared by the header's
+ * reschedule button and `rescheduleOverdue` so the count shown and the set
+ * acted on are always the same tasks.
  */
 function overdueCandidates(
 	candidates: SectionCandidate[],

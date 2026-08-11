@@ -58,8 +58,11 @@ Personality comes from type *treatment*, not imported fonts:
 The **hero** is the header's triage status line (`.tasks-pressure`): below the
 date it reports today's load as a typeset console readout — `N overdue · N due
 today`, overdue in the alarm red — or "Nothing due today" when clear. Counts come
-from `countPressure(flat)` over all incomplete dated tasks. It is deliberately a
-status line in the existing mono register, not a dashboard stat card.
+from `countPressure(candidates, scopeTag, todayISO())` over all incomplete dated
+tasks in scope (every one, unscoped on `All`/`Today`/`This week`; just that
+section's own + inherited when a section chip is active — see **View switcher
+and mass reschedule** below). It is deliberately a status line in the existing
+mono register, not a dashboard stat card.
 
 Per-section colour comes from `sectionAccent(section.id)` in `taskView.ts` — a
 stable hue hashed from the section id (follows the section, not its position),
@@ -187,7 +190,7 @@ applied via the `--section-accent` CSS custom property as the card's left spine.
 ## Subtask integration
 
 The panel used to treat a subtask two contradictory ways at once: as a **real
-task** when counting (`countPressure(flat)` walks every task at any depth), but
+task** when counting (`countPressure` walked every task at any depth), but
 as **decoration on its parent** when sorting and grouping (`sortTasks` /
 `dueBucket` read only a top-level task's own `due`). So a subtask due today,
 hanging off an undated parent, was counted in the header's "N overdue" while its
@@ -308,13 +311,16 @@ view contains.
   late"). Undated tasks never appear in either. An empty result says "Nothing
   due today" / "Nothing due this week" rather than showing nothing.
 - **Mass reschedule**: when there's a backlog (`pressure.overdue > 0` in the
-  active scope), a small calendar-glyph button rides on the header's "N
-  overdue" stat. Its scope always matches the active view — a section chip
-  reschedules only that section's overdue tasks (by tag, own + inherited);
-  `All`/`Today`/`This week` reschedule every incomplete overdue task in the
-  file. The scoped count is computed the same way the header counts overdue
-  work in the first place (`overdueCandidates()`), so the number shown and
-  the set acted on can never disagree (`DEV_RULES.md` §11).
+  active scope), a labelled `Reschedule` pill (icon + text — not an icon-only
+  glyph, which read as decoration rather than a button at the status line's
+  size and got missed) rides on the header's "N overdue" stat. Its scope
+  always matches the active view — a section chip reschedules only that
+  section's overdue tasks (by tag, own + inherited); `All`/`Today`/`This week`
+  reschedule every incomplete overdue task in the file. `countPressure()` (the
+  header's number) and `overdueCandidates()` (the button's reach) read the
+  same `sectionCandidates` set through the same `scopeTag` filter, so the
+  number shown and the set acted on can never disagree on *any* view, not
+  only the unscoped ones (`DEV_RULES.md` §11).
   - The plugin opens an inline popover (`.tasks-reschedule-popup`, styled
     like the existing `.tasks-confirm-popup` delete-confirm): `Today` /
     `Tomorrow` quick picks plus a `type="date"` field (never free text, per

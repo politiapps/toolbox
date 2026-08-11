@@ -126,8 +126,11 @@
 	height: 17px;
 }
 
-/* Mass reschedule: a quiet icon button riding on the "N overdue" stat, so it
-   only ever appears with a backlog behind it. */
+/* Mass reschedule: a labelled pill riding on the "N overdue" stat, so it only
+   ever appears with a backlog behind it. Deliberately not an icon-only glyph
+   — at the status line's 0.66rem size a bare 13px icon reads as decoration,
+   not a button, and got missed entirely. A visible border + label at rest
+   (not only on hover) is what makes it register as clickable. */
 .tasks-reschedule-wrap {
 	position: relative;
 	display: inline-flex;
@@ -136,28 +139,37 @@
 .tasks-reschedule-btn {
 	display: inline-flex;
 	align-items: center;
-	justify-content: center;
-	width: 20px;
+	gap: 4px;
 	height: 20px;
-	padding: 0;
+	padding: 0 7px 0 5px;
 	margin-left: 2px;
-	background: transparent;
-	border: none;
+	background-color: var(--background-modifier-hover);
+	border: 1px solid var(--background-modifier-border);
 	box-shadow: none;
-	border-radius: 5px;
-	color: var(--text-faint);
+	border-radius: 20px;
+	color: var(--text-muted);
+	font-family: var(--font-monospace);
+	font-size: 0.62rem;
+	font-weight: 600;
+	letter-spacing: 0.08em;
+	text-transform: uppercase;
 	cursor: pointer;
-	transition: color 0.12s ease, background-color 0.12s ease;
+	transition: color 0.12s ease, background-color 0.12s ease, border-color 0.12s ease;
 }
 
 .tasks-reschedule-btn:hover {
 	color: var(--color-red, #ef4444);
 	background-color: color-mix(in srgb, var(--color-red, #ef4444) 14%, transparent);
+	border-color: color-mix(in srgb, var(--color-red, #ef4444) 45%, transparent);
 }
 
-.tasks-reschedule-btn svg {
-	width: 13px;
-	height: 13px;
+.tasks-reschedule-btn-icon {
+	display: inline-flex;
+}
+
+.tasks-reschedule-btn-icon svg {
+	width: 12px;
+	height: 12px;
 }
 
 .tasks-reschedule-popup {
