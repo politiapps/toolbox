@@ -1,5 +1,13 @@
 import { describe, it, expect } from "vitest";
-import { parseTasks, parseTask, serializeTask, collectTags } from "../src/taskParser";
+import {
+	parseTasks,
+	parseTask,
+	serializeTask,
+	serializeTaskBlock,
+	collectTags,
+	addChildTaskLine,
+	childIndentOf,
+} from "../src/taskParser";
 
 /**
  * Golden round-trip tests. These lock the exact markdown behavior the Obsidian
@@ -100,6 +108,59 @@ describe("round-trip: parse → serialize → parse", () => {
 			expect(reserialised2).toBe(reserialised);
 		});
 	}
+});
+
+describe("serializeTaskBlock — task line plus notes", () => {
+	it("returns just the line when there are no notes", () => {
+		const block = serializeTaskBlock({
+			description: "Draft",
+			tags: [],
+			due: null,
+			priority: "normal",
+			completed: false,
+			doneDate: null,
+		});
+		expect(block).toEqual(["- [ ] Draft"]);
+	});
+
+	it("indents multi-line notes one level under the task", () => {
+		const block = serializeTaskBlock(
+			{ description: "Draft", tags: [], due: null, priority: "normal", completed: false, doneDate: null },
+			"first line\nsecond line"
+		);
+		expect(block).toEqual(["- [ ] Draft", "    first line", "    second line"]);
+	});
+
+	it("round-trips through parseTasks as the task's notes", () => {
+		const block = serializeTaskBlock(
+			{ description: "Draft", tags: [], due: null, priority: "normal", completed: false, doneDate: null },
+			"a note"
+		);
+		const { tasks } = parseTasks(block.join("\n"));
+		expect(tasks[0].notes).toBe("a note");
+	});
+});
+
+describe("addChildTaskLine — subtask plus notes", () => {
+	it("inserts the child line and indented note lines under the parent", () => {
+		const { tasks, lines } = parseTasks("- [ ] Parent #proj");
+		const parent = tasks[0];
+		const childLine = serializeTask({
+			indent: childIndentOf(parent),
+			description: "Child",
+			tags: [],
+			due: null,
+			priority: "normal",
+			completed: false,
+			doneDate: null,
+		});
+		const out = addChildTaskLine(lines, parent, childLine, "child note");
+		expect(out).toEqual(["- [ ] Parent #proj", "    - [ ] Child", "        child note"]);
+
+		const { tasks: reparsed } = parseTasks(out.join("\n"));
+		expect(reparsed[0].children[0].description).toBe("Child");
+		expect(reparsed[0].children[0].notes).toBe("child note");
+	});
 });
 
 describe("parseTasks — hierarchy", () => {

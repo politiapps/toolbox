@@ -172,10 +172,15 @@ manifest.json        Plugin id (`toolbox`) / name (`Toolbox`) / minAppVersion (1
   tree (indentation-based, with `children`/`notes`), `flat` is every task.
 - `serializeTask(input)` → canonical markdown line.
 - Pure structural editors over the line array: `setTaskNotes`,
-  `addChildTaskLine`, `insertTaskLineBefore` (place a line at `blockStart`, used
-  for a recurring task's next occurrence), `removeTaskBlock`, `moveTaskAsChild`
-  (re-parent a task's whole block under another, re-indented; rejects cyclic
-  moves), plus `findTaskByRaw`, `childIndentOf`.
+  `addChildTaskLine` (takes an optional `notes` argument to insert a new
+  subtask's note lines, indented one level deeper, in the same splice),
+  `insertTaskLineBefore` (place a line at `blockStart`, used for a recurring
+  task's next occurrence), `removeTaskBlock`, `moveTaskAsChild` (re-parent a
+  task's whole block under another, re-indented; rejects cyclic moves), plus
+  `findTaskByRaw`, `childIndentOf`.
+- `serializeTaskBlock(input, notes?)` → a brand-new task's line plus its note
+  lines (same indentation rule as `addChildTaskLine`'s `notes`), so a
+  top-level task can be appended to the file with notes attached in one write.
 - `collectTags(tasks)` → unique tags in first-seen order.
 - The `🔁` **token** is owned here: `recurrence` on `Task`/`TaskInput` holds the
   raw rule text; its *meaning* is `recurrence.ts`'s job, not this file's.
@@ -296,12 +301,20 @@ manifest.json        Plugin id (`toolbox`) / name (`Toolbox`) / minAppVersion (1
   (state persisted per task), a `done/total` progress badge, and a note
   indicator. Structural writes go through `applyStructural` (re-read → locate by
   raw → pure edit → write).
-- `TaskFormModal` is the quick add form (also used for "add subtask").
+- `TaskFormModal` is the quick add form (also used for "add subtask"). Both
+  flows include a **notes** textarea (passed through to `createTask`/
+  `addSubtask` and written via `serializeTaskBlock`/`addChildTaskLine`'s
+  `notes` argument) and an **"Add & open"** secondary button that creates the
+  task/subtask and immediately opens its `TaskDetailModal`.
 - `TaskDetailModal` opens when you click a task: edit fields, a multi-line
   **notes** textarea, and a subtask list (toggle + add). Each subtask row
   shows the same due badge / priority chip a top-level row does
   (`renderDueSlot`/`renderPriorityChip`, module-level helpers shared with
-  `renderTask`) and lists them via `orderSubtasks` — due date, then priority.
+  `renderTask`), lists them via `orderSubtasks` — due date, then priority —
+  and its description is clickable, opening that subtask's own
+  `TaskDetailModal` on top (`TasksView.openDetail` takes an optional
+  close-callback, used here to refresh the parent modal's subtask list once
+  the child closes).
 - Every `type="date"` field (here and in `timesheetView.ts`/`invoiceModal.ts`)
   opens `datePicker.ts`'s custom calendar via `attachDatePicker()` instead of
   the OS picker.

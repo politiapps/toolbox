@@ -1593,6 +1593,15 @@
 	color: var(--text-faint);
 }
 
+.tasks-detail-subtitle.is-clickable {
+	cursor: pointer;
+}
+
+.tasks-detail-subtitle.is-clickable:hover {
+	text-decoration: underline;
+	text-decoration-color: var(--text-faint);
+}
+
 .tasks-detail-addsub {
 	display: flex;
 	gap: 6px;

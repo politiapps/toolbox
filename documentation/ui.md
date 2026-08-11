@@ -244,6 +244,16 @@ subtasks used to show only a checkbox and a description in whatever order
 they were typed; the schedule wasn't visible until you opened each subtask in
 turn, and the list didn't reflect what was actually most pressing.
 
+**Clicking a subtask's description in the detail modal opens its own
+`TaskDetailModal`** (`.tasks-detail-subtitle.is-clickable`), on top of the
+parent's — the same click-to-open behaviour a top-level row's description
+has, since a subtask is still a task with its own notes/subtasks/fields worth
+editing directly rather than only through the checkbox. `TasksView.openDetail`
+takes an optional close callback; the subtask row passes one that re-reads and
+re-renders the parent modal's subtask list once the child modal closes, so any
+change (due, priority, notes, its own subtasks) is reflected immediately
+underneath without needing to reopen the parent.
+
 ## Due-date group dividers (`.tasks-due-group`)
 
 A section sorted by **Due date** is really three jobs stacked — what's late,
@@ -373,7 +383,8 @@ so both look identical.
 
 ## Add / Edit form (`TaskFormModal`)
 
-An Obsidian `Modal` with `.tasks-form-modal`. Fields:
+An Obsidian `Modal` with `.tasks-form-modal`, used for both "Add task" and "Add
+subtask" (`openAddForm` / `openAddSubtask` in `taskView.ts`). Fields:
 1. Description (text, autofocused).
 2. Tag — a dropdown of existing tags (most-recently-used first) plus a
    "+ Create new tag" option that reveals a text box (`newTagSetting`, hidden by
@@ -382,9 +393,23 @@ An Obsidian `Modal` with `.tasks-form-modal`. Fields:
    (see below), clearable back to "no date".
 4. Priority — dropdown: None / Highest / High / Medium / Low / Lowest, matching
    the official Tasks plugin emoji (🔺 ⏫ 🔼 🔽 ⏬).
+5. Repeat (`buildRecurrenceSetting`, shared with the detail modal).
+6. Notes — a multi-line textarea (`.tasks-notes-input`, same styling the detail
+   modal's notes field uses), so a task or subtask can be created with notes
+   already attached instead of requiring a follow-up trip through the detail
+   modal.
 
-Submit appends (add) or replaces (edit) the line and refreshes. Used tags are
-promoted via `touchRecentTag()`.
+The primary button appends (add) or replaces (edit) the task line and
+refreshes. Both the add-task and add-subtask forms also offer a secondary
+**"Add & open"** button that creates the task (or subtask) and immediately
+opens its `TaskDetailModal` — useful for going straight on to add subtasks of
+its own. Used tags are promoted via `touchRecentTag()`.
+
+Task-line construction and note-line indentation stay owned by
+`taskParser.ts`: `serializeTaskBlock()` builds a brand-new top-level task's
+line plus its indented note lines as one array (appended to the file in a
+single write), and `addChildTaskLine()` takes an optional `notes` argument to
+do the same for a subtask relative to its parent.
 
 ## Date picker
 

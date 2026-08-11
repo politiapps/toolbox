@@ -26,6 +26,7 @@ import {
 	SortOrder,
 	parseTasks,
 	serializeTask,
+	serializeTaskBlock,
 	collectTags,
 	childIndentOf,
 	findTaskByRaw,
@@ -1197,15 +1198,15 @@ export class TasksView extends ItemView {
 			"Add task",
 			this.allTags,
 			null,
-			async (input) => {
-				await this.createTask(input);
+			async (input, notes) => {
+				await this.createTask(input, notes);
 			},
 			prefillTag,
 			{
 				label: "Add & open",
 				tooltip: "Create the task and open it to add notes and subtasks",
-				handler: async (input) => {
-					const task = await this.createTask(input);
+				handler: async (input, notes) => {
+					const task = await this.createTask(input, notes);
 					if (task) this.openDetail(task);
 				},
 			}
@@ -1213,28 +1214,38 @@ export class TasksView extends ItemView {
 	}
 
 	/**
-	 * Append a new top-level task, refresh, and return the freshly parsed Task
-	 * (located by its serialised line) so callers can open it for further editing.
+	 * Append a new top-level task (plus its note lines, when given), refresh,
+	 * and return the freshly parsed Task (located by its serialised line) so
+	 * callers can open it for further editing.
 	 */
-	private async createTask(input: TaskInput): Promise<Task | null> {
-		const line = serializeTask({
-			indent: "",
-			description: input.description,
-			tags: input.tags,
-			due: input.due,
-			priority: input.priority,
-			recurrence: input.recurrence,
-			completed: false,
-			doneDate: null,
-		});
-		await this.appendLine(line);
+	private async createTask(input: TaskInput, notes?: string): Promise<Task | null> {
+		const block = serializeTaskBlock(
+			{
+				indent: "",
+				description: input.description,
+				tags: input.tags,
+				due: input.due,
+				priority: input.priority,
+				recurrence: input.recurrence,
+				completed: false,
+				doneDate: null,
+			},
+			notes
+		);
+		const line = block[0];
+		await this.appendLine(block.join("\n"));
 		for (const tag of input.tags) touchRecentTag(this.plugin.settings, tag);
 		await this.plugin.saveSettings();
 		await this.refresh();
 		return this.reloadTask(line);
 	}
 
-	/** Open the full add form for a subtask, pre-tagged with the parent's project. */
+	/**
+	 * Open the full add form for a subtask, pre-tagged with the parent's project.
+	 * The secondary "Add & open" action creates it and opens its own detail modal
+	 * (`onDone` still fires first, so the parent modal's subtask list — if this
+	 * was opened from one — is already refreshed underneath).
+	 */
 	openAddSubtask(parent: Task, onDone?: () => void): void {
 		const prefill = parent.tags[0];
 		new TaskFormModal(
@@ -1242,16 +1253,26 @@ export class TasksView extends ItemView {
 			"Add subtask",
 			this.allTags,
 			null,
-			async (input) => {
-				await this.addSubtask(parent, input);
+			async (input, notes) => {
+				await this.addSubtask(parent, input, notes);
 				onDone?.();
 			},
-			prefill
+			prefill,
+			{
+				label: "Add & open",
+				tooltip: "Create the subtask and open it to add notes and subtasks",
+				handler: async (input, notes) => {
+					const task = await this.addSubtask(parent, input, notes);
+					onDone?.();
+					if (task) this.openDetail(task);
+				},
+			}
 		).open();
 	}
 
-	private openDetail(task: Task): void {
-		new TaskDetailModal(this, task).open();
+	/** Open a task's detail modal; `onCloseCallback` fires once it's closed. */
+	openDetail(task: Task, onCloseCallback?: () => void): void {
+		new TaskDetailModal(this, task, onCloseCallback).open();
 	}
 
 	/** Exposed so the detail modal can populate its tag dropdown. */
@@ -1365,7 +1386,13 @@ export class TasksView extends ItemView {
 		await this.refresh();
 	}
 
-	async addSubtask(parent: Task, input: TaskInput): Promise<void> {
+	/**
+	 * Add a subtask (plus its note lines, when given) under `parent`, refresh,
+	 * and return the freshly parsed Task so callers (e.g. "Add & open") can open
+	 * it for further editing.
+	 */
+	async addSubtask(parent: Task, input: TaskInput, notes?: string): Promise<Task | null> {
+		let createdLine: string | null = null;
 		await this.applyStructural(parent.raw, (lines, t) => {
 			const line = serializeTask({
 				indent: childIndentOf(t),
@@ -1377,11 +1404,13 @@ export class TasksView extends ItemView {
 				completed: false,
 				doneDate: null,
 			});
-			return addChildTaskLine(lines, t, line);
+			createdLine = line;
+			return addChildTaskLine(lines, t, line, notes);
 		});
 		for (const tag of input.tags) touchRecentTag(this.plugin.settings, tag);
 		await this.plugin.saveSettings();
 		await this.refresh();
+		return createdLine ? this.reloadTask(createdLine) : null;
 	}
 
 	/** Save edited fields and notes together in a single read/write. */
@@ -1630,7 +1659,7 @@ function buildRecurrenceSetting(
 interface FormSecondaryAction {
 	label: string;
 	tooltip?: string;
-	handler: (input: TaskInput) => Promise<void>;
+	handler: (input: TaskInput, notes: string) => Promise<void>;
 }
 
 class TaskFormModal extends Modal {
@@ -1638,7 +1667,7 @@ class TaskFormModal extends Modal {
 	private titleText: string;
 	private knownTags: string[];
 	private initial: TaskInput | null;
-	private onSubmit: (input: TaskInput) => Promise<void>;
+	private onSubmit: (input: TaskInput, notes: string) => Promise<void>;
 	private secondary: FormSecondaryAction | null;
 
 	private description = "";
@@ -1646,13 +1675,14 @@ class TaskFormModal extends Modal {
 	private due: string | null = null;
 	private priority: Priority = "normal";
 	private recurrence: string | null = null;
+	private notes = "";
 
 	constructor(
 		view: TasksView,
 		titleText: string,
 		knownTags: string[],
 		initial: TaskInput | null,
-		onSubmit: (input: TaskInput) => Promise<void>,
+		onSubmit: (input: TaskInput, notes: string) => Promise<void>,
 		prefillTag?: string,
 		secondary?: FormSecondaryAction
 	) {
@@ -1752,6 +1782,13 @@ class TaskFormModal extends Modal {
 			(rule) => (this.recurrence = rule)
 		);
 
+		contentEl.createEl("div", { cls: "tasks-detail-label", text: "Notes" });
+		const notesArea = contentEl.createEl("textarea", { cls: "tasks-notes-input" });
+		notesArea.value = this.notes;
+		notesArea.rows = 4;
+		notesArea.placeholder = "Add notes…";
+		notesArea.addEventListener("input", () => (this.notes = notesArea.value));
+
 		const buttons = new Setting(contentEl).addButton((btn) =>
 			btn
 				.setButtonText(this.initial ? "Save" : "Add task")
@@ -1790,7 +1827,7 @@ class TaskFormModal extends Modal {
 		const input = this.collectInput();
 		if (!input) return;
 		this.close();
-		await this.onSubmit(input);
+		await this.onSubmit(input, this.notes);
 	}
 
 	private async submitSecondary(): Promise<void> {
@@ -1798,7 +1835,7 @@ class TaskFormModal extends Modal {
 		const input = this.collectInput();
 		if (!input) return;
 		this.close();
-		await this.secondary.handler(input);
+		await this.secondary.handler(input, this.notes);
 	}
 
 	onClose(): void {
@@ -1813,6 +1850,7 @@ class TaskFormModal extends Modal {
 class TaskDetailModal extends Modal {
 	private view: TasksView;
 	private task: Task;
+	private onCloseCallback?: () => void;
 
 	private description: string;
 	private tag: string;
@@ -1821,10 +1859,11 @@ class TaskDetailModal extends Modal {
 	private recurrence: string | null;
 	private notes: string;
 
-	constructor(view: TasksView, task: Task) {
+	constructor(view: TasksView, task: Task, onCloseCallback?: () => void) {
 		super(view.app);
 		this.view = view;
 		this.task = task;
+		this.onCloseCallback = onCloseCallback;
 		this.description = task.description;
 		this.tag = task.tags[0] ?? "";
 		this.due = task.due;
@@ -1944,8 +1983,18 @@ class TaskDetailModal extends Modal {
 				await this.view.toggleTask(child);
 				await this.reload();
 			});
-			const span = row.createSpan({ cls: "tasks-detail-subtitle", text: child.description });
+			const span = row.createSpan({ cls: "tasks-detail-subtitle is-clickable", text: child.description });
 			if (child.completed) span.addClass("is-completed");
+			// Opens the subtask's own detail modal (on top of this one), same as
+			// clicking a task's description does in the main list — a subtask is
+			// still a task, so it gets the same notes/subtasks/edit surface. When
+			// it closes, this list re-reads so any change (due, priority, notes,
+			// its own subtasks) shows immediately underneath.
+			span.setAttr("aria-label", "Open subtask");
+			span.addEventListener("click", (e) => {
+				e.stopPropagation();
+				this.view.openDetail(child, () => this.reload());
+			});
 			// Same due badge / priority chip a top-level row shows, so a subtask's
 			// own schedule is visible without opening it — and matches the order
 			// `orderSubtasks` now lists them in (due date, then priority).
@@ -1987,5 +2036,6 @@ class TaskDetailModal extends Modal {
 
 	onClose(): void {
 		this.contentEl.empty();
+		this.onCloseCallback?.();
 	}
 }

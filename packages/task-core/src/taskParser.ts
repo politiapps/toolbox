@@ -262,10 +262,21 @@ export function setTaskNotes(lines: string[], task: Task, notes: string): string
 	return out;
 }
 
-/** Insert a serialised child line at the end of `parent`'s block. Pure. */
-export function addChildTaskLine(lines: string[], parent: Task, childLine: string): string[] {
+/** Note lines for `notes`, indented one level under a task whose own indent is `taskIndent`. */
+function noteLinesFor(taskIndent: string, notes: string): string[] {
+	if (!notes.trim()) return [];
+	const indent = taskIndent + "    ";
+	return notes.trim().split("\n").map((l) => indent + l.trim());
+}
+
+/**
+ * Insert a serialised child line — and, when given, its note lines indented
+ * one level deeper — at the end of `parent`'s block. Pure.
+ */
+export function addChildTaskLine(lines: string[], parent: Task, childLine: string, notes?: string): string[] {
 	const out = lines.slice();
-	out.splice(parent.blockEnd + 1, 0, childLine);
+	const noteLines = noteLinesFor(childIndentOf(parent), notes ?? "");
+	out.splice(parent.blockEnd + 1, 0, childLine, ...noteLines);
 	return out;
 }
 
@@ -346,6 +357,17 @@ export function serializeTask(task: TaskInput & { indent?: string }): string {
 	if (task.completed && task.doneDate) parts.push(`${DONE_EMOJI} ${task.doneDate}`);
 
 	return `${indent}- ${box} ${parts.filter((p) => p.length > 0).join(" ")}`;
+}
+
+/**
+ * Serialise a task line plus optional note lines under it (indented one level
+ * deeper than `input.indent`). Used to append a brand new task with notes to
+ * the file in a single write, mirroring what `addChildTaskLine`'s `notes`
+ * parameter does for a subtask.
+ */
+export function serializeTaskBlock(input: TaskInput & { indent?: string }, notes?: string): string[] {
+	const line = serializeTask(input);
+	return [line, ...noteLinesFor(input.indent ?? "", notes ?? "")];
 }
 
 /** Collect unique tags across tasks, preserving first-seen order. */

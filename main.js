@@ -4399,9 +4399,16 @@ function setTaskNotes(lines, task, notes) {
   }
   return out;
 }
-function addChildTaskLine(lines, parent, childLine) {
+function noteLinesFor(taskIndent, notes) {
+  if (!notes.trim())
+    return [];
+  const indent = taskIndent + "    ";
+  return notes.trim().split("\n").map((l) => indent + l.trim());
+}
+function addChildTaskLine(lines, parent, childLine, notes) {
   const out = lines.slice();
-  out.splice(parent.blockEnd + 1, 0, childLine);
+  const noteLines = noteLinesFor(childIndentOf(parent), notes != null ? notes : "");
+  out.splice(parent.blockEnd + 1, 0, childLine, ...noteLines);
   return out;
 }
 function insertTaskLineBefore(lines, task, line) {
@@ -4452,6 +4459,11 @@ function serializeTask(task) {
   if (task.completed && task.doneDate)
     parts.push(`${DONE_EMOJI} ${task.doneDate}`);
   return `${indent}- ${box} ${parts.filter((p) => p.length > 0).join(" ")}`;
+}
+function serializeTaskBlock(input, notes) {
+  var _a;
+  const line = serializeTask(input);
+  return [line, ...noteLinesFor((_a = input.indent) != null ? _a : "", notes != null ? notes : "")];
 }
 function collectTags(tasks) {
   const seen = /* @__PURE__ */ new Set();
@@ -6647,15 +6659,15 @@ var TasksView = class extends import_obsidian4.ItemView {
       "Add task",
       this.allTags,
       null,
-      async (input) => {
-        await this.createTask(input);
+      async (input, notes) => {
+        await this.createTask(input, notes);
       },
       prefillTag,
       {
         label: "Add & open",
         tooltip: "Create the task and open it to add notes and subtasks",
-        handler: async (input) => {
-          const task = await this.createTask(input);
+        handler: async (input, notes) => {
+          const task = await this.createTask(input, notes);
           if (task)
             this.openDetail(task);
         }
@@ -6663,28 +6675,38 @@ var TasksView = class extends import_obsidian4.ItemView {
     ).open();
   }
   /**
-   * Append a new top-level task, refresh, and return the freshly parsed Task
-   * (located by its serialised line) so callers can open it for further editing.
+   * Append a new top-level task (plus its note lines, when given), refresh,
+   * and return the freshly parsed Task (located by its serialised line) so
+   * callers can open it for further editing.
    */
-  async createTask(input) {
-    const line = serializeTask({
-      indent: "",
-      description: input.description,
-      tags: input.tags,
-      due: input.due,
-      priority: input.priority,
-      recurrence: input.recurrence,
-      completed: false,
-      doneDate: null
-    });
-    await this.appendLine(line);
+  async createTask(input, notes) {
+    const block = serializeTaskBlock(
+      {
+        indent: "",
+        description: input.description,
+        tags: input.tags,
+        due: input.due,
+        priority: input.priority,
+        recurrence: input.recurrence,
+        completed: false,
+        doneDate: null
+      },
+      notes
+    );
+    const line = block[0];
+    await this.appendLine(block.join("\n"));
     for (const tag of input.tags)
       touchRecentTag(this.plugin.settings, tag);
     await this.plugin.saveSettings();
     await this.refresh();
     return this.reloadTask(line);
   }
-  /** Open the full add form for a subtask, pre-tagged with the parent's project. */
+  /**
+   * Open the full add form for a subtask, pre-tagged with the parent's project.
+   * The secondary "Add & open" action creates it and opens its own detail modal
+   * (`onDone` still fires first, so the parent modal's subtask list — if this
+   * was opened from one — is already refreshed underneath).
+   */
   openAddSubtask(parent, onDone) {
     const prefill = parent.tags[0];
     new TaskFormModal(
@@ -6692,15 +6714,26 @@ var TasksView = class extends import_obsidian4.ItemView {
       "Add subtask",
       this.allTags,
       null,
-      async (input) => {
-        await this.addSubtask(parent, input);
+      async (input, notes) => {
+        await this.addSubtask(parent, input, notes);
         onDone == null ? void 0 : onDone();
       },
-      prefill
+      prefill,
+      {
+        label: "Add & open",
+        tooltip: "Create the subtask and open it to add notes and subtasks",
+        handler: async (input, notes) => {
+          const task = await this.addSubtask(parent, input, notes);
+          onDone == null ? void 0 : onDone();
+          if (task)
+            this.openDetail(task);
+        }
+      }
     ).open();
   }
-  openDetail(task) {
-    new TaskDetailModal(this, task).open();
+  /** Open a task's detail modal; `onCloseCallback` fires once it's closed. */
+  openDetail(task, onCloseCallback) {
+    new TaskDetailModal(this, task, onCloseCallback).open();
   }
   /** Exposed so the detail modal can populate its tag dropdown. */
   knownTagList() {
@@ -6798,7 +6831,13 @@ var TasksView = class extends import_obsidian4.ItemView {
     await this.applyStructural(task.raw, (lines, t) => setTaskNotes(lines, t, notes));
     await this.refresh();
   }
-  async addSubtask(parent, input) {
+  /**
+   * Add a subtask (plus its note lines, when given) under `parent`, refresh,
+   * and return the freshly parsed Task so callers (e.g. "Add & open") can open
+   * it for further editing.
+   */
+  async addSubtask(parent, input, notes) {
+    let createdLine = null;
     await this.applyStructural(parent.raw, (lines, t) => {
       const line = serializeTask({
         indent: childIndentOf(t),
@@ -6810,12 +6849,14 @@ var TasksView = class extends import_obsidian4.ItemView {
         completed: false,
         doneDate: null
       });
-      return addChildTaskLine(lines, t, line);
+      createdLine = line;
+      return addChildTaskLine(lines, t, line, notes);
     });
     for (const tag of input.tags)
       touchRecentTag(this.plugin.settings, tag);
     await this.plugin.saveSettings();
     await this.refresh();
+    return createdLine ? this.reloadTask(createdLine) : null;
   }
   /** Save edited fields and notes together in a single read/write. */
   async saveTaskDetail(task, input, notes) {
@@ -7009,6 +7050,7 @@ var TaskFormModal = class extends import_obsidian4.Modal {
     this.due = null;
     this.priority = "normal";
     this.recurrence = null;
+    this.notes = "";
     this.view = view;
     this.titleText = titleText;
     this.knownTags = knownTags;
@@ -7094,6 +7136,12 @@ var TaskFormModal = class extends import_obsidian4.Modal {
       () => this.due,
       (rule) => this.recurrence = rule
     );
+    contentEl.createEl("div", { cls: "tasks-detail-label", text: "Notes" });
+    const notesArea = contentEl.createEl("textarea", { cls: "tasks-notes-input" });
+    notesArea.value = this.notes;
+    notesArea.rows = 4;
+    notesArea.placeholder = "Add notes\u2026";
+    notesArea.addEventListener("input", () => this.notes = notesArea.value);
     const buttons = new import_obsidian4.Setting(contentEl).addButton(
       (btn) => btn.setButtonText(this.initial ? "Save" : "Add task").setCta().onClick(() => this.submit())
     );
@@ -7129,7 +7177,7 @@ var TaskFormModal = class extends import_obsidian4.Modal {
     if (!input)
       return;
     this.close();
-    await this.onSubmit(input);
+    await this.onSubmit(input, this.notes);
   }
   async submitSecondary() {
     if (!this.secondary)
@@ -7138,18 +7186,19 @@ var TaskFormModal = class extends import_obsidian4.Modal {
     if (!input)
       return;
     this.close();
-    await this.secondary.handler(input);
+    await this.secondary.handler(input, this.notes);
   }
   onClose() {
     this.contentEl.empty();
   }
 };
 var TaskDetailModal = class extends import_obsidian4.Modal {
-  constructor(view, task) {
+  constructor(view, task, onCloseCallback) {
     var _a;
     super(view.app);
     this.view = view;
     this.task = task;
+    this.onCloseCallback = onCloseCallback;
     this.description = task.description;
     this.tag = (_a = task.tags[0]) != null ? _a : "";
     this.due = task.due;
@@ -7257,9 +7306,14 @@ var TaskDetailModal = class extends import_obsidian4.Modal {
         await this.view.toggleTask(child);
         await this.reload();
       });
-      const span = row.createSpan({ cls: "tasks-detail-subtitle", text: child.description });
+      const span = row.createSpan({ cls: "tasks-detail-subtitle is-clickable", text: child.description });
       if (child.completed)
         span.addClass("is-completed");
+      span.setAttr("aria-label", "Open subtask");
+      span.addEventListener("click", (e) => {
+        e.stopPropagation();
+        this.view.openDetail(child, () => this.reload());
+      });
       renderDueSlot(row, child);
       renderPriorityChip(row, child.priority);
     }
@@ -7297,7 +7351,9 @@ var TaskDetailModal = class extends import_obsidian4.Modal {
     );
   }
   onClose() {
+    var _a;
     this.contentEl.empty();
+    (_a = this.onCloseCallback) == null ? void 0 : _a.call(this);
   }
 };
 
