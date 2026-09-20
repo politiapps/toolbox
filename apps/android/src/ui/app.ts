@@ -12,7 +12,7 @@ import {
 	VIEW_TODAY,
 	VIEW_WEEK,
 } from "@toolbox/task-core";
-import { el } from "./dom";
+import { el, openModal } from "./dom";
 import { setIcon, iconButton } from "./icons";
 import { todayISO, formatDueDisplay, sectionAccent, dueWithin } from "../dates";
 import {
@@ -40,7 +40,7 @@ type Screen = "list" | "settings";
 export class App {
 	private ctx: AppContext;
 	private screen: Screen = "list";
-	private shoppingCleanup?: () => void;
+	private shoppingCleanup?: ReturnType<typeof mountShopping>;
 	private renderVersion = 0;
 	/** True once a vault data.json was read this session (it wins over auto/manual). */
 	private vaultConfigFound = false;
@@ -279,7 +279,11 @@ export class App {
 			this.shoppingCleanup = mountShopping(screen, new ShoppingStore(
 				() => this.storage.readFile(vault, SHOPPING_PATH),
 				text => this.storage.writeFile(vault, SHOPPING_PATH, text)
-			));
+			), {
+				platform: "android", openModal,
+				collapseState: this.settings.collapseState,
+				persist: () => this.ctx.persist(),
+			});
 			this.root.append(screen);
 			return;
 		}
@@ -461,7 +465,7 @@ export class App {
 		const addBtn = el("button", { cls: "app-add", attrs: { "aria-label": shopping ? "Add shopping item" : "Add task" } });
 		setIcon(addBtn, "plus");
 		addBtn.addEventListener("click", () => {
-			if (shopping) this.root.querySelector<HTMLInputElement>(".toolbox-shopping form input")?.focus();
+			if (shopping) this.shoppingCleanup?.openAdd();
 			else openAddTask(this.ctx);
 		});
 		actions.append(settingsBtn, addBtn);

@@ -5591,20 +5591,25 @@ function touchRecentTag(settings, tag) {
 
 // packages/shopping-ui/panel.ts
 var css = `
-.toolbox-shopping{font:inherit;color:var(--text-normal,var(--text,inherit));max-width:780px;margin:auto;padding:16px;box-sizing:border-box}
-.toolbox-shopping *{box-sizing:border-box}.toolbox-shopping h2{margin:0 0 8px}.toolbox-shopping p{opacity:.8}
-.toolbox-shopping button,.toolbox-shopping input,.toolbox-shopping select{font:inherit;min-height:44px;border:1px solid var(--background-modifier-border,var(--border,#8886));border-radius:8px;padding:8px;background:var(--background-primary,var(--bg-elev,#fff));color:var(--text-normal,var(--text,#222));max-width:100%}
-.toolbox-shopping button{cursor:pointer}.toolbox-shopping button:disabled{opacity:.5;cursor:default}
-.toolbox-shopping :focus-visible{outline:2px solid var(--interactive-accent,var(--accent,#6577dd));outline-offset:2px}
-.toolbox-shopping .shop-toolbar{display:flex;gap:8px;flex-wrap:wrap;margin:12px 0}.toolbox-shopping [aria-pressed=true]{background:var(--interactive-accent,var(--accent,#5968bf));color:var(--text-on-accent,#fff)}
-.toolbox-shopping form{display:grid;grid-template-columns:1fr 1fr;gap:10px;padding:12px;background:var(--background-secondary,var(--bg-elev-2,#8881));border-radius:12px}
-.toolbox-shopping label{display:flex;flex-direction:column;gap:4px;min-width:0}.toolbox-shopping label:first-child{grid-column:1/-1}
-.toolbox-shopping .shop-row{display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid var(--background-modifier-border,var(--border,#8884))}
-.toolbox-shopping .shop-row label{flex:1;display:flex;flex-direction:row;align-items:center;overflow-wrap:anywhere}.toolbox-shopping .shop-row input{flex:none;width:24px;height:24px}
-.toolbox-shopping .shop-row small{display:block;opacity:.7}.toolbox-shopping .shop-checked .shop-name{text-decoration:line-through;opacity:.65}
-.toolbox-shopping .shop-status{min-height:24px}.toolbox-shopping .shop-error{color:var(--text-error,var(--danger,#c43939))}
-.toolbox-shopping h3{margin:24px 0 4px;font-size:1.1em}.toolbox-shopping h4{margin:14px 0 0;opacity:.7;font-size:.9em}
-@media(max-width:380px){.toolbox-shopping form{grid-template-columns:1fr}.toolbox-shopping{padding:8px}.toolbox-shopping .shop-row{flex-wrap:wrap}}
+.toolbox-shopping{font:inherit;color:var(--text-normal,var(--text));min-width:0}
+.shop-toolbar{display:flex;align-items:center;gap:8px;margin:8px 0;flex-wrap:wrap}
+.shop-toolbar select{max-width:50%;font:inherit;font-size:.8rem}
+.shop-status{font-size:.8rem;color:var(--text-muted);margin:8px 0}.shop-status:empty{display:none}
+.shop-error{color:var(--text-error,var(--danger))!important}
+.shop-section-toggle{display:flex!important;align-items:center;gap:7px;flex:1;min-width:0;text-align:left;background:none!important;border:0!important;box-shadow:none!important;padding:0!important;color:inherit!important;height:auto!important;font:inherit}
+.shop-section-toggle svg{width:14px;height:14px;flex:none}.shop-section-toggle[aria-expanded=false] svg{transform:rotate(-90deg)}
+.shop-section-toggle span:first-of-type{overflow-wrap:anywhere}
+.shop-title{background:none!important;border:0!important;box-shadow:none!important;padding:0!important;height:auto!important;text-align:left;cursor:pointer;font-family:inherit;font-weight:inherit;color:var(--text-normal,var(--text));display:block;max-width:100%}
+.shop-title.task-title{font-size:inherit}
+.shop-title:focus-visible,.shop-section-toggle:focus-visible{outline:2px solid var(--interactive-accent,var(--accent));outline-offset:2px}
+.shop-quantity{font-size:.75rem;color:var(--text-muted);white-space:pre-wrap;overflow-wrap:anywhere}
+.shop-dialog form{display:flex;flex-direction:column;gap:12px}.shop-dialog label{display:flex;flex-direction:column;gap:6px;font-size:.85rem}
+.shop-dialog input{width:100%;font:inherit}.shop-dialog .shop-buttons{display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap;margin-top:16px}
+.shop-dialog .shop-hint{font-size:.8rem;color:var(--text-muted)}
+.shop-dialog .shop-staples{max-height:55vh;overflow:auto}.shop-staple-row{display:flex;align-items:center;gap:8px}.shop-staple-row>div{flex:1;min-width:0}
+.shop-aisle{margin:10px 0 4px;padding:0 10px;font-size:.7rem;color:var(--text-muted);text-transform:uppercase;letter-spacing:.05em}
+.toolbox-shopping .shop-actions{align-self:center}.toolbox-shopping .shop-section-add{opacity:1}
+@media(pointer:coarse){.toolbox-shopping .shop-actions{opacity:1}.toolbox-shopping .shop-actions button,.shop-dialog .shop-icon{min-width:44px;min-height:44px}.shop-section-toggle{min-height:44px}}
 `;
 function node(tag, text, cls) {
   const el = document.createElement(tag);
@@ -5614,78 +5619,126 @@ function node(tag, text, cls) {
     el.className = cls;
   return el;
 }
-function mountShopping(root, store) {
+function icon(button, kind) {
+  const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+  svg.setAttribute("viewBox", "0 0 24 24");
+  svg.setAttribute("fill", "none");
+  svg.setAttribute("stroke", "currentColor");
+  svg.setAttribute("stroke-width", "2");
+  svg.setAttribute("aria-hidden", "true");
+  const path = document.createElementNS(svg.namespaceURI, "path");
+  path.setAttribute(
+    "d",
+    {
+      plus: "M12 5v14M5 12h14",
+      edit: "m16 3 5 5-12 12-6 1 1-6Z M14 5l5 5",
+      refresh: "M20 7v5h-5M4 17v-5h5M5 8a8 8 0 0 1 13-3l2 3M4 16l2 3a8 8 0 0 0 13-3",
+      chevron: "m6 9 6 6 6-6"
+    }[kind]
+  );
+  svg.append(path);
+  button.append(svg);
+}
+function mountShopping(root, store, ui) {
+  const desktop = ui.platform === "obsidian";
+  const cls = {
+    section: desktop ? "tasks-section" : "section",
+    head: desktop ? "tasks-section-header" : "section-head",
+    sectionTitle: desktop ? "tasks-section-title" : "section-name",
+    count: desktop ? "tasks-count-badge" : "section-count",
+    body: desktop ? "tasks-section-body" : "section-body",
+    row: desktop ? "tasks-row" : "task-row",
+    checkbox: desktop ? "tasks-checkbox" : "task-checkbox",
+    main: desktop ? "tasks-row-main" : "task-main",
+    title: desktop ? "tasks-desc" : "task-title",
+    meta: desktop ? "tasks-meta" : "task-meta",
+    tag: desktop ? "tasks-tag-pill" : "task-tag",
+    actions: desktop ? "tasks-actions" : "task-actions",
+    icon: desktop ? "tasks-icon-button" : "icon-button",
+    empty: desktop ? "tasks-empty" : "empty-note",
+    button: desktop ? "tasks-view-chip" : "view-chip",
+    primary: desktop ? "mod-cta" : "btn btn-cta"
+  };
   const host = node("section", void 0, "toolbox-shopping");
-  const style = node("style", css);
-  host.append(style);
+  host.append(node("style", css));
   root.append(host);
-  const title = node("h2", "Shopping list");
-  const status = node("div", "", "shop-status");
-  status.setAttribute("role", "status");
-  status.setAttribute("aria-live", "polite");
   const toolbar = node("div", void 0, "shop-toolbar");
+  const status = node("div", void 0, "shop-status");
+  status.setAttribute("role", "status");
   const content = node("div");
+  host.append(toolbar, status, content);
   let data = { version: 1, items: [] };
   let busy = false;
   let disposed = false;
-  let tab = "list";
   let filter = "";
-  let editing;
-  const form = node("form");
-  const field = (label, placeholder) => {
-    const wrap = node("label", label);
-    const input = node("input");
-    input.placeholder = placeholder;
-    wrap.append(input);
-    form.append(wrap);
-    return input;
+  let dialog;
+  let dialogError;
+  let dialogRoot;
+  const button = (parent, text, action, className = cls.button) => {
+    const b = node("button", text, className);
+    b.type = "button";
+    b.onclick = action;
+    parent.append(b);
+    return b;
   };
-  const name = field("Item", "e.g. frozen peas");
-  name.required = true;
-  const quantity = field("Quantity / note", "e.g. 2 bags");
-  const shop = field("Store", "Automatic (Grocery or Hardware store)");
-  const category = field("Category", "Automatic");
-  const uid = "shop-" + Math.random().toString(36).slice(2);
-  const shops = node("datalist");
-  shops.id = uid + "-stores";
-  shop.setAttribute("list", shops.id);
-  const categories = node("datalist");
-  categories.id = uid + "-categories";
-  category.setAttribute("list", categories.id);
-  const submit = node("button", "Add item");
-  submit.type = "submit";
-  const cancel = node("button", "Cancel edit");
-  cancel.type = "button";
-  cancel.hidden = true;
-  form.append(shops, categories, submit, cancel);
-  const clearForm = () => {
-    editing = void 0;
-    form.reset();
-    submit.textContent = "Add item";
-    cancel.hidden = true;
+  const iconButton = (parent, label, kind, action) => {
+    const b = button(parent, "", action, cls.icon + " shop-icon");
+    b.setAttribute("aria-label", label);
+    b.title = label;
+    icon(b, kind);
+    return b;
   };
-  cancel.onclick = clearForm;
-  host.append(
-    title,
-    node(
-      "p",
-      "Grouped by store and aisle. Choose a category to override automatic sorting."
-    ),
-    form,
-    toolbar,
-    status,
-    content
-  );
-  const error2 = (e) => {
-    status.textContent = e instanceof Error ? e.message : String(e);
+  function showDialog(title, render2) {
+    var _a;
+    if (busy || disposed)
+      return;
+    dialog == null ? void 0 : dialog.close();
+    const returnLabel = (_a = document.activeElement) == null ? void 0 : _a.getAttribute("aria-label");
+    dialog = ui.openModal((container, hostClose) => {
+      const close = () => {
+        var _a2;
+        hostClose();
+        const target = returnLabel ? Array.from(root.querySelectorAll("button")).find(
+          (b) => b.getAttribute("aria-label") === returnLabel
+        ) : void 0;
+        (_a2 = target != null ? target : root.querySelector(
+          '[aria-label="Add shopping item"]'
+        )) == null ? void 0 : _a2.focus();
+      };
+      const body = node("div", void 0, "shop-dialog");
+      body.append(node("style", css), node("h3", title, "modal-title"));
+      dialogRoot = body;
+      dialogError = node("div", void 0, "shop-status shop-error");
+      dialogError.setAttribute("role", "alert");
+      container.append(body);
+      body.append(dialogError);
+      render2(body, close);
+    });
+  }
+  function error2(e) {
+    const message = e instanceof Error ? e.message : String(e);
+    status.textContent = message;
     status.classList.add("shop-error");
-  };
+    if (dialogError == null ? void 0 : dialogError.isConnected)
+      dialogError.textContent = message;
+  }
   async function run(work, after) {
+    var _a;
     if (busy || disposed)
       return;
     busy = true;
     host.setAttribute("aria-busy", "true");
-    host.querySelectorAll("button").forEach((b) => b.disabled = true);
+    const controls = [
+      ...Array.from(
+        host.querySelectorAll("button,input,select")
+      ),
+      ...Array.from(
+        (_a = dialogRoot == null ? void 0 : dialogRoot.querySelectorAll(
+          "button,input"
+        )) != null ? _a : []
+      )
+    ];
+    controls.forEach((b) => b.disabled = true);
     try {
       const result = await work();
       if (disposed)
@@ -5693,93 +5746,323 @@ function mountShopping(root, store) {
       data = result;
       status.classList.remove("shop-error");
       status.textContent = "";
-      after == null ? void 0 : after();
+      if (dialogError)
+        dialogError.textContent = "";
       render();
+      after == null ? void 0 : after();
     } catch (e) {
       if (!disposed)
         error2(e);
     } finally {
       busy = false;
       host.removeAttribute("aria-busy");
-      host.querySelectorAll("button").forEach((b) => b.disabled = false);
+      controls.forEach((b) => b.disabled = false);
     }
   }
   function current(d, item) {
     const fresh = d.items.find((i) => i.id === item.id);
     if (!fresh || JSON.stringify(fresh) !== JSON.stringify(item))
-      throw new Error("This item changed. Refresh before trying again.");
+      throw new Error(
+        "This item changed. Close this dialog, refresh, and try again."
+      );
     return fresh;
   }
-  form.onsubmit = (e) => {
-    e.preventDefault();
-    const input = {
-      name: name.value,
-      quantity: quantity.value,
-      store: shop.value,
-      category: category.value
-    };
-    const original = editing;
-    void run(
-      () => store.mutate((d) => {
+  function editItem(original, prefillStore = filter) {
+    showDialog(
+      original ? "Edit shopping item" : "Add shopping item",
+      (body, close) => {
+        var _a, _b, _c, _d;
+        const form = node("form");
+        body.append(form);
+        const field = (label, value, placeholder = "") => {
+          const wrap = node("label", label, "form-field");
+          const input = node("input", void 0, "form-input");
+          input.value = value;
+          input.placeholder = placeholder;
+          wrap.append(input);
+          form.append(wrap);
+          return input;
+        };
+        const name = field("Item", (_a = original == null ? void 0 : original.name) != null ? _a : "", "e.g. frozen peas");
+        name.required = true;
+        const quantity = field(
+          "Quantity / note",
+          (_b = original == null ? void 0 : original.quantity) != null ? _b : "",
+          "e.g. 2 bags"
+        );
+        const shop = field(
+          "Store",
+          (_c = original == null ? void 0 : original.store) != null ? _c : prefillStore,
+          "Automatic"
+        );
+        const category = field(
+          "Category",
+          (_d = original == null ? void 0 : original.category) != null ? _d : "",
+          "Automatic"
+        );
+        for (const [input, values2] of [
+          [shop, [...SHOPPING_STORES, ...data.items.map((i) => i.store)]],
+          [
+            category,
+            [...SHOPPING_CATEGORIES, ...data.items.map((i) => i.category)]
+          ]
+        ]) {
+          const list = node("datalist");
+          list.id = "shop-" + crypto.randomUUID();
+          input.setAttribute("list", list.id);
+          for (const value of new Set(values2)) {
+            const o = node("option");
+            o.value = value;
+            list.append(o);
+          }
+          form.append(list);
+        }
+        form.append(
+          node(
+            "p",
+            "Leave store and category blank for automatic grouping.",
+            "shop-hint"
+          )
+        );
+        const buttons = node("div", void 0, "shop-buttons modal-buttons");
         if (original) {
-          const item = current(d, original);
-          const temp = { version: 1, items: [] };
-          addShoppingItem(temp, input, item.id);
-          const next = temp.items[0];
-          if (d.items.some(
-            (i) => i.id !== item.id && i.name.toLowerCase() === next.name.toLowerCase() && i.store.toLowerCase() === next.store.toLowerCase()
-          ))
-            throw new Error("That item already exists for this store.");
-          Object.assign(item, {
-            name: next.name,
-            store: next.store,
-            category: next.category,
-            quantity: next.quantity
+          const remove = button(buttons, "Remove from list", () => {
+            if (remove.textContent !== "Confirm remove") {
+              remove.textContent = "Confirm remove";
+              return;
+            }
+            void run(
+              () => store.mutate((d) => {
+                const item = current(d, original);
+                item.active = false;
+                item.checked = false;
+              }),
+              close
+            );
           });
-        } else
-          addShoppingItem(d, input, crypto.randomUUID());
-      }),
-      () => {
-        clearForm();
+        }
+        button(buttons, "Cancel", close);
+        const save = button(
+          buttons,
+          original ? "Save item" : "Add item",
+          () => {
+          },
+          cls.primary
+        );
+        save.type = "submit";
+        form.append(buttons);
+        form.onsubmit = (e) => {
+          e.preventDefault();
+          const input = {
+            name: name.value,
+            quantity: quantity.value,
+            store: shop.value,
+            category: category.value
+          };
+          void run(
+            () => store.mutate((d) => {
+              if (!original) {
+                addShoppingItem(d, input, crypto.randomUUID());
+                return;
+              }
+              const item = current(d, original);
+              const temp = { version: 1, items: [] };
+              addShoppingItem(temp, input, item.id);
+              const next = temp.items[0];
+              if (d.items.some(
+                (i) => i.id !== item.id && i.name.toLowerCase() === next.name.toLowerCase() && i.store.toLowerCase() === next.store.toLowerCase()
+              ))
+                throw new Error("That item already exists for this store.");
+              Object.assign(item, {
+                name: next.name,
+                quantity: next.quantity,
+                store: next.store,
+                category: next.category
+              });
+            }),
+            close
+          );
+        };
         name.focus();
       }
     );
-  };
-  function button(parent, text, action) {
-    const b = node("button", text);
-    b.type = "button";
-    b.onclick = action;
-    parent.append(b);
-    return b;
+  }
+  function openStaples() {
+    showDialog("Staples", (body, close) => {
+      body.append(
+        node(
+          "p",
+          "Previously listed items, most frequently added first.",
+          "shop-hint"
+        )
+      );
+      const search = node("input", void 0, "form-input");
+      search.type = "search";
+      search.placeholder = "Find a staple";
+      search.setAttribute("aria-label", "Find a staple");
+      body.append(search);
+      const list = node("div", void 0, "shop-staples");
+      body.append(list);
+      const renderStaples = () => {
+        list.replaceChildren();
+        const items = shoppingStaples(data).filter(
+          (i) => (!filter || i.store === filter) && `${i.name} ${i.store} ${i.category}`.toLowerCase().includes(search.value.toLowerCase())
+        );
+        if (!items.length)
+          list.append(
+            node(
+              "p",
+              "No matching staples. Removed and finished items appear here.",
+              cls.empty
+            )
+          );
+        for (const item of items) {
+          const row = node("div", void 0, cls.row + " shop-staple-row");
+          const main = node("div");
+          main.append(
+            node("span", item.name, cls.title),
+            node(
+              "div",
+              `${item.store} \xB7 ${item.category} \xB7 Added ${item.frequency} times`,
+              "shop-hint"
+            )
+          );
+          row.append(main);
+          iconButton(
+            row,
+            `Add ${item.name} again`,
+            "plus",
+            () => void run(
+              () => store.mutate((d) => {
+                current(d, item);
+                addShoppingItem(d, item, crypto.randomUUID());
+              }),
+              () => {
+                renderStaples();
+                search.focus();
+              }
+            )
+          );
+          list.append(row);
+        }
+      };
+      search.oninput = renderStaples;
+      renderStaples();
+      button(body, "Done", close);
+      search.focus();
+    });
+  }
+  function renderRow(parent, item) {
+    const row = node(
+      "div",
+      void 0,
+      cls.row + (item.checked ? " is-completed" : "")
+    );
+    row.append(
+      node("span", void 0, desktop ? "tasks-twisty" : "twisty-spacer")
+    );
+    const check = node("input", void 0, cls.checkbox);
+    check.type = "checkbox";
+    check.checked = item.checked;
+    check.setAttribute("aria-label", `Purchased ${item.name}`);
+    check.onchange = () => {
+      const checked = check.checked;
+      check.checked = item.checked;
+      void run(
+        () => store.mutate((d) => {
+          current(d, item).checked = checked;
+        })
+      );
+    };
+    row.append(check);
+    const main = node("div", void 0, cls.main);
+    const title = button(
+      main,
+      item.name,
+      () => editItem(item),
+      cls.title + " shop-title"
+    );
+    title.setAttribute("aria-label", `Edit ${item.name}`);
+    const meta = node("div", void 0, cls.meta);
+    if (item.quantity)
+      meta.append(node("span", item.quantity, "shop-quantity"));
+    if (item.checked)
+      meta.append(
+        node("span", item.store, cls.tag),
+        node("span", item.category, cls.tag)
+      );
+    main.append(meta);
+    row.append(main);
+    const actions = node("div", void 0, cls.actions + " shop-actions");
+    iconButton(actions, `Edit ${item.name}`, "edit", () => editItem(item));
+    row.append(actions);
+    parent.append(row);
+  }
+  function renderSection(title, items, purchased = false) {
+    var _a;
+    const id = purchased ? "shopping:purchased" : "shopping:store:" + title;
+    const collapsed = (_a = ui.collapseState[id]) != null ? _a : purchased;
+    const section = node(
+      "div",
+      void 0,
+      cls.section + (purchased ? desktop ? " tasks-section-completed" : " section-completed" : "")
+    );
+    section.style.setProperty("--section-accent", sectionAccent(id));
+    const header = node("div", void 0, cls.head);
+    const toggle = button(
+      header,
+      "",
+      () => {
+        ui.collapseState[id] = !collapsed;
+        void ui.persist().catch(error2);
+        render();
+      },
+      "shop-section-toggle"
+    );
+    toggle.setAttribute("aria-expanded", String(!collapsed));
+    icon(toggle, "chevron");
+    toggle.append(
+      node("span", title, cls.sectionTitle),
+      node("span", String(items.length), cls.count)
+    );
+    if (!purchased) {
+      const add = iconButton(
+        header,
+        `Add item to ${title}`,
+        "plus",
+        () => editItem(void 0, title)
+      );
+      add.classList.add("shop-section-add");
+    }
+    section.append(header);
+    if (!collapsed) {
+      const body = node("div", void 0, cls.body);
+      let category = "";
+      for (const item of items) {
+        if (!purchased && category !== item.category) {
+          body.append(
+            node(
+              "div",
+              item.category,
+              desktop ? "tasks-due-group shop-aisle" : "due-group shop-aisle"
+            )
+          );
+          category = item.category;
+        }
+        renderRow(body, item);
+      }
+      section.append(body);
+    }
+    content.append(section);
   }
   function render() {
     toolbar.replaceChildren();
     content.replaceChildren();
-    const opts = (list, values2) => {
-      list.replaceChildren();
-      for (const value of new Set(values2)) {
-        const o = node("option");
-        o.value = value;
-        list.append(o);
-      }
-    };
-    opts(shops, [...SHOPPING_STORES, ...data.items.map((i) => i.store)]);
-    opts(categories, [
-      ...SHOPPING_CATEGORIES,
-      ...data.items.map((i) => i.category)
-    ]);
-    for (const [value, label] of [
-      ["list", "List"],
-      ["staples", "Staples"]
-    ]) {
-      const b = button(toolbar, label, () => {
-        tab = value;
-        render();
-      });
-      b.setAttribute("aria-pressed", String(tab === value));
-    }
-    button(toolbar, "Refresh", () => void run(() => store.load()));
-    const select = node("select");
+    const select = node(
+      "select",
+      void 0,
+      desktop ? "dropdown" : "form-input"
+    );
     select.setAttribute("aria-label", "Filter by store");
     for (const value of [
       "",
@@ -5789,123 +6072,68 @@ function mountShopping(root, store) {
       o.value = value;
       select.append(o);
     }
+    if (filter && !data.items.some((i) => i.store === filter))
+      filter = "";
     select.value = filter;
     select.onchange = () => {
       filter = select.value;
       render();
     };
     toolbar.append(select);
-    const source = tab === "list" ? sortedShoppingItems(data) : shoppingStaples(data);
-    const items = source.filter((i) => !filter || i.store === filter);
-    if (tab === "list") {
-      const checked = items.filter((i) => i.checked);
-      if (checked.length)
-        button(
-          toolbar,
-          `Finish purchased (${checked.length})`,
-          () => void run(
-            () => store.mutate((d) => {
-              for (const item of checked) {
-                const fresh = current(d, item);
-                fresh.active = false;
-                fresh.checked = false;
-              }
-            })
-          )
-        );
-      status.textContent = `${items.filter((i) => !i.checked).length} items remaining`;
-    } else
-      status.textContent = "Previously listed items, most frequently added first. Items already on your list are hidden.";
-    if (!items.length)
-      content.append(
-        node(
-          "p",
-          tab === "list" ? "Your list is empty. Add an item above or choose Staples." : "No staples yet. Finish purchased items to make them available here."
-        )
-      );
-    let lastGroup = "";
-    for (const item of items) {
-      const group = `${item.checked ? "Purchased" : item.store} / ${item.category}`;
-      if (tab === "list" && group !== lastGroup) {
-        content.append(node("h3", group));
-        lastGroup = group;
-      }
-      const row = node(
-        "div",
-        void 0,
-        "shop-row" + (item.checked ? " shop-checked" : "")
-      );
-      const label = node("label");
-      const text = node("span", void 0, "shop-name");
-      text.append(
-        node("span", item.name + (item.quantity ? ` \xB7 ${item.quantity}` : ""))
-      );
-      if (tab === "list") {
-        const check = node("input");
-        check.type = "checkbox";
-        check.checked = item.checked;
-        check.setAttribute("aria-label", `Purchased ${item.name}`);
-        check.onchange = () => {
-          const checked = check.checked;
-          check.checked = item.checked;
-          void run(
-            () => store.mutate((d) => {
-              current(d, item).checked = checked;
-            })
-          );
-        };
-        label.append(check);
-      }
-      text.append(
-        node(
-          "small",
-          tab === "staples" ? `${item.store} \xB7 ${item.category} \xB7 Added ${item.frequency} times` : item.store
-        )
-      );
-      label.append(text);
-      row.append(label);
-      if (tab === "staples")
-        button(
-          row,
-          "Add again",
-          () => void run(
-            () => store.mutate((d) => {
-              current(d, item);
-              addShoppingItem(d, item, crypto.randomUUID());
-            })
-          )
-        );
-      button(row, "Edit", () => {
-        editing = item;
-        name.value = item.name;
-        quantity.value = item.quantity;
-        shop.value = item.store;
-        category.value = item.category;
-        submit.textContent = "Save item";
-        cancel.hidden = false;
-        name.focus();
-      });
-      if (tab === "list")
-        button(
-          row,
-          "Remove",
-          () => void run(
-            () => store.mutate((d) => {
+    button(toolbar, "Staples", openStaples);
+    iconButton(
+      toolbar,
+      "Refresh shopping list",
+      "refresh",
+      () => void run(() => store.load())
+    );
+    const items = sortedShoppingItems(data).filter(
+      (i) => !filter || i.store === filter
+    );
+    const active = items.filter((i) => !i.checked);
+    const checked = items.filter((i) => i.checked);
+    status.textContent = `${active.length} items remaining`;
+    if (checked.length)
+      button(
+        toolbar,
+        `Finish purchased (${checked.length})`,
+        () => void run(
+          () => store.mutate((d) => {
+            for (const item of checked) {
               const fresh = current(d, item);
               fresh.active = false;
               fresh.checked = false;
-            })
-          )
-        );
-      content.append(row);
+            }
+          })
+        )
+      );
+    if (!items.length) {
+      content.append(
+        node(
+          "div",
+          "No shopping items. Use + to add an item or choose Staples.",
+          cls.empty
+        )
+      );
     }
+    for (const name of new Set(active.map((i) => i.store)))
+      renderSection(
+        name,
+        active.filter((i) => i.store === name)
+      );
+    if (checked.length)
+      renderSection("Purchased", checked, true);
   }
   render();
   void run(() => store.load());
-  return () => {
-    disposed = true;
-    host.remove();
-  };
+  return Object.assign(
+    () => {
+      disposed = true;
+      dialog == null ? void 0 : dialog.close();
+      host.remove();
+    },
+    { openAdd: () => editItem() }
+  );
 }
 
 // src/taskView.ts
@@ -6327,7 +6555,17 @@ var TasksView = class extends import_obsidian4.ItemView {
     this.renderPanelHeader(root, countPressure(candidates, scopeTag, todayISO()), candidates, scopeTag);
     this.renderViewSwitcher(root, activeView);
     if (activeView === VIEW_SHOPPING) {
-      this.shoppingCleanup = mountShopping(root, this.plugin.shoppingStore);
+      this.shoppingCleanup = mountShopping(root, this.plugin.shoppingStore, {
+        platform: "obsidian",
+        collapseState: this.plugin.settings.collapseState,
+        persist: () => this.plugin.saveSettings(),
+        openModal: (render) => {
+          const modal = new import_obsidian4.Modal(this.app);
+          modal.open();
+          render(modal.contentEl, () => modal.close());
+          return { close: () => modal.close() };
+        }
+      });
       return;
     }
     this.renderPomodoro(root);
@@ -6452,7 +6690,7 @@ var TasksView = class extends import_obsidian4.ItemView {
     add.addEventListener("click", () => {
       var _a;
       if (shopping)
-        (_a = root.querySelector(".toolbox-shopping form input")) == null ? void 0 : _a.focus();
+        (_a = this.shoppingCleanup) == null ? void 0 : _a.openAdd();
       else
         this.openAddForm();
     });
@@ -24356,9 +24594,9 @@ var TimesheetView = class extends import_obsidian7.ItemView {
       this.buildTimer(this.timerSectionEl);
   }
   /** Build a labelled, icon-led timer action button. */
-  makeTimerBtn(parent, icon, label, cls) {
+  makeTimerBtn(parent, icon2, label, cls) {
     const btn = parent.createEl("button", { cls: `timesheet-timer-btn ${cls}` });
-    (0, import_obsidian7.setIcon)(btn.createSpan({ cls: "timesheet-btn-icon" }), icon);
+    (0, import_obsidian7.setIcon)(btn.createSpan({ cls: "timesheet-btn-icon" }), icon2);
     btn.createSpan({ cls: "timesheet-btn-label", text: label });
     return btn;
   }

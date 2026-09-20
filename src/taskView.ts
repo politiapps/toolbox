@@ -156,7 +156,7 @@ export class TasksView extends ItemView {
 	plugin: TasksPlugin;
 	private allTags: string[] = [];
 	private renderVersion = 0;
-	private shoppingCleanup?: () => void;
+	private shoppingCleanup?: ReturnType<typeof mountShopping>;
 	/** Raw line text of the task currently being dragged (drag-to-subtask). */
 	private draggedTaskRaw: string | null = null;
 	/** Pomodoro card element + tick handle + current task options. */
@@ -276,7 +276,17 @@ export class TasksView extends ItemView {
 		this.renderPanelHeader(root, countPressure(candidates, scopeTag, todayISO()), candidates, scopeTag);
 		this.renderViewSwitcher(root, activeView);
 		if (activeView === VIEW_SHOPPING) {
-			this.shoppingCleanup = mountShopping(root, this.plugin.shoppingStore);
+			this.shoppingCleanup = mountShopping(root, this.plugin.shoppingStore, {
+				platform: "obsidian",
+				collapseState: this.plugin.settings.collapseState,
+				persist: () => this.plugin.saveSettings(),
+				openModal: render => {
+					const modal = new Modal(this.app);
+					modal.open();
+					render(modal.contentEl, () => modal.close());
+					return { close: () => modal.close() };
+				},
+			});
 			return;
 		}
 		this.renderPomodoro(root);
@@ -421,7 +431,7 @@ export class TasksView extends ItemView {
 		const shopping = this.resolveActiveView() === VIEW_SHOPPING;
 		add.setAttr("aria-label", shopping ? "Add shopping item" : "Add task");
 		add.addEventListener("click", () => {
-			if (shopping) root.querySelector<HTMLInputElement>(".toolbox-shopping form input")?.focus();
+			if (shopping) this.shoppingCleanup?.openAdd();
 			else this.openAddForm();
 		});
 		if (shopping) return;

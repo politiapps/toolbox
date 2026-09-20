@@ -464,3 +464,20 @@ All classes are prefixed `tasks-` to avoid collisions. State modifiers use
 Obsidian's `is-` convention (`is-collapsed`, `is-completed`, `is-overdue`).
 Colours come from Obsidian CSS variables (`--text-error`, `--text-muted`, …) so
 the panel follows the active theme.
+
+
+## Unified shopping and task interactions
+
+Shopping is a Tasks view, with the same host-specific section cards, checkbox
+rows, title typography, metadata pills and icon actions. The header + opens the
+host task modal (Obsidian Modal or Android bottom sheet); clicking a row title
+or pencil edits it there. Forms are not permanently visible above the list.
+Store sections use collapse toggles and counts, with aisle dividers inside.
+Purchased uses the quieter Completed card treatment and folds by default.
+Staples is a searchable add picker rather than a second list screen.
+
+The shopping renderer maps to existing Tasks CSS classes for each host, with
+only structural CSS for its toolbar, form and picker. This keeps theme and
+future task-style changes aligned without copying visual token values.
+Android task and shopping modals share accessible naming, focus trapping,
+Escape dismissal, focus restoration and stacked-modal scroll-lock handling.

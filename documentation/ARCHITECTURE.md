@@ -437,8 +437,9 @@ External edit → `vault.on('modify')` (main.ts) → `refreshViews()` → re-ren
 - `packages/task-core/src/shopping.ts`: versioned JSON model, offline category
   inference, store/aisle ordering, frequency-ranked staples, validation and
   queued read/merge/write operations with conflict checks.
-- `packages/shopping-ui/panel.ts`: the shared DOM interface and scoped,
-  theme-aware styles; mounted by both platforms, with cleanup on navigation.
+- `packages/shopping-ui/panel.ts`: the shared DOM interface, mapped to each
+  host’s existing task CSS classes and modal. Returns cleanup plus an openAdd
+  action for the Tasks header. Store collapse state uses host settings.
 - `src/shoppingStore.ts`: Obsidian vault IO adapter, owned by `main.ts`.
 - `src/taskView.ts` and Android `ui/app.ts`: Shopping is a shared `VIEW_SHOPPING`
   choice inside the existing Tasks switcher. No separate panel or ribbon. The

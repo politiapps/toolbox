@@ -169,3 +169,9 @@ Every completed change must be committed, pushed and published as a new version
 so the user can update in Obsidian. Bump package.json, package-lock.json,
 manifest.json and versions.json together; validate the change, build main.js,
 and publish a GitHub release with main.js, manifest.json and styles.css.
+
+
+18. **Use the host task controls for other list views.** Reuse Tasks row,
+    checkbox, section, metadata and action classes, and mount forms in the
+    host modal. Avoid broad button/input CSS that overrides typography, touch
+    targets or theme colors. Inspect both dark-mode contrast and narrow layouts.

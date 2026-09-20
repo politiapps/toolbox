@@ -9,24 +9,30 @@ that file in your existing vault sync. This feature does not provide a sync
 service. Use **Refresh** after changes on another device. Existing `#shopping`
 tasks remain tasks; they are not automatically migrated or duplicated.
 
-- Enter an item and an optional quantity/note. Leave category blank for automatic
+- Use the Tasks **+** button to open the add dialog, or a store section’s **+**
+  to pre-fill its store. Enter an item and an optional quantity/note. Leave category blank for automatic
   classification. Known items use Produce, Bakery, Meat & seafood, Pantry,
   Household, Dairy & eggs, Frozen, or Hardware. Unknown items use Other.
 - Leave store blank to use Grocery (or Hardware store for recognised hardware).
   Enter Woolworths, a specialist shop, or any other name to assign a specific
   store. Suggestions remember stores/categories used before.
 - Enter any category to override classification, including custom aisle names.
-  Edit an item to change its name, quantity, store or category later.
+  Click an item name or its pencil action to edit its name, quantity, store or
+  category in the same dialog.
 - The list groups by store, then aisle. Standard aisles follow the shared order
   above; custom categories follow alphabetically. Use the store filter to show
-  just the shop you are visiting. Checked items move to the end.
+  just the shop you are visiting. Store sections collapse like task sections and
+  remember their collapse state. Checked items move to **Purchased**, collapsed
+  by default. Expand it to review or uncheck an item.
 - Check purchases, then **Finish purchased** to move the checked items in the
   current store filter into history. Uncheck to undo before finishing.
-- **Staples** shows previous items not currently on the list, ranked by number of
-  list additions, with alphabetical ties. **Add again** restores the remembered
+- **Staples** opens a searchable picker of previous items not currently on the
+  list, ranked by number of list additions, with alphabetical ties. Its **+**
+  action restores the remembered
   store, category and quantity. Frequency counts additions, not checkbox toggles
   or quantity purchased. The same item at two stores has separate history.
-- **Remove** also retains an item in staples; it does not delete history.
+- **Remove from list** in the edit dialog asks for confirmation and retains
+  the item in staples; it does not delete history.
 
 Automatic classification uses an offline keyword dictionary, not a product
 catalogue. Review ambiguous products and override their category as needed.
