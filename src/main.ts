@@ -31,6 +31,7 @@ import { CalendarOccurrence, getEventsForToday, mergeOccurrences } from "./calen
 import { renderTodayCalendar } from "./calendarView";
 import { COLUMNS_CLASS, editableColumnsExtension } from "./editableColumns";
 import { openEmbedEditor, resolveEmbed } from "./embedEditor";
+import { ShoppingView, VIEW_TYPE_SHOPPING, vaultShoppingStore } from "./shoppingView";
 import { InvoiceModal } from "./invoiceModal";
 
 /** How often to re-fetch the calendar feed while the plugin is running. */
@@ -69,6 +70,15 @@ export default class TasksPlugin extends Plugin {
 
 	async onload(): Promise<void> {
 		await this.loadSettings();
+
+		const shoppingStore = vaultShoppingStore(this.app);
+		this.registerView(VIEW_TYPE_SHOPPING, leaf => new ShoppingView(leaf, shoppingStore));
+		const openShopping = async () => {
+			const leaf = this.app.workspace.getLeavesOfType(VIEW_TYPE_SHOPPING)[0] ?? this.app.workspace.getRightLeaf(false);
+			if (leaf) { await leaf.setViewState({ type: VIEW_TYPE_SHOPPING, active: true }); await this.app.workspace.revealLeaf(leaf); }
+		};
+		this.addRibbonIcon("shopping-cart", "Open shopping list", () => void openShopping());
+		this.addCommand({ id: "open-shopping-list", name: "Open shopping list", callback: () => void openShopping() });
 
 		this.registerView(VIEW_TYPE_TASKS, (leaf: WorkspaceLeaf) => new TasksView(leaf, this));
 

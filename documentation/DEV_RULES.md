@@ -149,3 +149,16 @@ When you fix a non-obvious bug or hit an Obsidian API quirk:
 - [ ] Vault event? Uses `this.registerEvent()`.
 - [ ] Tag / section / path / sort? Comes from settings.
 - [ ] `ARCHITECTURE.md` updated for structural changes.
+
+## Cross-platform audit follow-up (September 2026)
+
+15. **Invalidate stale asynchronous renders.** Every render request increments a
+    generation; after a file read, discard the result if a newer render started.
+    Closing a view also invalidates outstanding reads.
+16. **Reset vault-specific discovery flags on every configuration read.** A
+    previous vault's successful lookup must never disable automatic categories
+    in a newly selected vault. Validate parsed JSON before property access.
+17. **Read-before-write is not atomic.** Queue local shopping mutations, re-read
+    current data and reject observed conflicts. Do not claim this prevents
+    simultaneous cross-device writes. Existing task writers need the same
+    discipline plus durable task identity (see the audit report).

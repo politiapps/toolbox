@@ -28,7 +28,6 @@ export function renderSettings(ctx: AppContext, root: HTMLElement, onBack: () =>
 	const linkBtn = el("button", { cls: "btn", text: ctx.settings.vault ? "Change" : "Link vault" });
 	linkBtn.addEventListener("click", async () => {
 		await ctx.pickVault();
-		rerender();
 	});
 	vaultRow.append(linkBtn);
 	vaultSection.append(vaultRow);

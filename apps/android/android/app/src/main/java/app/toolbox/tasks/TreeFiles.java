@@ -31,7 +31,8 @@ final class TreeFiles {
             DocumentFile next = cur.findFile(name);
             if (next == null) {
                 if (!createMissing) return null;
-                next = last ? cur.createFile("text/markdown", name) : cur.createDirectory(name);
+                String mime = name.endsWith(".json") ? "application/json" : "text/markdown";
+                next = last ? cur.createFile(mime, name) : cur.createDirectory(name);
                 if (next == null) return null;
             }
             cur = next;

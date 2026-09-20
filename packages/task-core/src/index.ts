@@ -13,3 +13,4 @@ export * from "./recurrence";
 export * from "./sort";
 export * from "./presentation";
 export * from "./datePickerGrid";
+export * from "./shopping";

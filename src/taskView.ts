@@ -153,6 +153,7 @@ function uniqueIncompleteNames(flat: Task[]): string[] {
 export class TasksView extends ItemView {
 	plugin: TasksPlugin;
 	private allTags: string[] = [];
+	private renderVersion = 0;
 	/** Raw line text of the task currently being dragged (drag-to-subtask). */
 	private draggedTaskRaw: string | null = null;
 	/** Pomodoro card element + tick handle + current task options. */
@@ -183,6 +184,7 @@ export class TasksView extends ItemView {
 	}
 
 	async onClose(): Promise<void> {
+		++this.renderVersion;
 		// The vault 'modify' listener lives in main.ts; only the Pomodoro tick is
 		// owned by this view.
 		this.stopPomodoroTick();
@@ -241,8 +243,10 @@ export class TasksView extends ItemView {
 	/* ---------------------------- rendering ---------------------------- */
 
 	async refresh(): Promise<void> {
+		const version = ++this.renderVersion;
 		const file = this.getTasksFile();
 		const content = file ? await this.app.vault.read(file) : "";
+		if (version !== this.renderVersion) return;
 		const { tasks, flat } = parseTasks(content);
 		this.allTags = this.mergedTagList(flat);
 		this.pomodoroTaskNames = uniqueIncompleteNames(flat);
@@ -292,7 +296,7 @@ export class TasksView extends ItemView {
 			}
 		}
 
-		const completed = tasks.filter((t) => t.completed);
+		const completed = tasks.filter((t) => t.completed && (!scopeTag || tagListHasTag(t.tags, scopeTag)));
 		this.renderCompletedSection(root, completed);
 	}
 

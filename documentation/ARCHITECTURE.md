@@ -431,3 +431,18 @@ External edit → `vault.on('modify')` (main.ts) → `refreshViews()` → re-ren
 
 `saveData()` stores the whole `TasksPluginSettings` object, including
 `collapseState` (per-section + Completed) and `recentTags`.
+
+## Shared shopping list (September 2026)
+
+- `packages/task-core/src/shopping.ts`: versioned JSON model, offline category
+  inference, store/aisle ordering, frequency-ranked staples, validation and
+  queued read/merge/write operations with conflict checks.
+- `packages/shopping-ui/panel.ts`: the shared DOM interface and scoped,
+  theme-aware styles; mounted by both platforms, with cleanup on navigation.
+- `src/shoppingView.ts`: Obsidian ItemView and vault IO adapter, registered with
+  a shopping ribbon and command by `main.ts`.
+- Android `ui/app.ts`: Shopping screen using its existing StorageAdapter.
+- Both store active items and reusable history in vault-root
+  `shopping-list.json`. See `shopping.md` for behavior and sync boundaries.
+- Tests include shared DOM flows and Android task-render regressions. The
+  push/PR workflow builds both app surfaces and runs the test suite.

@@ -92,3 +92,12 @@ plugins straight from GitHub releases.
 
 Manual install (no BRAT): copy `main.js`, `manifest.json`, and `styles.css` from
 a release into `<vault>/.obsidian/plugins/toolbox/`.
+
+## Shopping list
+
+Open the shopping-cart ribbon / **Open shopping list** command in Obsidian, or
+**Shopping** in Android after linking your vault. Both share automatic aisle
+categories, custom stores/categories, quantities, purchase checkboxes and
+frequency-ranked **Staples**. Sync `shopping-list.json` with your vault.
+See [shopping instructions](documentation/shopping.md) and the
+[cross-platform audit](documentation/audit-2026-09-20.md).

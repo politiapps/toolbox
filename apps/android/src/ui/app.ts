@@ -1,3 +1,5 @@
+import { ShoppingStore, SHOPPING_PATH } from "@toolbox/task-core";
+import { mountShopping } from "../../../../packages/shopping-ui/panel";
 import {
 	Task,
 	sortTasks,
@@ -33,11 +35,13 @@ import type { StorageAdapter } from "../storage";
 import { DATA_JSON_PATH } from "../storage";
 import type { AppContext } from "./context";
 
-type Screen = "list" | "settings";
+type Screen = "list" | "settings" | "shopping";
 
 export class App {
 	private ctx: AppContext;
 	private screen: Screen = "list";
+	private shoppingCleanup?: () => void;
+	private renderVersion = 0;
 	/** True once a vault data.json was read this session (it wins over auto/manual). */
 	private vaultConfigFound = false;
 
@@ -78,7 +82,8 @@ export class App {
 
 	/** Re-read the file and honour any queued widget action when returning to front. */
 	private async onForeground(): Promise<void> {
-		await this.render();
+		await this.syncObsidianConfig();
+		if (this.screen !== "shopping") await this.render();
 		await this.handlePendingAction();
 	}
 
@@ -91,6 +96,7 @@ export class App {
 
 	/** Re-read the vault's data.json and mirror its sections + tasks path. */
 	private async syncObsidianConfig(): Promise<void> {
+		this.vaultConfigFound = false;
 		const vault = this.settings.vault;
 		if (!vault) return;
 		try {
@@ -140,6 +146,7 @@ export class App {
 		} catch {
 			return null;
 		}
+		if (!data || typeof data !== "object") return null;
 		const rawSections = data.sections;
 		if (!Array.isArray(rawSections)) return null;
 
@@ -203,6 +210,23 @@ export class App {
 	}
 
 	async render(): Promise<void> {
+		++this.renderVersion;
+		this.shoppingCleanup?.();
+		this.shoppingCleanup = undefined;
+		if (this.screen === "shopping" && this.settings.vault) {
+			const vault = this.settings.vault;
+			this.root.replaceChildren();
+			const back = el("button", { cls: "btn", text: "Back to tasks" });
+			back.onclick = () => { this.screen = "list"; void this.render(); };
+			const shoppingScreen = el("div", { cls: "screen shopping-screen" });
+			shoppingScreen.append(back);
+			this.root.append(shoppingScreen);
+			this.shoppingCleanup = mountShopping(shoppingScreen, new ShoppingStore(
+				() => this.storage.readFile(vault, SHOPPING_PATH),
+				text => this.storage.writeFile(vault, SHOPPING_PATH, text)
+			));
+			return;
+		}
 		if (this.screen === "settings") {
 			renderSettings(this.ctx, this.root, () => {
 				this.screen = "list";
@@ -214,7 +238,9 @@ export class App {
 	}
 
 	private async renderList(): Promise<void> {
+		const version = this.renderVersion;
 		const { tasks, flat } = await this.service.load();
+		if (version !== this.renderVersion) return;
 		this.ctx.knownTags = this.mergedTags(tasks);
 
 		// No data.json on the phone and not manually configured → categories follow
@@ -314,7 +340,7 @@ export class App {
 			}
 		}
 
-		const completed = tasks.filter((t) => t.completed);
+		const completed = tasks.filter((t) => t.completed && (!scopeTag || tagListHasTag(t.tags, scopeTag)));
 		this.renderCompleted(screen, completed);
 
 		this.root.append(screen);
@@ -437,7 +463,10 @@ export class App {
 		const addBtn = el("button", { cls: "app-add", attrs: { "aria-label": "Add task" } });
 		setIcon(addBtn, "plus");
 		addBtn.addEventListener("click", () => openAddTask(this.ctx));
-		actions.append(settingsBtn, addBtn);
+		const shoppingBtn = el("button", { cls: "btn", text: "Shopping" });
+		shoppingBtn.disabled = !this.settings.vault;
+		shoppingBtn.onclick = () => { this.screen = "shopping"; void this.render(); };
+		actions.append(shoppingBtn, settingsBtn, addBtn);
 		top.append(actions);
 		header.append(top);
 

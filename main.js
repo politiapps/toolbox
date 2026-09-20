@@ -19,9 +19,9 @@ var __export = (target, all) => {
 };
 var __copyProps = (to, from, except, desc) => {
   if (from && typeof from === "object" || typeof from === "function") {
-    for (let key of __getOwnPropNames(from))
-      if (!__hasOwnProp.call(to, key) && key !== except)
-        __defProp(to, key, { get: () => from[key], enumerable: !(desc = __getOwnPropDesc(from, key)) || desc.enumerable });
+    for (let key2 of __getOwnPropNames(from))
+      if (!__hasOwnProp.call(to, key2) && key2 !== except)
+        __defProp(to, key2, { get: () => from[key2], enumerable: !(desc = __getOwnPropDesc(from, key2)) || desc.enumerable });
   }
   return to;
 };
@@ -40,8 +40,8 @@ var require_common = __commonJS({
   "node_modules/pako/lib/utils/common.js"(exports) {
     "use strict";
     var TYPED_OK = typeof Uint8Array !== "undefined" && typeof Uint16Array !== "undefined" && typeof Int32Array !== "undefined";
-    function _has(obj, key) {
-      return Object.prototype.hasOwnProperty.call(obj, key);
+    function _has(obj, key2) {
+      return Object.prototype.hasOwnProperty.call(obj, key2);
     }
     exports.assign = function(obj) {
       var sources = Array.prototype.slice.call(arguments, 1);
@@ -488,7 +488,7 @@ var require_trees = __commonJS({
       var elems = desc.stat_desc.elems;
       var n, m;
       var max_code = -1;
-      var node;
+      var node2;
       s.heap_len = 0;
       s.heap_max = HEAP_SIZE;
       for (n = 0; n < elems; n++) {
@@ -500,19 +500,19 @@ var require_trees = __commonJS({
         }
       }
       while (s.heap_len < 2) {
-        node = s.heap[++s.heap_len] = max_code < 2 ? ++max_code : 0;
-        tree[node * 2] = 1;
-        s.depth[node] = 0;
+        node2 = s.heap[++s.heap_len] = max_code < 2 ? ++max_code : 0;
+        tree[node2 * 2] = 1;
+        s.depth[node2] = 0;
         s.opt_len--;
         if (has_stree) {
-          s.static_len -= stree[node * 2 + 1];
+          s.static_len -= stree[node2 * 2 + 1];
         }
       }
       desc.max_code = max_code;
       for (n = s.heap_len >> 1; n >= 1; n--) {
         pqdownheap(s, tree, n);
       }
-      node = elems;
+      node2 = elems;
       do {
         n = s.heap[
           1
@@ -534,13 +534,13 @@ var require_trees = __commonJS({
         ];
         s.heap[--s.heap_max] = n;
         s.heap[--s.heap_max] = m;
-        tree[node * 2] = tree[n * 2] + tree[m * 2];
-        s.depth[node] = (s.depth[n] >= s.depth[m] ? s.depth[n] : s.depth[m]) + 1;
-        tree[n * 2 + 1] = tree[m * 2 + 1] = node;
+        tree[node2 * 2] = tree[n * 2] + tree[m * 2];
+        s.depth[node2] = (s.depth[n] >= s.depth[m] ? s.depth[n] : s.depth[m]) + 1;
+        tree[n * 2 + 1] = tree[m * 2 + 1] = node2;
         s.heap[
           1
           /*SMALLEST*/
-        ] = node++;
+        ] = node2++;
         pqdownheap(
           s,
           tree,
@@ -4243,7 +4243,7 @@ __export(main_exports, {
   default: () => TasksPlugin
 });
 module.exports = __toCommonJS(main_exports);
-var import_obsidian10 = require("obsidian");
+var import_obsidian11 = require("obsidian");
 
 // src/settings.ts
 var import_obsidian = require("obsidian");
@@ -4995,6 +4995,153 @@ function monthOf(iso) {
   return { year, month };
 }
 
+// packages/task-core/src/shopping.ts
+var SHOPPING_PATH = "shopping-list.json";
+var SHOPPING_CATEGORIES = [
+  "Produce",
+  "Bakery",
+  "Meat & seafood",
+  "Pantry",
+  "Household",
+  "Dairy & eggs",
+  "Frozen",
+  "Hardware",
+  "Other"
+];
+var SHOPPING_STORES = [
+  "Grocery",
+  "Woolworths",
+  "Hardware store",
+  "Other"
+];
+var key = (s) => s.trim().replace(/\s+/g, " ").toLocaleLowerCase();
+function inferShoppingCategory(name) {
+  var _a, _b;
+  const n = key(name);
+  const rules = [
+    ["Frozen", /\b(frozen|ice cream|ice blocks|ice cubes)\b/],
+    [
+      "Hardware",
+      /\b(screws?|nails?|hammer|drill|paint|sandpaper|timber|bolts?|screwdriver)\b/
+    ],
+    [
+      "Household",
+      /\b(detergent|soap|toilet paper|dishwashing|laundry|cleaner|shampoo|toothpaste|bin bags)\b/
+    ],
+    ["Dairy & eggs", /\b(milk|cheese|yog[hu]urt|butter|cream|eggs?)\b/],
+    [
+      "Meat & seafood",
+      /\b(chicken|beef|pork|lamb|steak|salmon|prawns?|fish|bacon|sausages?|mince)\b/
+    ],
+    ["Bakery", /\b(bread|rolls?|bagels?|croissants?|wraps?)\b/],
+    [
+      "Pantry",
+      /\b(rice|pasta|flour|sugar|salt|pepper|oil|canned|tinned|cereal|coffee|tea|sauce|beans|lentils)\b/
+    ],
+    [
+      "Produce",
+      /\b(apples?|bananas?|oranges?|lemons?|limes?|tomatoes?|potatoes?|onions?|carrots?|lettuce|spinach|broccoli|avocados?|berries|strawberries|mushrooms?|cucumber|capsicum|garlic|ginger|fruit|vegetables?)\b/
+    ]
+  ];
+  return (_b = (_a = rules.find(([, re]) => re.test(n))) == null ? void 0 : _a[0]) != null ? _b : "Other";
+}
+function parseShopping(text) {
+  if (text === null)
+    return { version: 1, items: [] };
+  const data = JSON.parse(text);
+  if (!data || data.version !== 1 || !Array.isArray(data.items))
+    throw new Error(
+      "Unsupported shopping file. The file has not been changed."
+    );
+  const ids = /* @__PURE__ */ new Set();
+  for (const i of data.items) {
+    if (!i || !["id", "name", "store", "category", "quantity"].every(
+      (k) => typeof i[k] === "string"
+    ) || !i.id || !i.name.trim() || !i.store.trim() || !i.category.trim() || ids.has(i.id) || typeof i.active !== "boolean" || typeof i.checked !== "boolean" || !Number.isSafeInteger(i.frequency) || i.frequency < 1) {
+      throw new Error("Invalid shopping file. The file has not been changed.");
+    }
+    ids.add(i.id);
+  }
+  return data;
+}
+function addShoppingItem(data, input, id) {
+  const name = input.name.trim().replace(/\s+/g, " ");
+  if (!name)
+    throw new Error("Enter an item name.");
+  const category = input.category.trim() || inferShoppingCategory(name);
+  const store = input.store.trim() || (category === "Hardware" ? "Hardware store" : "Grocery");
+  const existing = data.items.find(
+    (i) => key(i.name) === key(name) && key(i.store) === key(store)
+  );
+  if (existing == null ? void 0 : existing.active)
+    throw new Error(
+      "This item is already on the list for that store. Edit its quantity instead."
+    );
+  if (existing) {
+    Object.assign(existing, {
+      name,
+      category,
+      store,
+      quantity: input.quantity.trim(),
+      active: true,
+      checked: false,
+      frequency: existing.frequency + 1
+    });
+  } else
+    data.items.push({
+      id,
+      name,
+      category,
+      store,
+      quantity: input.quantity.trim(),
+      active: true,
+      checked: false,
+      frequency: 1
+    });
+}
+function shoppingStaples(data) {
+  return data.items.filter((i) => !i.active).sort(
+    (a, b) => b.frequency - a.frequency || a.name.localeCompare(b.name) || a.store.localeCompare(b.store)
+  );
+}
+function sortedShoppingItems(data) {
+  const rank = (s) => {
+    const i = SHOPPING_CATEGORIES.indexOf(s);
+    return i < 0 ? SHOPPING_CATEGORIES.length : i;
+  };
+  return data.items.filter((i) => i.active).sort(
+    (a, b) => Number(a.checked) - Number(b.checked) || a.store.localeCompare(b.store) || rank(a.category) - rank(b.category) || a.category.localeCompare(b.category) || a.name.localeCompare(b.name)
+  );
+}
+var ShoppingStore = class {
+  constructor(read, write) {
+    this.read = read;
+    this.write = write;
+    this.tail = Promise.resolve();
+  }
+  async load() {
+    return parseShopping(await this.read());
+  }
+  mutate(edit) {
+    const work = this.tail.then(async () => {
+      const before = await this.read();
+      const data = parseShopping(before);
+      edit(data);
+      const output = JSON.stringify(data, null, 2) + "\n";
+      parseShopping(output);
+      if (await this.read() !== before)
+        throw new Error(
+          "Shopping changed on another device. Refresh and try again."
+        );
+      await this.write(output);
+      return data;
+    });
+    this.tail = work.catch(() => {
+    });
+    return work;
+  }
+};
+
 // src/settings.ts
 var TIMESHEET_ORG_COLORS = [
   "#6366f1",
@@ -5293,7 +5440,7 @@ var TasksSettingTab = class extends import_obsidian.PluginSettingTab {
     );
     new import_obsidian.Setting(wrapper).setName("Sort order").addDropdown((dd) => {
       Object.keys(SORT_ORDER_LABELS).forEach(
-        (key) => dd.addOption(key, SORT_ORDER_LABELS[key])
+        (key2) => dd.addOption(key2, SORT_ORDER_LABELS[key2])
       );
       dd.setValue(section.sort).onChange(async (value) => {
         section.sort = value;
@@ -5760,6 +5907,7 @@ var TasksView = class extends import_obsidian4.ItemView {
   constructor(leaf, plugin) {
     super(leaf);
     this.allTags = [];
+    this.renderVersion = 0;
     /** Raw line text of the task currently being dragged (drag-to-subtask). */
     this.draggedTaskRaw = null;
     /** Pomodoro card element + tick handle + current task options. */
@@ -5782,6 +5930,7 @@ var TasksView = class extends import_obsidian4.ItemView {
     await this.refresh();
   }
   async onClose() {
+    ++this.renderVersion;
     this.stopPomodoroTick();
   }
   /* ----------------------------- file IO ----------------------------- */
@@ -5833,8 +5982,11 @@ var TasksView = class extends import_obsidian4.ItemView {
   }
   /* ---------------------------- rendering ---------------------------- */
   async refresh() {
+    const version = ++this.renderVersion;
     const file = this.getTasksFile();
     const content = file ? await this.app.vault.read(file) : "";
+    if (version !== this.renderVersion)
+      return;
     const { tasks, flat } = parseTasks(content);
     this.allTags = this.mergedTagList(flat);
     this.pomodoroTaskNames = uniqueIncompleteNames(flat);
@@ -5865,7 +6017,7 @@ var TasksView = class extends import_obsidian4.ItemView {
         this.renderSection(root, section, matching);
       }
     }
-    const completed = tasks.filter((t) => t.completed);
+    const completed = tasks.filter((t) => t.completed && (!scopeTag || tagListHasTag(t.tags, scopeTag)));
     this.renderCompletedSection(root, completed);
   }
   /** The active view, falling back to "All" if it names a since-deleted section. */
@@ -6366,12 +6518,12 @@ var TasksView = class extends import_obsidian4.ItemView {
       }
     });
   }
-  isCollapsed(key, fallback) {
+  isCollapsed(key2, fallback) {
     const state = this.plugin.settings.collapseState;
-    return key in state ? state[key] : fallback;
+    return key2 in state ? state[key2] : fallback;
   }
-  async setCollapsed(key, collapsed) {
-    this.plugin.settings.collapseState[key] = collapsed;
+  async setCollapsed(key2, collapsed) {
+    this.plugin.settings.collapseState[key2] = collapsed;
     await this.plugin.saveSettings();
   }
   renderSection(root, section, entries) {
@@ -9501,48 +9653,48 @@ var PDFDict = (
     PDFDict2.prototype.entries = function() {
       return Array.from(this.dict.entries());
     };
-    PDFDict2.prototype.set = function(key, value) {
-      this.dict.set(key, value);
+    PDFDict2.prototype.set = function(key2, value) {
+      this.dict.set(key2, value);
     };
-    PDFDict2.prototype.get = function(key, preservePDFNull) {
+    PDFDict2.prototype.get = function(key2, preservePDFNull) {
       if (preservePDFNull === void 0) {
         preservePDFNull = false;
       }
-      var value = this.dict.get(key);
+      var value = this.dict.get(key2);
       if (value === PDFNull_default && !preservePDFNull)
         return void 0;
       return value;
     };
-    PDFDict2.prototype.has = function(key) {
-      var value = this.dict.get(key);
+    PDFDict2.prototype.has = function(key2) {
+      var value = this.dict.get(key2);
       return value !== void 0 && value !== PDFNull_default;
     };
-    PDFDict2.prototype.lookupMaybe = function(key) {
+    PDFDict2.prototype.lookupMaybe = function(key2) {
       var _a;
       var types = [];
       for (var _i = 1; _i < arguments.length; _i++) {
         types[_i - 1] = arguments[_i];
       }
       var preservePDFNull = types.includes(PDFNull_default);
-      var value = (_a = this.context).lookupMaybe.apply(_a, __spreadArrays([this.get(key, preservePDFNull)], types));
+      var value = (_a = this.context).lookupMaybe.apply(_a, __spreadArrays([this.get(key2, preservePDFNull)], types));
       if (value === PDFNull_default && !preservePDFNull)
         return void 0;
       return value;
     };
-    PDFDict2.prototype.lookup = function(key) {
+    PDFDict2.prototype.lookup = function(key2) {
       var _a;
       var types = [];
       for (var _i = 1; _i < arguments.length; _i++) {
         types[_i - 1] = arguments[_i];
       }
       var preservePDFNull = types.includes(PDFNull_default);
-      var value = (_a = this.context).lookup.apply(_a, __spreadArrays([this.get(key, preservePDFNull)], types));
+      var value = (_a = this.context).lookup.apply(_a, __spreadArrays([this.get(key2, preservePDFNull)], types));
       if (value === PDFNull_default && !preservePDFNull)
         return void 0;
       return value;
     };
-    PDFDict2.prototype.delete = function(key) {
-      return this.dict.delete(key);
+    PDFDict2.prototype.delete = function(key2) {
+      return this.dict.delete(key2);
     };
     PDFDict2.prototype.asMap = function() {
       return new Map(this.dict);
@@ -9552,18 +9704,18 @@ var PDFDict = (
         tag = "";
       }
       var existingKeys = this.keys();
-      var key = PDFName_default.of(this.context.addRandomSuffix(tag, 10));
-      while (existingKeys.includes(key)) {
-        key = PDFName_default.of(this.context.addRandomSuffix(tag, 10));
+      var key2 = PDFName_default.of(this.context.addRandomSuffix(tag, 10));
+      while (existingKeys.includes(key2)) {
+        key2 = PDFName_default.of(this.context.addRandomSuffix(tag, 10));
       }
-      return key;
+      return key2;
     };
     PDFDict2.prototype.clone = function(context) {
       var clone = PDFDict2.withContext(context || this.context);
       var entries = this.entries();
       for (var idx = 0, len = entries.length; idx < len; idx++) {
-        var _a = entries[idx], key = _a[0], value = _a[1];
-        clone.set(key, value);
+        var _a = entries[idx], key2 = _a[0], value = _a[1];
+        clone.set(key2, value);
       }
       return clone;
     };
@@ -9571,8 +9723,8 @@ var PDFDict = (
       var dictString = "<<\n";
       var entries = this.entries();
       for (var idx = 0, len = entries.length; idx < len; idx++) {
-        var _a = entries[idx], key = _a[0], value = _a[1];
-        dictString += key.toString() + " " + value.toString() + "\n";
+        var _a = entries[idx], key2 = _a[0], value = _a[1];
+        dictString += key2.toString() + " " + value.toString() + "\n";
       }
       dictString += ">>";
       return dictString;
@@ -9581,8 +9733,8 @@ var PDFDict = (
       var size = 5;
       var entries = this.entries();
       for (var idx = 0, len = entries.length; idx < len; idx++) {
-        var _a = entries[idx], key = _a[0], value = _a[1];
-        size += key.sizeInBytes() + value.sizeInBytes() + 2;
+        var _a = entries[idx], key2 = _a[0], value = _a[1];
+        size += key2.sizeInBytes() + value.sizeInBytes() + 2;
       }
       return size;
     };
@@ -9593,8 +9745,8 @@ var PDFDict = (
       buffer[offset++] = CharCodes_default.Newline;
       var entries = this.entries();
       for (var idx = 0, len = entries.length; idx < len; idx++) {
-        var _a = entries[idx], key = _a[0], value = _a[1];
-        offset += key.copyBytesInto(buffer, offset);
+        var _a = entries[idx], key2 = _a[0], value = _a[1];
+        offset += key2.copyBytesInto(buffer, offset);
         buffer[offset++] = CharCodes_default.Space;
         offset += value.copyBytesInto(buffer, offset);
         buffer[offset++] = CharCodes_default.Newline;
@@ -10121,10 +10273,10 @@ var PDFContext = (
         var dict = PDFDict_default.withContext(this);
         var keys = Object.keys(literal);
         for (var idx = 0, len = keys.length; idx < len; idx++) {
-          var key = keys[idx];
-          var value = literal[key];
+          var key2 = keys[idx];
+          var value = literal[key2];
           if (value !== void 0)
-            dict.set(PDFName_default.of(key), this.obj(value));
+            dict.set(PDFName_default.of(key2), this.obj(value));
         }
         return dict;
       }
@@ -10205,8 +10357,8 @@ var PDFPageLeaf = (
       var clone = PDFPageLeaf2.fromMapWithContext(/* @__PURE__ */ new Map(), context || this.context, this.autoNormalizeCTM);
       var entries = this.entries();
       for (var idx = 0, len = entries.length; idx < len; idx++) {
-        var _a = entries[idx], key = _a[0], value = _a[1];
-        clone.set(key, value);
+        var _a = entries[idx], key2 = _a[0], value = _a[1];
+        clone.set(key2, value);
       }
       return clone;
     };
@@ -10246,9 +10398,9 @@ var PDFPageLeaf = (
     };
     PDFPageLeaf2.prototype.getInheritableAttribute = function(name) {
       var attribute;
-      this.ascend(function(node) {
+      this.ascend(function(node2) {
         if (!attribute)
-          attribute = node.get(name);
+          attribute = node2.get(name);
       });
       return attribute;
     };
@@ -10289,9 +10441,9 @@ var PDFPageLeaf = (
       return Font2.uniqueKey(tag);
     };
     PDFPageLeaf2.prototype.newFontDictionary = function(tag, fontDictRef) {
-      var key = this.newFontDictionaryKey(tag);
-      this.setFontDictionary(key, fontDictRef);
-      return key;
+      var key2 = this.newFontDictionaryKey(tag);
+      this.setFontDictionary(key2, fontDictRef);
+      return key2;
     };
     PDFPageLeaf2.prototype.setXObject = function(name, xObjectRef) {
       var XObject = this.normalizedEntries().XObject;
@@ -10302,9 +10454,9 @@ var PDFPageLeaf = (
       return XObject.uniqueKey(tag);
     };
     PDFPageLeaf2.prototype.newXObject = function(tag, xObjectRef) {
-      var key = this.newXObjectKey(tag);
-      this.setXObject(key, xObjectRef);
-      return key;
+      var key2 = this.newXObjectKey(tag);
+      this.setXObject(key2, xObjectRef);
+      return key2;
     };
     PDFPageLeaf2.prototype.setExtGState = function(name, extGStateRef) {
       var ExtGState = this.normalizedEntries().ExtGState;
@@ -10315,9 +10467,9 @@ var PDFPageLeaf = (
       return ExtGState.uniqueKey(tag);
     };
     PDFPageLeaf2.prototype.newExtGState = function(tag, extGStateRef) {
-      var key = this.newExtGStateKey(tag);
-      this.setExtGState(key, extGStateRef);
-      return key;
+      var key2 = this.newExtGStateKey(tag);
+      this.setExtGState(key2, extGStateRef);
+      return key2;
     };
     PDFPageLeaf2.prototype.ascend = function(visitor) {
       visitor(this);
@@ -10403,10 +10555,10 @@ var PDFObjectCopier = (
         var clonedPage = originalPage.clone();
         var InheritableEntries = PDFPageLeaf_default.InheritableEntries;
         for (var idx = 0, len = InheritableEntries.length; idx < len; idx++) {
-          var key = PDFName_default.of(InheritableEntries[idx]);
-          var value = clonedPage.getInheritableAttribute(key);
-          if (!clonedPage.get(key) && value)
-            clonedPage.set(key, value);
+          var key2 = PDFName_default.of(InheritableEntries[idx]);
+          var value = clonedPage.getInheritableAttribute(key2);
+          if (!clonedPage.get(key2) && value)
+            clonedPage.set(key2, value);
         }
         clonedPage.delete(PDFName_default.of("Parent"));
         return _this.copyPDFDict(clonedPage);
@@ -10419,8 +10571,8 @@ var PDFObjectCopier = (
         _this.traversedObjects.set(originalDict, clonedDict);
         var entries = originalDict.entries();
         for (var idx = 0, len = entries.length; idx < len; idx++) {
-          var _a = entries[idx], key = _a[0], value = _a[1];
-          clonedDict.set(key, _this.copy(value));
+          var _a = entries[idx], key2 = _a[0], value = _a[1];
+          clonedDict.set(key2, _this.copy(value));
         }
         return clonedDict;
       };
@@ -10444,8 +10596,8 @@ var PDFObjectCopier = (
         _this.traversedObjects.set(originalStream, clonedStream);
         var entries = originalStream.dict.entries();
         for (var idx = 0, len = entries.length; idx < len; idx++) {
-          var _a = entries[idx], key = _a[0], value = _a[1];
-          clonedStream.dict.set(key, _this.copy(value));
+          var _a = entries[idx], key2 = _a[0], value = _a[1];
+          clonedStream.dict.set(key2, _this.copy(value));
         }
         return clonedStream;
       };
@@ -13369,25 +13521,25 @@ UPNG.quantize.getKDtree = function(nimg, ps, err) {
       }
     if (maxL < err)
       break;
-    var node = leafs[mi];
-    var s0 = UPNG.quantize.splitPixels(nimg, nimg32, node.i0, node.i1, node.est.e, node.est.eMq255);
-    var s0wrong = node.i0 >= s0 || node.i1 <= s0;
+    var node2 = leafs[mi];
+    var s0 = UPNG.quantize.splitPixels(nimg, nimg32, node2.i0, node2.i1, node2.est.e, node2.est.eMq255);
+    var s0wrong = node2.i0 >= s0 || node2.i1 <= s0;
     if (s0wrong) {
-      node.est.L = 0;
+      node2.est.L = 0;
       continue;
     }
-    var ln = { i0: node.i0, i1: s0, bst: null, est: null, tdst: 0, left: null, right: null };
+    var ln = { i0: node2.i0, i1: s0, bst: null, est: null, tdst: 0, left: null, right: null };
     ln.bst = UPNG.quantize.stats(nimg, ln.i0, ln.i1);
     ln.est = UPNG.quantize.estats(ln.bst);
-    var rn = { i0: s0, i1: node.i1, bst: null, est: null, tdst: 0, left: null, right: null };
-    rn.bst = { R: [], m: [], N: node.bst.N - ln.bst.N };
+    var rn = { i0: s0, i1: node2.i1, bst: null, est: null, tdst: 0, left: null, right: null };
+    rn.bst = { R: [], m: [], N: node2.bst.N - ln.bst.N };
     for (var i = 0; i < 16; i++)
-      rn.bst.R[i] = node.bst.R[i] - ln.bst.R[i];
+      rn.bst.R[i] = node2.bst.R[i] - ln.bst.R[i];
     for (var i = 0; i < 4; i++)
-      rn.bst.m[i] = node.bst.m[i] - ln.bst.m[i];
+      rn.bst.m[i] = node2.bst.m[i] - ln.bst.m[i];
     rn.est = UPNG.quantize.estats(rn.bst);
-    node.left = ln;
-    node.right = rn;
+    node2.left = ln;
+    node2.right = rn;
     leafs[mi] = ln;
     leafs.push(rn);
   }
@@ -15262,14 +15414,14 @@ var ViewerPreferences = (
     function ViewerPreferences2(dict) {
       this.dict = dict;
     }
-    ViewerPreferences2.prototype.lookupBool = function(key) {
-      var returnObj = this.dict.lookup(PDFName_default.of(key));
+    ViewerPreferences2.prototype.lookupBool = function(key2) {
+      var returnObj = this.dict.lookup(PDFName_default.of(key2));
       if (returnObj instanceof PDFBool_default)
         return returnObj;
       return void 0;
     };
-    ViewerPreferences2.prototype.lookupName = function(key) {
-      var returnObj = this.dict.lookup(PDFName_default.of(key));
+    ViewerPreferences2.prototype.lookupName = function(key2) {
+      var returnObj = this.dict.lookup(PDFName_default.of(key2));
       if (returnObj instanceof PDFName_default)
         return returnObj;
       return void 0;
@@ -15575,9 +15727,9 @@ var PDFAcroField = (
     };
     PDFAcroField2.prototype.getInheritableAttribute = function(name) {
       var attribute;
-      this.ascend(function(node) {
+      this.ascend(function(node2) {
         if (!attribute)
-          attribute = node.dict.get(name);
+          attribute = node2.dict.get(name);
       });
       return attribute;
     };
@@ -15933,9 +16085,9 @@ var PDFWidgetAnnotation = (
       if (normal instanceof PDFDict_default) {
         var keys = normal.keys();
         for (var idx = 0, len = keys.length; idx < len; idx++) {
-          var key = keys[idx];
-          if (key !== PDFName_default.of("Off"))
-            return key;
+          var key2 = keys[idx];
+          if (key2 !== PDFName_default.of("Off"))
+            return key2;
         }
       }
       return void 0;
@@ -16616,9 +16768,9 @@ var flagIsSet = function(flags, flag3) {
 };
 var getInheritableAttribute = function(startNode, name) {
   var attribute;
-  ascend(startNode, function(node) {
+  ascend(startNode, function(node2) {
     if (!attribute)
-      attribute = node.get(name);
+      attribute = node2.get(name);
   });
   return attribute;
 };
@@ -16882,9 +17034,9 @@ var PDFPageTree = (
     };
     PDFPageTree2.prototype.insertLeafKid = function(kidIdx, leafRef) {
       var Kids = this.Kids();
-      this.ascend(function(node) {
-        var newCount = node.Count().asNumber() + 1;
-        node.set(PDFName_default.of("Count"), PDFNumber_default.of(newCount));
+      this.ascend(function(node2) {
+        var newCount = node2.Count().asNumber() + 1;
+        node2.set(PDFName_default.of("Count"), PDFNumber_default.of(newCount));
       });
       Kids.insert(kidIdx, leafRef);
     };
@@ -16892,9 +17044,9 @@ var PDFPageTree = (
       var Kids = this.Kids();
       var kid = Kids.lookup(kidIdx);
       if (kid instanceof PDFPageLeaf_default) {
-        this.ascend(function(node) {
-          var newCount = node.Count().asNumber() - 1;
-          node.set(PDFName_default.of("Count"), PDFNumber_default.of(newCount));
+        this.ascend(function(node2) {
+          var newCount = node2.Count().asNumber() - 1;
+          node2.set(PDFName_default.of("Count"), PDFNumber_default.of(newCount));
         });
       }
       Kids.remove(kidIdx);
@@ -17301,9 +17453,9 @@ var PDFObjectParser = (
       this.skipWhitespaceAndComments();
       var dict = /* @__PURE__ */ new Map();
       while (!this.bytes.done() && this.bytes.peek() !== CharCodes_default.GreaterThan && this.bytes.peekAhead(1) !== CharCodes_default.GreaterThan) {
-        var key = this.parseName();
+        var key2 = this.parseName();
         var value = this.parseObject();
-        dict.set(key, value);
+        dict.set(key2, value);
         this.skipWhitespaceAndComments();
       }
       this.skipWhitespaceAndComments();
@@ -18118,20 +18270,20 @@ var setStrokingRgbColor = function(red, green, blue) {
     asPDFNumber(blue)
   ]);
 };
-var setFillingCmykColor = function(cyan, magenta, yellow, key) {
+var setFillingCmykColor = function(cyan, magenta, yellow, key2) {
   return PDFOperator_default.of(PDFOperatorNames_default.NonStrokingColorCmyk, [
     asPDFNumber(cyan),
     asPDFNumber(magenta),
     asPDFNumber(yellow),
-    asPDFNumber(key)
+    asPDFNumber(key2)
   ]);
 };
-var setStrokingCmykColor = function(cyan, magenta, yellow, key) {
+var setStrokingCmykColor = function(cyan, magenta, yellow, key2) {
   return PDFOperator_default.of(PDFOperatorNames_default.StrokingColorCmyk, [
     asPDFNumber(cyan),
     asPDFNumber(magenta),
     asPDFNumber(yellow),
-    asPDFNumber(key)
+    asPDFNumber(key2)
   ]);
 };
 var beginMarkedContent = function(tag) {
@@ -18158,12 +18310,12 @@ var rgb = function(red, green, blue) {
   assertRange(blue, "blue", 0, 1);
   return { type: ColorTypes.RGB, red, green, blue };
 };
-var cmyk = function(cyan, magenta, yellow, key) {
+var cmyk = function(cyan, magenta, yellow, key2) {
   assertRange(cyan, "cyan", 0, 1);
   assertRange(magenta, "magenta", 0, 1);
   assertRange(yellow, "yellow", 0, 1);
-  assertRange(key, "key", 0, 1);
-  return { type: ColorTypes.CMYK, cyan, magenta, yellow, key };
+  assertRange(key2, "key", 0, 1);
+  return { type: ColorTypes.CMYK, cyan, magenta, yellow, key: key2 };
 };
 var Grayscale = ColorTypes.Grayscale;
 var RGB = ColorTypes.RGB;
@@ -21334,12 +21486,12 @@ var PDFForm = (
         if (res) {
           nonTerminal = res;
         } else {
-          var node = PDFAcroNonTerminal_default.create(this.doc.context);
-          node.setPartialName(namePart);
-          node.setParent(parentRef);
-          var nodeRef = this.doc.context.register(node.dict);
+          var node2 = PDFAcroNonTerminal_default.create(this.doc.context);
+          node2.setPartialName(namePart);
+          node2.setParent(parentRef);
+          var nodeRef = this.doc.context.register(node2.dict);
           parent_1.addField(nodeRef);
-          nonTerminal = [node, nodeRef];
+          nonTerminal = [node2, nodeRef];
         }
       }
       return nonTerminal;
@@ -21637,12 +21789,12 @@ var PDFDocument = (
       this.defaultWordBreaks = [" "];
       this.computePages = function() {
         var pages = [];
-        _this.catalog.Pages().traverse(function(node, ref) {
-          if (node instanceof PDFPageLeaf_default) {
-            var page = _this.pageMap.get(node);
+        _this.catalog.Pages().traverse(function(node2, ref) {
+          if (node2 instanceof PDFPageLeaf_default) {
+            var page = _this.pageMap.get(node2);
             if (!page) {
-              page = PDFPage_default.of(node, ref, _this);
-              _this.pageMap.set(node, page);
+              page = PDFPage_default.of(node2, ref, _this);
+              _this.pageMap.set(node2, page);
             }
             pages.push(page);
           }
@@ -21780,8 +21932,8 @@ var PDFDocument = (
     };
     PDFDocument2.prototype.setTitle = function(title, options) {
       assertIs(title, "title", ["string"]);
-      var key = PDFName_default.of("Title");
-      this.getInfoDict().set(key, PDFHexString_default.fromText(title));
+      var key2 = PDFName_default.of("Title");
+      this.getInfoDict().set(key2, PDFHexString_default.fromText(title));
       if (options === null || options === void 0 ? void 0 : options.showInWindowTitleBar) {
         var prefs = this.catalog.getOrCreateViewerPreferences();
         prefs.setDisplayDocTitle(true);
@@ -21789,43 +21941,43 @@ var PDFDocument = (
     };
     PDFDocument2.prototype.setAuthor = function(author) {
       assertIs(author, "author", ["string"]);
-      var key = PDFName_default.of("Author");
-      this.getInfoDict().set(key, PDFHexString_default.fromText(author));
+      var key2 = PDFName_default.of("Author");
+      this.getInfoDict().set(key2, PDFHexString_default.fromText(author));
     };
     PDFDocument2.prototype.setSubject = function(subject) {
       assertIs(subject, "author", ["string"]);
-      var key = PDFName_default.of("Subject");
-      this.getInfoDict().set(key, PDFHexString_default.fromText(subject));
+      var key2 = PDFName_default.of("Subject");
+      this.getInfoDict().set(key2, PDFHexString_default.fromText(subject));
     };
     PDFDocument2.prototype.setKeywords = function(keywords) {
       assertIs(keywords, "keywords", [Array]);
-      var key = PDFName_default.of("Keywords");
-      this.getInfoDict().set(key, PDFHexString_default.fromText(keywords.join(" ")));
+      var key2 = PDFName_default.of("Keywords");
+      this.getInfoDict().set(key2, PDFHexString_default.fromText(keywords.join(" ")));
     };
     PDFDocument2.prototype.setCreator = function(creator) {
       assertIs(creator, "creator", ["string"]);
-      var key = PDFName_default.of("Creator");
-      this.getInfoDict().set(key, PDFHexString_default.fromText(creator));
+      var key2 = PDFName_default.of("Creator");
+      this.getInfoDict().set(key2, PDFHexString_default.fromText(creator));
     };
     PDFDocument2.prototype.setProducer = function(producer) {
       assertIs(producer, "creator", ["string"]);
-      var key = PDFName_default.of("Producer");
-      this.getInfoDict().set(key, PDFHexString_default.fromText(producer));
+      var key2 = PDFName_default.of("Producer");
+      this.getInfoDict().set(key2, PDFHexString_default.fromText(producer));
     };
     PDFDocument2.prototype.setLanguage = function(language) {
       assertIs(language, "language", ["string"]);
-      var key = PDFName_default.of("Lang");
-      this.catalog.set(key, PDFString_default.of(language));
+      var key2 = PDFName_default.of("Lang");
+      this.catalog.set(key2, PDFString_default.of(language));
     };
     PDFDocument2.prototype.setCreationDate = function(creationDate) {
       assertIs(creationDate, "creationDate", [[Date, "Date"]]);
-      var key = PDFName_default.of("CreationDate");
-      this.getInfoDict().set(key, PDFString_default.fromDate(creationDate));
+      var key2 = PDFName_default.of("CreationDate");
+      this.getInfoDict().set(key2, PDFString_default.fromDate(creationDate));
     };
     PDFDocument2.prototype.setModificationDate = function(modificationDate) {
       assertIs(modificationDate, "modificationDate", [[Date, "Date"]]);
-      var key = PDFName_default.of("ModDate");
-      this.getInfoDict().set(key, PDFString_default.fromDate(modificationDate));
+      var key2 = PDFName_default.of("ModDate");
+      this.getInfoDict().set(key2, PDFString_default.fromDate(modificationDate));
     };
     PDFDocument2.prototype.getPageCount = function() {
       if (this.pageCount === void 0)
@@ -22955,8 +23107,8 @@ var PDFPage = (
         CA: borderOpacity,
         BM: blendMode
       });
-      var key = this.node.newExtGState("GS", graphicsState);
-      return key;
+      var key2 = this.node.newExtGState("GS", graphicsState);
+      return key2;
     };
     PDFPage3.prototype.scaleAnnot = function(annot, x, y) {
       var selectors = ["RD", "CL", "Vertices", "QuadPoints", "L", "Rect"];
@@ -24570,10 +24722,10 @@ function mergeOccurrences(lists) {
   const out = [];
   for (const list of lists) {
     for (const occ of list) {
-      const key = occurrenceKey(occ);
-      if (seen.has(key))
+      const key2 = occurrenceKey(occ);
+      if (seen.has(key2))
         continue;
-      seen.add(key);
+      seen.add(key2);
       out.push(occ);
     }
   }
@@ -25069,9 +25221,377 @@ function indexOfSlice(hay, needle) {
   return -1;
 }
 
+// src/shoppingView.ts
+var import_obsidian10 = require("obsidian");
+
+// packages/shopping-ui/panel.ts
+var css = `
+.toolbox-shopping{font:inherit;color:var(--text-normal,var(--text,inherit));max-width:780px;margin:auto;padding:16px;box-sizing:border-box}
+.toolbox-shopping *{box-sizing:border-box}.toolbox-shopping h2{margin:0 0 8px}.toolbox-shopping p{opacity:.8}
+.toolbox-shopping button,.toolbox-shopping input,.toolbox-shopping select{font:inherit;min-height:44px;border:1px solid var(--background-modifier-border,var(--border,#8886));border-radius:8px;padding:8px;background:var(--background-primary,var(--bg-elev,#fff));color:var(--text-normal,var(--text,#222));max-width:100%}
+.toolbox-shopping button{cursor:pointer}.toolbox-shopping button:disabled{opacity:.5;cursor:default}
+.toolbox-shopping :focus-visible{outline:2px solid var(--interactive-accent,var(--accent,#6577dd));outline-offset:2px}
+.toolbox-shopping .shop-toolbar{display:flex;gap:8px;flex-wrap:wrap;margin:12px 0}.toolbox-shopping [aria-pressed=true]{background:var(--interactive-accent,var(--accent,#5968bf));color:var(--text-on-accent,#fff)}
+.toolbox-shopping form{display:grid;grid-template-columns:1fr 1fr;gap:10px;padding:12px;background:var(--background-secondary,var(--bg-elev-2,#8881));border-radius:12px}
+.toolbox-shopping label{display:flex;flex-direction:column;gap:4px;min-width:0}.toolbox-shopping label:first-child{grid-column:1/-1}
+.toolbox-shopping .shop-row{display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid var(--background-modifier-border,var(--border,#8884))}
+.toolbox-shopping .shop-row label{flex:1;display:flex;flex-direction:row;align-items:center;overflow-wrap:anywhere}.toolbox-shopping .shop-row input{flex:none;width:24px;height:24px}
+.toolbox-shopping .shop-row small{display:block;opacity:.7}.toolbox-shopping .shop-checked .shop-name{text-decoration:line-through;opacity:.65}
+.toolbox-shopping .shop-status{min-height:24px}.toolbox-shopping .shop-error{color:var(--text-error,var(--danger,#c43939))}
+.toolbox-shopping h3{margin:24px 0 4px;font-size:1.1em}.toolbox-shopping h4{margin:14px 0 0;opacity:.7;font-size:.9em}
+@media(max-width:380px){.toolbox-shopping form{grid-template-columns:1fr}.toolbox-shopping{padding:8px}.toolbox-shopping .shop-row{flex-wrap:wrap}}
+`;
+function node(tag, text, cls) {
+  const el = document.createElement(tag);
+  if (text)
+    el.textContent = text;
+  if (cls)
+    el.className = cls;
+  return el;
+}
+function mountShopping(root, store) {
+  const host = node("section", void 0, "toolbox-shopping");
+  const style = node("style", css);
+  host.append(style);
+  root.append(host);
+  const title = node("h2", "Shopping list");
+  const status = node("div", "", "shop-status");
+  status.setAttribute("role", "status");
+  status.setAttribute("aria-live", "polite");
+  const toolbar = node("div", void 0, "shop-toolbar");
+  const content = node("div");
+  let data = { version: 1, items: [] };
+  let busy = false;
+  let disposed = false;
+  let tab = "list";
+  let filter = "";
+  let editing;
+  const form = node("form");
+  const field = (label, placeholder) => {
+    const wrap = node("label", label);
+    const input = node("input");
+    input.placeholder = placeholder;
+    wrap.append(input);
+    form.append(wrap);
+    return input;
+  };
+  const name = field("Item", "e.g. frozen peas");
+  name.required = true;
+  const quantity = field("Quantity / note", "e.g. 2 bags");
+  const shop = field("Store", "Automatic (Grocery or Hardware store)");
+  const category = field("Category", "Automatic");
+  const uid = "shop-" + Math.random().toString(36).slice(2);
+  const shops = node("datalist");
+  shops.id = uid + "-stores";
+  shop.setAttribute("list", shops.id);
+  const categories = node("datalist");
+  categories.id = uid + "-categories";
+  category.setAttribute("list", categories.id);
+  const submit = node("button", "Add item");
+  submit.type = "submit";
+  const cancel = node("button", "Cancel edit");
+  cancel.type = "button";
+  cancel.hidden = true;
+  form.append(shops, categories, submit, cancel);
+  const clearForm = () => {
+    editing = void 0;
+    form.reset();
+    submit.textContent = "Add item";
+    cancel.hidden = true;
+  };
+  cancel.onclick = clearForm;
+  host.append(
+    title,
+    node(
+      "p",
+      "Grouped by store and aisle. Choose a category to override automatic sorting."
+    ),
+    form,
+    toolbar,
+    status,
+    content
+  );
+  const error2 = (e) => {
+    status.textContent = e instanceof Error ? e.message : String(e);
+    status.classList.add("shop-error");
+  };
+  async function run(work, after) {
+    if (busy || disposed)
+      return;
+    busy = true;
+    host.setAttribute("aria-busy", "true");
+    host.querySelectorAll("button").forEach((b) => b.disabled = true);
+    try {
+      const result = await work();
+      if (disposed)
+        return;
+      data = result;
+      status.classList.remove("shop-error");
+      status.textContent = "";
+      after == null ? void 0 : after();
+      render();
+    } catch (e) {
+      if (!disposed)
+        error2(e);
+    } finally {
+      busy = false;
+      host.removeAttribute("aria-busy");
+      host.querySelectorAll("button").forEach((b) => b.disabled = false);
+    }
+  }
+  function current(d, item) {
+    const fresh = d.items.find((i) => i.id === item.id);
+    if (!fresh || JSON.stringify(fresh) !== JSON.stringify(item))
+      throw new Error("This item changed. Refresh before trying again.");
+    return fresh;
+  }
+  form.onsubmit = (e) => {
+    e.preventDefault();
+    const input = {
+      name: name.value,
+      quantity: quantity.value,
+      store: shop.value,
+      category: category.value
+    };
+    const original = editing;
+    void run(
+      () => store.mutate((d) => {
+        if (original) {
+          const item = current(d, original);
+          const temp = { version: 1, items: [] };
+          addShoppingItem(temp, input, item.id);
+          const next = temp.items[0];
+          if (d.items.some(
+            (i) => i.id !== item.id && i.name.toLowerCase() === next.name.toLowerCase() && i.store.toLowerCase() === next.store.toLowerCase()
+          ))
+            throw new Error("That item already exists for this store.");
+          Object.assign(item, {
+            name: next.name,
+            store: next.store,
+            category: next.category,
+            quantity: next.quantity
+          });
+        } else
+          addShoppingItem(d, input, crypto.randomUUID());
+      }),
+      () => {
+        clearForm();
+        name.focus();
+      }
+    );
+  };
+  function button(parent, text, action) {
+    const b = node("button", text);
+    b.type = "button";
+    b.onclick = action;
+    parent.append(b);
+    return b;
+  }
+  function render() {
+    toolbar.replaceChildren();
+    content.replaceChildren();
+    const opts = (list, values2) => {
+      list.replaceChildren();
+      for (const value of new Set(values2)) {
+        const o = node("option");
+        o.value = value;
+        list.append(o);
+      }
+    };
+    opts(shops, [...SHOPPING_STORES, ...data.items.map((i) => i.store)]);
+    opts(categories, [
+      ...SHOPPING_CATEGORIES,
+      ...data.items.map((i) => i.category)
+    ]);
+    for (const [value, label] of [
+      ["list", "List"],
+      ["staples", "Staples"]
+    ]) {
+      const b = button(toolbar, label, () => {
+        tab = value;
+        render();
+      });
+      b.setAttribute("aria-pressed", String(tab === value));
+    }
+    button(toolbar, "Refresh", () => void run(() => store.load()));
+    const select = node("select");
+    select.setAttribute("aria-label", "Filter by store");
+    for (const value of [
+      "",
+      ...Array.from(new Set(data.items.map((i) => i.store))).sort()
+    ]) {
+      const o = node("option", value || "All stores");
+      o.value = value;
+      select.append(o);
+    }
+    select.value = filter;
+    select.onchange = () => {
+      filter = select.value;
+      render();
+    };
+    toolbar.append(select);
+    const source = tab === "list" ? sortedShoppingItems(data) : shoppingStaples(data);
+    const items = source.filter((i) => !filter || i.store === filter);
+    if (tab === "list") {
+      const checked = items.filter((i) => i.checked);
+      if (checked.length)
+        button(
+          toolbar,
+          `Finish purchased (${checked.length})`,
+          () => void run(
+            () => store.mutate((d) => {
+              for (const item of checked) {
+                const fresh = current(d, item);
+                fresh.active = false;
+                fresh.checked = false;
+              }
+            })
+          )
+        );
+      status.textContent = `${items.filter((i) => !i.checked).length} items remaining`;
+    } else
+      status.textContent = "Previously listed items, most frequently added first. Items already on your list are hidden.";
+    if (!items.length)
+      content.append(
+        node(
+          "p",
+          tab === "list" ? "Your list is empty. Add an item above or choose Staples." : "No staples yet. Finish purchased items to make them available here."
+        )
+      );
+    let lastGroup = "";
+    for (const item of items) {
+      const group = `${item.checked ? "Purchased" : item.store} / ${item.category}`;
+      if (tab === "list" && group !== lastGroup) {
+        content.append(node("h3", group));
+        lastGroup = group;
+      }
+      const row = node(
+        "div",
+        void 0,
+        "shop-row" + (item.checked ? " shop-checked" : "")
+      );
+      const label = node("label");
+      const text = node("span", void 0, "shop-name");
+      text.append(
+        node("span", item.name + (item.quantity ? ` \xB7 ${item.quantity}` : ""))
+      );
+      if (tab === "list") {
+        const check = node("input");
+        check.type = "checkbox";
+        check.checked = item.checked;
+        check.setAttribute("aria-label", `Purchased ${item.name}`);
+        check.onchange = () => {
+          const checked = check.checked;
+          check.checked = item.checked;
+          void run(
+            () => store.mutate((d) => {
+              current(d, item).checked = checked;
+            })
+          );
+        };
+        label.append(check);
+      }
+      text.append(
+        node(
+          "small",
+          tab === "staples" ? `${item.store} \xB7 ${item.category} \xB7 Added ${item.frequency} times` : item.store
+        )
+      );
+      label.append(text);
+      row.append(label);
+      if (tab === "staples")
+        button(
+          row,
+          "Add again",
+          () => void run(
+            () => store.mutate((d) => {
+              current(d, item);
+              addShoppingItem(d, item, crypto.randomUUID());
+            })
+          )
+        );
+      button(row, "Edit", () => {
+        editing = item;
+        name.value = item.name;
+        quantity.value = item.quantity;
+        shop.value = item.store;
+        category.value = item.category;
+        submit.textContent = "Save item";
+        cancel.hidden = false;
+        name.focus();
+      });
+      if (tab === "list")
+        button(
+          row,
+          "Remove",
+          () => void run(
+            () => store.mutate((d) => {
+              const fresh = current(d, item);
+              fresh.active = false;
+              fresh.checked = false;
+            })
+          )
+        );
+      content.append(row);
+    }
+  }
+  render();
+  void run(() => store.load());
+  return () => {
+    disposed = true;
+    host.remove();
+  };
+}
+
+// src/shoppingView.ts
+var VIEW_TYPE_SHOPPING = "toolbox-shopping";
+var ShoppingView = class extends import_obsidian10.ItemView {
+  constructor(leaf, store) {
+    super(leaf);
+    this.store = store;
+  }
+  getViewType() {
+    return VIEW_TYPE_SHOPPING;
+  }
+  getDisplayText() {
+    return "Shopping list";
+  }
+  getIcon() {
+    return "shopping-cart";
+  }
+  async onOpen() {
+    this.cleanup = mountShopping(this.contentEl, this.store);
+  }
+  async onClose() {
+    var _a;
+    (_a = this.cleanup) == null ? void 0 : _a.call(this);
+  }
+};
+function vaultShoppingStore(app) {
+  return new ShoppingStore(
+    async () => {
+      const file = app.vault.getAbstractFileByPath(SHOPPING_PATH);
+      if (!file)
+        return null;
+      if (!(file instanceof import_obsidian10.TFile))
+        throw new Error("Shopping path is a folder.");
+      return app.vault.read(file);
+    },
+    async (text) => {
+      const file = app.vault.getAbstractFileByPath(SHOPPING_PATH);
+      if (file instanceof import_obsidian10.TFile)
+        await app.vault.modify(file, text);
+      else if (!file)
+        await app.vault.create(SHOPPING_PATH, text);
+      else
+        throw new Error("Shopping path is a folder.");
+    }
+  );
+}
+
 // src/main.ts
 var CALENDAR_REFRESH_MS = 30 * 60 * 1e3;
-var TasksPlugin = class extends import_obsidian10.Plugin {
+var TasksPlugin = class extends import_obsidian11.Plugin {
   constructor() {
     super(...arguments);
     /**
@@ -25102,6 +25622,18 @@ var TasksPlugin = class extends import_obsidian10.Plugin {
   }
   async onload() {
     await this.loadSettings();
+    const shoppingStore = vaultShoppingStore(this.app);
+    this.registerView(VIEW_TYPE_SHOPPING, (leaf) => new ShoppingView(leaf, shoppingStore));
+    const openShopping = async () => {
+      var _a;
+      const leaf = (_a = this.app.workspace.getLeavesOfType(VIEW_TYPE_SHOPPING)[0]) != null ? _a : this.app.workspace.getRightLeaf(false);
+      if (leaf) {
+        await leaf.setViewState({ type: VIEW_TYPE_SHOPPING, active: true });
+        await this.app.workspace.revealLeaf(leaf);
+      }
+    };
+    this.addRibbonIcon("shopping-cart", "Open shopping list", () => void openShopping());
+    this.addCommand({ id: "open-shopping-list", name: "Open shopping list", callback: () => void openShopping() });
     this.registerView(VIEW_TYPE_TASKS, (leaf) => new TasksView(leaf, this));
     this.addRibbonIcon("list-checks", "Open tasks panel", () => {
       this.activateView();
@@ -25112,7 +25644,7 @@ var TasksPlugin = class extends import_obsidian10.Plugin {
       callback: () => this.activateView()
     });
     this.addSettingTab(new TasksSettingTab(this.app, this));
-    const isTasksFile = (file) => file instanceof import_obsidian10.TFile && file.path === this.settings.tasksFilePath;
+    const isTasksFile = (file) => file instanceof import_obsidian11.TFile && file.path === this.settings.tasksFilePath;
     this.registerEvent(this.app.vault.on("modify", (f) => isTasksFile(f) && this.refreshViews()));
     this.registerEvent(this.app.vault.on("create", (f) => isTasksFile(f) && this.refreshViews()));
     this.registerEvent(this.app.vault.on("delete", (f) => isTasksFile(f) && this.refreshViews()));
@@ -25133,9 +25665,9 @@ var TasksPlugin = class extends import_obsidian10.Plugin {
     this.applyEditableColumns();
     this.registerDomEvent(document, "click", (evt) => this.handleColumnEmbedClick(evt));
     this.addRibbonIcon("columns-3", "Insert columns", () => {
-      const view = this.app.workspace.getActiveViewOfType(import_obsidian10.MarkdownView);
+      const view = this.app.workspace.getActiveViewOfType(import_obsidian11.MarkdownView);
       if (!view) {
-        new import_obsidian10.Notice("Open a note in editing mode to insert columns.");
+        new import_obsidian11.Notice("Open a note in editing mode to insert columns.");
         return;
       }
       this.insertColumnsBlock(view.editor);
@@ -25161,7 +25693,7 @@ var TasksPlugin = class extends import_obsidian10.Plugin {
         new InvoiceModal(this.app, this).open();
       }
     });
-    const isTimesheetFile = (file) => file instanceof import_obsidian10.TFile && file.path === this.settings.timesheetFilePath;
+    const isTimesheetFile = (file) => file instanceof import_obsidian11.TFile && file.path === this.settings.timesheetFilePath;
     this.registerEvent(this.app.vault.on("modify", (f) => isTimesheetFile(f) && this.refreshTimesheetViews()));
     this.registerEvent(this.app.vault.on("create", (f) => isTimesheetFile(f) && this.refreshTimesheetViews()));
     this.registerEvent(
@@ -25174,7 +25706,7 @@ var TasksPlugin = class extends import_obsidian10.Plugin {
       const host = el.createDiv();
       this.calendarBlocks.add(host);
       this.renderCalendarBlock(host);
-      const child = new import_obsidian10.MarkdownRenderChild(host);
+      const child = new import_obsidian11.MarkdownRenderChild(host);
       child.register(() => this.calendarBlocks.delete(host));
       ctx.addChild(child);
     });
@@ -25253,7 +25785,7 @@ var TasksPlugin = class extends import_obsidian10.Plugin {
       this.refreshViews();
       return;
     }
-    const results = await Promise.allSettled(urls.map((url) => (0, import_obsidian10.requestUrl)({ url })));
+    const results = await Promise.allSettled(urls.map((url) => (0, import_obsidian11.requestUrl)({ url })));
     const feeds = [];
     let anySuccess = false;
     for (const res of results) {
@@ -25275,7 +25807,7 @@ var TasksPlugin = class extends import_obsidian10.Plugin {
     if (!u)
       return { ok: false, count: 0 };
     try {
-      const res = await (0, import_obsidian10.requestUrl)({ url: u });
+      const res = await (0, import_obsidian11.requestUrl)({ url: u });
       return { ok: true, count: getEventsForToday(res.text).length };
     } catch (e) {
       return { ok: false, count: 0 };
