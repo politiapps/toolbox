@@ -137,7 +137,7 @@ export function dueWithin(iso: string, days: number, today: string = todayISO())
 /**
  * The sidebar/app can show every configured section at once, one section
  * alone, or a cross-cutting due-window slice across all of them. A `ViewId`
- * is one of the three special ids below or a `SectionConfig.id`. Shared so
+ * is one of the special ids below or a `SectionConfig.id`. Shared so
  * the plugin and the app never hand-roll diverging string literals for the
  * special views.
  */
@@ -145,6 +145,7 @@ export type ViewId = string;
 export const VIEW_ALL = "__all__";
 export const VIEW_TODAY = "__today__";
 export const VIEW_WEEK = "__week__";
+export const VIEW_SHOPPING = "__shopping__";
 
 /* ------------------------------------------------------------------ */
 /* Priority                                                            */

@@ -95,8 +95,8 @@ a release into `<vault>/.obsidian/plugins/toolbox/`.
 
 ## Shopping list
 
-Open the shopping-cart ribbon / **Open shopping list** command in Obsidian, or
-**Shopping** in Android after linking your vault. Both share automatic aisle
+Open **Tasks → Shopping** in the existing view switcher in Obsidian or Android.
+The **Open shopping list** command selects the same view inside Tasks. Both share automatic aisle
 categories, custom stores/categories, quantities, purchase checkboxes and
 frequency-ranked **Staples**. Sync `shopping-list.json` with your vault.
 See [shopping instructions](documentation/shopping.md) and the

@@ -162,3 +162,10 @@ When you fix a non-obvious bug or hit an Obsidian API quirk:
     current data and reject observed conflicts. Do not claim this prevents
     simultaneous cross-device writes. Existing task writers need the same
     discipline plus durable task identity (see the audit report).
+
+## Release preference
+
+Every completed change must be committed, pushed and published as a new version
+so the user can update in Obsidian. Bump package.json, package-lock.json,
+manifest.json and versions.json together; validate the change, build main.js,
+and publish a GitHub release with main.js, manifest.json and styles.css.

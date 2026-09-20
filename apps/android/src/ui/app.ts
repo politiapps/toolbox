@@ -1,4 +1,4 @@
-import { ShoppingStore, SHOPPING_PATH } from "@toolbox/task-core";
+import { ShoppingStore, SHOPPING_PATH, VIEW_SHOPPING } from "@toolbox/task-core";
 import { mountShopping } from "../../../../packages/shopping-ui/panel";
 import {
 	Task,
@@ -35,7 +35,7 @@ import type { StorageAdapter } from "../storage";
 import { DATA_JSON_PATH } from "../storage";
 import type { AppContext } from "./context";
 
-type Screen = "list" | "settings" | "shopping";
+type Screen = "list" | "settings";
 
 export class App {
 	private ctx: AppContext;
@@ -83,7 +83,7 @@ export class App {
 	/** Re-read the file and honour any queued widget action when returning to front. */
 	private async onForeground(): Promise<void> {
 		await this.syncObsidianConfig();
-		if (this.screen !== "shopping") await this.render();
+		await this.render();
 		await this.handlePendingAction();
 	}
 
@@ -211,22 +211,9 @@ export class App {
 
 	async render(): Promise<void> {
 		++this.renderVersion;
+		if (this.screen === "list" && this.settings.activeView === VIEW_SHOPPING && this.shoppingCleanup) return;
 		this.shoppingCleanup?.();
 		this.shoppingCleanup = undefined;
-		if (this.screen === "shopping" && this.settings.vault) {
-			const vault = this.settings.vault;
-			this.root.replaceChildren();
-			const back = el("button", { cls: "btn", text: "Back to tasks" });
-			back.onclick = () => { this.screen = "list"; void this.render(); };
-			const shoppingScreen = el("div", { cls: "screen shopping-screen" });
-			shoppingScreen.append(back);
-			this.root.append(shoppingScreen);
-			this.shoppingCleanup = mountShopping(shoppingScreen, new ShoppingStore(
-				() => this.storage.readFile(vault, SHOPPING_PATH),
-				text => this.storage.writeFile(vault, SHOPPING_PATH, text)
-			));
-			return;
-		}
 		if (this.screen === "settings") {
 			renderSettings(this.ctx, this.root, () => {
 				this.screen = "list";
@@ -264,7 +251,7 @@ export class App {
 		this.renderHeader(screen, candidates, scopeTag);
 		renderViewSwitcher(this.ctx, screen, activeView);
 
-		if (this.settings.pomodoroConfig.enabled) {
+		if (activeView !== VIEW_SHOPPING && this.settings.pomodoroConfig.enabled) {
 			renderPomodoro(this.ctx, screen, uniqueIncompleteNames(flat));
 		}
 
@@ -283,6 +270,16 @@ export class App {
 				})()
 			);
 			screen.append(empty);
+			this.root.append(screen);
+			return;
+		}
+
+		if (activeView === VIEW_SHOPPING) {
+			const vault = this.settings.vault;
+			this.shoppingCleanup = mountShopping(screen, new ShoppingStore(
+				() => this.storage.readFile(vault, SHOPPING_PATH),
+				text => this.storage.writeFile(vault, SHOPPING_PATH, text)
+			));
 			this.root.append(screen);
 			return;
 		}
@@ -349,7 +346,7 @@ export class App {
 	/** The active view, falling back to "All" if it names a since-deleted section. */
 	private resolveActiveView(): ViewId {
 		const v = this.settings.activeView;
-		if (v === VIEW_ALL || v === VIEW_TODAY || v === VIEW_WEEK) return v;
+		if (v === VIEW_ALL || v === VIEW_TODAY || v === VIEW_WEEK || v === VIEW_SHOPPING) return v;
 		return this.settings.sections.some((s) => s.id === v) ? v : VIEW_ALL;
 	}
 
@@ -460,15 +457,17 @@ export class App {
 		const actions = el("div", { cls: "app-header-actions" });
 		const settingsBtn = iconButton("settings", "Settings");
 		settingsBtn.addEventListener("click", () => this.ctx.openSettings());
-		const addBtn = el("button", { cls: "app-add", attrs: { "aria-label": "Add task" } });
+		const shopping = this.resolveActiveView() === VIEW_SHOPPING;
+		const addBtn = el("button", { cls: "app-add", attrs: { "aria-label": shopping ? "Add shopping item" : "Add task" } });
 		setIcon(addBtn, "plus");
-		addBtn.addEventListener("click", () => openAddTask(this.ctx));
-		const shoppingBtn = el("button", { cls: "btn", text: "Shopping" });
-		shoppingBtn.disabled = !this.settings.vault;
-		shoppingBtn.onclick = () => { this.screen = "shopping"; void this.render(); };
-		actions.append(shoppingBtn, settingsBtn, addBtn);
+		addBtn.addEventListener("click", () => {
+			if (shopping) this.root.querySelector<HTMLInputElement>(".toolbox-shopping form input")?.focus();
+			else openAddTask(this.ctx);
+		});
+		actions.append(settingsBtn, addBtn);
 		top.append(actions);
 		header.append(top);
+		if (shopping) { parent.append(header); return; }
 
 		// Read from the same candidate set + scopeTag filter `overdueCandidates`
 		// below uses, so this count and the reschedule button's reach can never

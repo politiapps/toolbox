@@ -31,7 +31,8 @@ import { CalendarOccurrence, getEventsForToday, mergeOccurrences } from "./calen
 import { renderTodayCalendar } from "./calendarView";
 import { COLUMNS_CLASS, editableColumnsExtension } from "./editableColumns";
 import { openEmbedEditor, resolveEmbed } from "./embedEditor";
-import { ShoppingView, VIEW_TYPE_SHOPPING, vaultShoppingStore } from "./shoppingView";
+import { vaultShoppingStore } from "./shoppingStore";
+import { ShoppingStore, VIEW_SHOPPING } from "@toolbox/task-core";
 import { InvoiceModal } from "./invoiceModal";
 
 /** How often to re-fetch the calendar feed while the plugin is running. */
@@ -39,6 +40,7 @@ const CALENDAR_REFRESH_MS = 30 * 60 * 1000;
 
 export default class TasksPlugin extends Plugin {
 	settings!: TasksPluginSettings;
+	shoppingStore!: ShoppingStore;
 
 	/**
 	 * Raw text of every successfully-fetched feed (refreshed on a timer). Today's
@@ -71,14 +73,17 @@ export default class TasksPlugin extends Plugin {
 	async onload(): Promise<void> {
 		await this.loadSettings();
 
-		const shoppingStore = vaultShoppingStore(this.app);
-		this.registerView(VIEW_TYPE_SHOPPING, leaf => new ShoppingView(leaf, shoppingStore));
-		const openShopping = async () => {
-			const leaf = this.app.workspace.getLeavesOfType(VIEW_TYPE_SHOPPING)[0] ?? this.app.workspace.getRightLeaf(false);
-			if (leaf) { await leaf.setViewState({ type: VIEW_TYPE_SHOPPING, active: true }); await this.app.workspace.revealLeaf(leaf); }
-		};
-		this.addRibbonIcon("shopping-cart", "Open shopping list", () => void openShopping());
-		this.addCommand({ id: "open-shopping-list", name: "Open shopping list", callback: () => void openShopping() });
+		this.shoppingStore = vaultShoppingStore(this.app);
+		this.addCommand({
+			id: "open-shopping-list",
+			name: "Open shopping list",
+			callback: async () => {
+				this.settings.activeView = VIEW_SHOPPING;
+				await this.saveSettings();
+				await this.activateView();
+				this.refreshViews();
+			},
+		});
 
 		this.registerView(VIEW_TYPE_TASKS, (leaf: WorkspaceLeaf) => new TasksView(leaf, this));
 

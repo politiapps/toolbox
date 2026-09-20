@@ -1,7 +1,8 @@
 # Shopping list
 
-Open **Shopping** in the Android task header after linking a vault. In Obsidian,
-use the shopping-cart ribbon or **Toolbox: Open shopping list** command.
+Open the existing **Tasks** panel, then choose **Shopping** in its view switcher
+(next to All, Today and This week). Android uses the same switcher after linking
+a vault. **Toolbox: Open shopping list** also selects Shopping inside Tasks.
 
 Both use the same interface and `shopping-list.json` at the vault root. Include
 that file in your existing vault sync. This feature does not provide a sync

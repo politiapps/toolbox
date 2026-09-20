@@ -439,9 +439,11 @@ External edit → `vault.on('modify')` (main.ts) → `refreshViews()` → re-ren
   queued read/merge/write operations with conflict checks.
 - `packages/shopping-ui/panel.ts`: the shared DOM interface and scoped,
   theme-aware styles; mounted by both platforms, with cleanup on navigation.
-- `src/shoppingView.ts`: Obsidian ItemView and vault IO adapter, registered with
-  a shopping ribbon and command by `main.ts`.
-- Android `ui/app.ts`: Shopping screen using its existing StorageAdapter.
+- `src/shoppingStore.ts`: Obsidian vault IO adapter, owned by `main.ts`.
+- `src/taskView.ts` and Android `ui/app.ts`: Shopping is a shared `VIEW_SHOPPING`
+  choice inside the existing Tasks switcher. No separate panel or ribbon. The
+  command selects that choice in Tasks; Android uses its existing StorageAdapter.
+  Background refreshes preserve the mounted shopping form until navigation.
 - Both store active items and reusable history in vault-root
   `shopping-list.json`. See `shopping.md` for behavior and sync boundaries.
 - Tests include shared DOM flows and Android task-render regressions. The

@@ -1,3 +1,5 @@
+import { mountShopping } from "../packages/shopping-ui/panel";
+import { VIEW_SHOPPING } from "@toolbox/task-core";
 /**
  * taskView.ts — The sidebar ItemView plus the add/edit task modal.
  *
@@ -154,6 +156,7 @@ export class TasksView extends ItemView {
 	plugin: TasksPlugin;
 	private allTags: string[] = [];
 	private renderVersion = 0;
+	private shoppingCleanup?: () => void;
 	/** Raw line text of the task currently being dragged (drag-to-subtask). */
 	private draggedTaskRaw: string | null = null;
 	/** Pomodoro card element + tick handle + current task options. */
@@ -184,6 +187,8 @@ export class TasksView extends ItemView {
 	}
 
 	async onClose(): Promise<void> {
+		this.shoppingCleanup?.();
+		this.shoppingCleanup = undefined;
 		++this.renderVersion;
 		// The vault 'modify' listener lives in main.ts; only the Pomodoro tick is
 		// owned by this view.
@@ -244,6 +249,8 @@ export class TasksView extends ItemView {
 
 	async refresh(): Promise<void> {
 		const version = ++this.renderVersion;
+		// Background task/calendar refreshes must not discard a shopping draft.
+		if (this.resolveActiveView() === VIEW_SHOPPING && this.shoppingCleanup) return;
 		const file = this.getTasksFile();
 		const content = file ? await this.app.vault.read(file) : "";
 		if (version !== this.renderVersion) return;
@@ -261,11 +268,17 @@ export class TasksView extends ItemView {
 		const scopeTag = this.scopeTagFor(activeView);
 
 		const root = this.contentEl;
+		this.shoppingCleanup?.();
+		this.shoppingCleanup = undefined;
 		root.empty();
 		root.addClass("tasks-panel-content");
 
 		this.renderPanelHeader(root, countPressure(candidates, scopeTag, todayISO()), candidates, scopeTag);
 		this.renderViewSwitcher(root, activeView);
+		if (activeView === VIEW_SHOPPING) {
+			this.shoppingCleanup = mountShopping(root, this.plugin.shoppingStore);
+			return;
+		}
 		this.renderPomodoro(root);
 		this.renderCalendar(root);
 
@@ -303,7 +316,7 @@ export class TasksView extends ItemView {
 	/** The active view, falling back to "All" if it names a since-deleted section. */
 	private resolveActiveView(): ViewId {
 		const v = this.plugin.settings.activeView;
-		if (v === VIEW_ALL || v === VIEW_TODAY || v === VIEW_WEEK) return v;
+		if (v === VIEW_ALL || v === VIEW_TODAY || v === VIEW_WEEK || v === VIEW_SHOPPING) return v;
 		return this.plugin.settings.sections.some((s) => s.id === v) ? v : VIEW_ALL;
 	}
 
@@ -332,6 +345,7 @@ export class TasksView extends ItemView {
 		const chip = (id: ViewId, label: string, accent?: string): void => {
 			const btn = strip.createEl("button", { cls: "tasks-view-chip" });
 			if (id === activeView) btn.addClass("is-active");
+			btn.setAttribute("aria-pressed", String(id === activeView));
 			if (accent) {
 				const dot = btn.createSpan({ cls: "tasks-view-chip-dot" });
 				dot.style.setProperty("--section-accent", accent);
@@ -343,6 +357,7 @@ export class TasksView extends ItemView {
 		chip(VIEW_ALL, "All");
 		chip(VIEW_TODAY, "Today");
 		chip(VIEW_WEEK, "This week");
+		chip(VIEW_SHOPPING, "Shopping");
 		for (const section of this.plugin.settings.sections) {
 			chip(section.id, section.name, sectionAccent(section.id));
 		}
@@ -403,8 +418,13 @@ export class TasksView extends ItemView {
 
 		const add = top.createEl("button", { cls: "tasks-add" });
 		setIcon(add, "plus");
-		add.setAttr("aria-label", "Add task");
-		add.addEventListener("click", () => this.openAddForm());
+		const shopping = this.resolveActiveView() === VIEW_SHOPPING;
+		add.setAttr("aria-label", shopping ? "Add shopping item" : "Add task");
+		add.addEventListener("click", () => {
+			if (shopping) root.querySelector<HTMLInputElement>(".toolbox-shopping form input")?.focus();
+			else this.openAddForm();
+		});
+		if (shopping) return;
 
 		// Triage status line: today's load, in the ops-console register. Overdue is
 		// the one thing allowed to shout, colour-bonded to the due-date ramp below.

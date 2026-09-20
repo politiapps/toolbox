@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 import { App } from "../src/ui/app";
 import { DEFAULT_SETTINGS } from "../src/appState";
 import { TaskService } from "../src/taskService";
-import { parseTasks } from "@toolbox/task-core";
+import { parseTasks, VIEW_SHOPPING, VIEW_ALL, SHOPPING_PATH } from "@toolbox/task-core";
 import type { StorageAdapter } from "../src/storage";
 vi.mock("@capacitor/preferences", () => ({
 	Preferences: { set: vi.fn(async () => {}) },
@@ -68,4 +68,28 @@ describe("Android task audit regressions", () => {
 		expect(root.textContent).toContain("Latest task");
 		expect(root.textContent).not.toContain("Stale task");
 	});
+});
+
+
+describe("shopping inside Tasks", () => {
+ it("opens from the existing switcher and preserves history and draft on refresh", async () => {
+  const { app, root, settings, storage } = setup();
+  vi.spyOn(storage, "readFile").mockImplementation(async (_vault, path) => path === SHOPPING_PATH ? JSON.stringify({version: 1, items: [{id: "milk", name: "Milk", store: "Grocery", category: "Dairy & eggs", quantity: "2", active: true, checked: false, frequency: 4}]}) : null);
+  await app.render();
+  const chip = Array.from(root.querySelectorAll<HTMLButtonElement>(".view-chip")).find(b => b.textContent === "Shopping")!;
+  chip.click();
+  await vi.waitFor(() => expect(root.textContent).toContain("Milk · 2"));
+  expect(settings.activeView).toBe(VIEW_SHOPPING);
+  expect(root.querySelector(".view-switcher")).not.toBeNull();
+  expect(root.textContent).not.toContain("Back to tasks");
+  const input = root.querySelector<HTMLInputElement>(".toolbox-shopping form input")!;
+  input.value = "Bread draft";
+  await app.render();
+  expect(root.querySelector(".toolbox-shopping form input")).toBe(input);
+  expect(input.value).toBe("Bread draft");
+  const all = Array.from(root.querySelectorAll<HTMLButtonElement>(".view-chip")).find(b => b.textContent === "All")!;
+  all.click();
+  await vi.waitFor(() => expect(root.querySelector(".toolbox-shopping")).toBeNull());
+  expect(settings.activeView).toBe(VIEW_ALL);
+ });
 });

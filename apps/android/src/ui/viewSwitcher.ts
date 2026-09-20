@@ -6,7 +6,7 @@
  * surfaces offer the same views.
  */
 
-import { VIEW_ALL, VIEW_TODAY, VIEW_WEEK } from "@toolbox/task-core";
+import { VIEW_ALL, VIEW_TODAY, VIEW_WEEK, VIEW_SHOPPING } from "@toolbox/task-core";
 import type { ViewId } from "@toolbox/task-core";
 import { el } from "./dom";
 import { sectionAccent } from "../dates";
@@ -17,6 +17,7 @@ export function renderViewSwitcher(ctx: AppContext, parent: HTMLElement, activeV
 
 	const chip = (id: ViewId, label: string, accent?: string): void => {
 		const btn = el("button", { cls: id === activeView ? "view-chip is-active" : "view-chip" });
+		btn.setAttribute("aria-pressed", String(id === activeView));
 		if (accent) {
 			const dot = el("span", { cls: "view-chip-dot" });
 			dot.style.setProperty("--section-accent", accent);
@@ -35,6 +36,7 @@ export function renderViewSwitcher(ctx: AppContext, parent: HTMLElement, activeV
 	chip(VIEW_ALL, "All");
 	chip(VIEW_TODAY, "Today");
 	chip(VIEW_WEEK, "This week");
+	chip(VIEW_SHOPPING, "Shopping");
 	for (const section of ctx.settings.sections) {
 		chip(section.id, section.name, sectionAccent(section.id));
 	}
